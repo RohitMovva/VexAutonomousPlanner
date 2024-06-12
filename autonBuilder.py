@@ -7,32 +7,34 @@ from scipy.integrate import quad
 import numpy as np
 import matplotlib.pyplot as plt
 
-# Math stuff
+# Calculations for length of Bezier curves (quadratic and cubic)
 def quad_bezier(t, P0, P1, P2):
     return (1-t)**2 * P0 + 2 * (1-t) * t * P1 + t**2 * P2
 
-# Derivative of the Bezier curve function
+# Derivative of the quadratic Bezier curve function
 def quad_bezier_derivative(t, P0, P1, P2):
     return 2 * (1-t) * (P1 - P0) + 2 * t * (P2 - P1)
 
-# Integrand for arc length calculation
+# Integrand for the quadratic arc length calculation
 def quad_integrand(t, P0, P1, P2):
     dx_dt, dy_dt = quad_bezier_derivative(t, P0, P1, P2)
     return np.sqrt(dx_dt**2 + dy_dt**2)
 
-# Bezier curve function
+# Quadratic Bezier curve function
 def cubic_bezier(t, P0, P1, P2, P3):
     return (1-t)**3 * P0 + 3 * (1-t)**2 * t * P1 + 3 * (1-t) * t**2 * P2 + t**3 * P3
 
-# Derivative of the Bezier curve function
+# Derivative of the cubic Bezier curve function
 def cubic_bezier_derivative(t, P0, P1, P2, P3):
     return 3 * (1-t)**2 * (P1 - P0) + 6 * (1-t) * t * (P2 - P1) + 3 * t**2 * (P3 - P2)
 
-# Integrand for arc length calculation
+# Integrand for the cubic arc length calculation
 def cubic_integrand(t, P0, P1, P2, P3):
     dx_dt, dy_dt = cubic_bezier_derivative(t, P0, P1, P2, P3)
     return np.sqrt(dx_dt**2 + dy_dt**2)
 
+
+# Click listener object
 class ClickableLabel(QLabel):
     def __init__(self, parent=None, gui_instance=None):
         super().__init__(parent)
@@ -46,6 +48,7 @@ class ClickableLabel(QLabel):
             self.gui_instance.add_node(x, y)
         super().mousePressEvent(event)
 
+# Node that stores data for auton route
 class Node(QWidget):
     def __init__(self, x, y, parent=None, gui_instance=None):
         super().__init__(parent)
@@ -57,21 +60,22 @@ class Node(QWidget):
         self.spinIntake = False
         self.clampGoal = False
         self.turn = 0
-        self.setFixedSize(10, 10)  # Set the size of the node
-        self.move(x+5, y+5)    # Move the node to the position with offset
+        self.setFixedSize(10, 10)
+        self.move(x+5, y+5)
         self.dragging = False
         self.offset = QPoint(0, 0)
 
     def paintEvent(self, event):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        # Determine the color based on node type
+
         if self.isStartNode:
             painter.setBrush(QColor("green"))
         elif self.isEndNode:
             painter.setBrush(QColor("red"))
         else:
             painter.setBrush(QColor("blue"))
+
         painter.drawEllipse(0,0,100,140)
         painter.drawEllipse(0, 0, self.width(), self.height())
 
@@ -145,7 +149,7 @@ class Node(QWidget):
             self.gui_instance.set_start_node(self)
         else:
             self.gui_instance.clear_start_node()
-        self.update()  # Trigger a repaint
+        self.update()
         self.gui_instance.update_lines()
         print(f"Start Node: {self.isStartNode}")
 
@@ -155,7 +159,7 @@ class Node(QWidget):
             self.gui_instance.set_end_node(self)
         else:
             self.gui_instance.clear_end_node()
-        self.update()  # Trigger a repaint
+        self.update()
         self.gui_instance.update_lines()
         print(f"End Node: {self.isEndNode}")
 
@@ -184,6 +188,7 @@ class Node(QWidget):
     def insert_node_after(self):
         self.gui_instance.add_node(self.x+5, self.y+5, self.gui_instance.index_of(self)+1)
 
+# Should be integrated directly with the Gui class
 class SaveNodesDialog(QDialog):
     def __init__(self, nodes_string, parent=None):
         super().__init__(parent)
@@ -206,7 +211,7 @@ class SaveNodesDialog(QDialog):
         clipboard = QApplication.clipboard()
         clipboard.setText(self.text_edit.toPlainText())
 
-class Gui(QMainWindow):
+class AutonomousPlannerGUIManager(QMainWindow):
     def __init__(self):
         super().__init__()
 
@@ -222,18 +227,13 @@ class Gui(QMainWindow):
 
         self.layout = QVBoxLayout()
 
-        # Create a QLabel to display the image
         self.label = ClickableLabel(parent=self.central_widget, gui_instance=self)
 
-        # Load and set the image
         pixmap = QPixmap('assets/top_down_cropped_high_stakes_field.png')  # Replace with your image path
-        # self.label.setPixmap(pixmap)
 
         self.update()
         self.layout.addWidget(self.label)
-        # self.layout.addWidget(self.central_widget)
         self.central_widget.setLayout(self.layout)
-        # self.layout.setCurrentWidget(self.central_widget)
 
         self.create_menu_bar()
 
@@ -287,7 +287,6 @@ class Gui(QMainWindow):
         print(f"Node created at ({x}, {y})")
 
     def update_lines(self):
-        self.central_widget.raise_()  # Ensure the DrawingWidget is on top
         self.central_widget.update()
         self.central_widget.show()
 
@@ -334,11 +333,10 @@ class Gui(QMainWindow):
             ]
             for node in self.nodes
         ]
-        nodes_string = json.dumps(nodes_data, separators=(',', ':'))  # Compact JSON representation
+        nodes_string = json.dumps(nodes_data, separators=(',', ':'))
         print("Nodes saved as string:", nodes_string)
         dialog = SaveNodesDialog(nodes_string, self)
         dialog.exec()
-        # return nodes_string
 
 
     def create_cpp_file(self):
@@ -414,7 +412,7 @@ class Gui(QMainWindow):
 
         plt.tight_layout()
         plt.show()
-    
+
 
 
 class DrawingWidget(QWidget):
@@ -443,7 +441,6 @@ class DrawingWidget(QWidget):
             print("CURRENT POSITION: " + str(current_position))
 
     def paintEvent(self, event):
-        # super().paintEvent(event)
         gui_instance = self.parent()
 
         painter = QPainter(self)
@@ -463,24 +460,8 @@ class DrawingWidget(QWidget):
             painter.drawPath(self.path)
             painter.end()
 
-            
-
-            # previous_node = None
-            # for node in gui_instance.nodes:
-            #     if previous_node is not None:
-            #         if node.isEndNode:
-            #             continue
-            #         print(f"Drawing line from ({previous_node.x + 5}, {previous_node.y + 5}) to ({node.x + 5}, {node.y + 5})")  # Debug print
-            #         painter.drawLine(previous_node.x+10, previous_node.y+10, node.x+10, node.y+10)
-            #     previous_node = node
-
-            # # Draw final line to end node
-            # if previous_node and previous_node != gui_instance.end_node:
-            #     print(f"Drawing final line from ({previous_node.x + 5}, {previous_node.y + 5}) to ({gui_instance.end_node.x + 5}, {gui_instance.end_node.y + 5})")
-            #     painter.drawLine(previous_node.x+10, previous_node.y+10, gui_instance.end_node.x+10, gui_instance.end_node.y+10)
-
+    # From @musicamante on stackoverflow rewrite later
     def buildPath(self, points):
-        # From 
         factor = 0.25
         self.path = QPainterPath(points[0])
         self.distances = []
@@ -499,15 +480,12 @@ class DrawingWidget(QWidget):
             cp2 = revTarget.p2()
 
             if p == 1:
-
                 P0, P1, P2 = map(np.array, [(self.path.currentPosition().x(), self.path.currentPosition().y()), (cp2.x(), cp2.y()), (current.x(), current.y())])
                 arc_length, _ = quad(quad_integrand, 0, 1, args=(P0, P1, P2))
                 print(arc_length)
                 self.distances.append(arc_length)
                 self.path.quadTo(cp2, current)
             else:
-                # use the control point "cp1" set in the *previous* cycle
-
                 P0, P1, P2, P3 = map(np.array, [(self.path.currentPosition().x(), self.path.currentPosition().y()), (cp1.x(), cp1.y()), (cp2.x(), cp2.y()), (current.x(),
                                                                                                                                                              current.y())])
                 arc_length, _ = quad(cubic_integrand, 0, 1, args=(P0, P1, P2, P3))
@@ -518,16 +496,12 @@ class DrawingWidget(QWidget):
             revSource = QLineF.fromPolar(target.length() * factor, angle).translated(current)
             cp1 = revSource.p2()
 
-        # the final curve, that joins to the last point
-        # for node in 
-        # self.scurve()
+        # The final curve, that joins to the last point
         P0, P1, P2 = map(np.array, [(self.path.currentPosition().x(), self.path.currentPosition().y()), (cp1.x(), cp1.y()), (points[-1].x(), points[-1].y())])
         arc_length, _ = quad(quad_integrand, 0, 1, args=(P0, P1, P2))
         self.distances.append(arc_length)
         print(arc_length)
         self.path.quadTo(cp1, points[-1])
-        # print(self.path.length)
-        # self.show()
 
     # Function to calculate the distance covered for given v_max
     def calculate_total_distance(self, v_max, a_max, j_max):
@@ -565,19 +539,8 @@ class DrawingWidget(QWidget):
         while (l <= r):
             mid = l + (r-l)/2
             a_max = j_max*mid
-            # v_max = (j_max * mid**2)/2
-            # t_acc = a_max/j_max
-            # sendhelp = a_max/j_max
-            # jerk*t^0
-            # jerk*t^1 + initacc*t^0
-            # (jerk*t^2)/2 + initacc*t^1 + initvelo*t^0
-            # (jerk*t^3)/6 + (initacc*t^2)/2 + initvelo*t^1 + initpos*t^0
-            
             d_jerk1 = (j_max*mid**3)/6
-            # d_jerk2 = (j_max*mid**3)/6 + (a_max*mid**2)/2 + v_max*mid
             d_jerk2 = ((-j_max)*mid**3)/6 + (a_max*mid**2)/2 + ((j_max*mid**2)/2)*mid
-            # d_jerk2 = v_max * mid + (1/2) * a_max * mid**2 - (1/6) * j_max * mid**3
-            # (1/6) * j_max * t_jerk**3 + v_max * t_jerk - (1/2) * a_max * t_jerk**2
             dist = d_jerk1 + d_jerk2
             print(mid, " ", dist, " ", distance)
             if (abs(distance-dist) < tolerance):
@@ -593,79 +556,37 @@ class DrawingWidget(QWidget):
 
     def generate_scurve_profile(self, distance, v_max=.25, a_max=0.125, j_max=0.08, dt=0.01):
         t_jerk = a_max / j_max
-        t_acc = (v_max - 2 * 0.5 * j_max * t_jerk**2) / a_max # v_max / a_max - t_j
+        t_acc = (v_max - 2 * 0.5 * j_max * t_jerk**2) / a_max
 
         d_jerk1 = (1/6) * j_max * t_jerk**3
-        # d_acc = (1/2) * a_max * t_acc**2 + 0.5 * j_max * t_jerk**2 * t_acc
         d_acc = (a_max*t_acc**2)/2 + ((j_max*t_jerk**2)/2)*t_acc**1
-        # t_acc*t^0
-        # t_acc*t^1 + init_velo*t^0
-        # (t_acc*t^2)/2 + init_velo*t^1 + init_pos
-
-        # jerk*t^0
-        # jerk*t^1 + initacc*t^0
-        # (jerk*t^2)/2 + initacc*t^1 + initvelo*t^0
-        # d_jerk2 = (j_max*t_jerk**3)/6 - (a_max*t_jerk**2)/2 + v_max*t_jerk
-
-        # acceleration*t^0
         d_jerk1 = (j_max*t_jerk**3)/6
         d_jerk2 = ((-j_max)*t_jerk**3)/6 + (a_max*t_jerk**2)/2 + ((j_max*t_jerk**2)/2 + t_acc*a_max)*t_jerk
-        # d_jerk3 = ((-j_max)*t_jerk**3)/6
-        # d_jerk4 = ((-j_max)*t_jerk**3)/6
-        # d_jerk2 = d_jerk1 + t_jerk*v_max
 
         t_flat = (distance - 2.0 * (d_jerk1 + d_acc + d_jerk2)) / v_max
         print(t_jerk, " ", t_acc, " ", t_flat)
         if t_flat < 0:
             v_max = self.find_correct_v_max(distance, a_max, j_max, v_max)
-            # v_max = (j_max * distance / 2)**(1/3)
             t_jerk = a_max / j_max
             t_acc = (v_max - 2 * 0.5 * j_max * t_jerk**2) / a_max
             t_flat = 0
 
             d_jerk1 = (j_max*t_jerk**3)/6
             d_jerk2 = ((-j_max)*t_jerk**3)/6 + (a_max*t_jerk**2)/2 + ((j_max*t_jerk**2)/2 + t_acc*a_max)*t_jerk
-            # d_jerk2 = (1/6) * j_max * t_jerk**3 + v_max * t_jerk - (1/2) * a_max * t_jerk**2
-            # d_jerk2 = (j_max * t_jerk**3) / 6 + ((j_max*t_jerk) * t_jerk**2) / 2 + ((j_max * t_jerk**2) / 2) * t_jerk
-            # d_jerk2 = (j_max*t_jerk**3)/6 + (a_max*t_jerk**2)/2 + v_max*t_jerk
-            # print("JERK DISTS: ", d_jerk1, " ", d_jerk2)
-            if (t_acc < 0): # 2*(d_jerk1+d_jerk2) >= distance
-                t_jerk = (distance / 2 / (1/6 * j_max))**(1/3)
-                t_jerk = ((distance/4)*6/j_max)**(1/3) # THIS IS OFF,
+            if (t_acc < 0):
                 t_jerk = self.find_tjerk(distance/2, t_jerk, j_max)
-                # a = (1/3) * j_max
-                # b = -(1/2) * a_max
-                # c = v_max
-                # d = -distance/2
 
-                # # Define the coefficients in a list
-                # coefficients = [a, b, c, d]
-
-                # # Solve the cubic equation
-                # roots = np.roots(coefficients)
-
-                # # Filter real roots
-                # real_roots = [root.real for root in roots if np.isreal(root)]
-                # t_jerk = real_roots[0]/2
-                
-                # t_jerk /= 2
-                # t_jerk = ((24*distance)/(j_max))**(1/4)/4
                 t_acc = 0
-                # d_jerk1 = (1/6) * j_max * t_jerk**3
-                # d_jerk2 = d_jerk1
                 d_acc = 0
                 d_flat = 0
                 a_max = t_jerk*j_max
                 
-                # v_max = self.find_correct_v_max(distance, 0, j_max, v_max)
             print("Dif: ", (distance / 2 / (1/6 * j_max))**(1/3)-((24*distance)/(j_max/dt))**(1/4))
             print(t_jerk, " ", t_acc, " ", t_flat, " ", v_max)
 
 
 
-            # print("NEW VELO MAX: ", v_max, " ", (distance - 2 * (0.5 * a_max * t_jerk**2 + a_max * t_acc**2)) / v_max)
         total_time = 4 * t_jerk + 2 * t_acc + t_flat
-        # print("TIME DIFF: ", total_time, " ", distance)
         time_intervals = np.arange(0, total_time, dt)
         positions, velocities, accelerations = [], [], []
         s = 0
@@ -675,40 +596,15 @@ class DrawingWidget(QWidget):
 
         d_jerk1 = (j_max*t_jerk**3)/6
         d_acc = (1/2) * a_max * t_acc**2 + 0.5 * j_max * t_jerk**2 * t_acc
-        # d_jerk2 = (1/6) * j_max * t_jerk**3 + v_max * t_jerk - (1/2) * a_max * t_jerk**2
         d_jerk2 = ((-j_max)*t_jerk**3)/6 + (a_max*t_jerk**2)/2 + ((j_max*t_jerk**2)/2 + t_acc*a_max)*t_jerk
-        # d_jerk2 = (j_max*t_jerk**3)/6 + (a_max*t_jerk**2)/2 + v_max*t_jerk
-        
-        # d_jerk2 = v_max * t_jerk + (1/2) * a_max * t_jerk**2 - (1/6) * j_max * t_jerk**3
         d_flat = v_max * t_flat
         if (d_acc < 0):
             d_acc = 0
-        total_distance_covered = 2 * d_jerk1 + 2 * d_acc + 2 * d_jerk2 + d_flat
 
-        # t_flat = (distance-(2 * d_jerk1 + 2 * d_acc + 2 * d_jerk2))/v_max
-        # print(distance-(2 * d_jerk1 + 2 * d_acc + 2 * d_jerk2), " ", )
-        # total_distance_covered = 2 * d_jerk1 + 2 * d_acc + 2 * d_jerk2 + d_flat
-        
-        print("DISTANCE: ", total_distance_covered, " ", distance)
-        print("ESTIMATED VELO AFTER JERK: ", 0.5 * j_max * t_jerk**2)
-
-        # Calculate time to reach maximum velocity after the jerk phase
-        # t_acc = (v_max - a_max * t_jerk) / a_max
-
-        
-
-        # print("DISTANCE: ", d_jerk1+d_acc+d_jerk2+d_flat, " ", distance)
-
-        # Initialize position and velocity
         a = 0
         s = 0
         v = 0
-        print("INTERVALS: 0-" + str(t_jerk) + ", " + str(t_jerk) + "-" + str(t_jerk+t_acc) + ", " + str(t_jerk+t_acc) + "-" + str(2 * t_jerk + t_acc )+ ", " + \
-              str(2 * t_jerk + t_acc) + "-" + str(2 * t_jerk + t_acc + t_flat) + ", " + str(2 * t_jerk + t_acc + t_flat) + "-" + str(3 * t_jerk + t_acc + t_flat) + \
-              ", " +str(3 * t_jerk + t_acc + t_flat) + "-" + str(3 * t_jerk + 2 * t_acc + t_flat) + ", " + str(3 * t_jerk + 2 * t_acc + t_flat) + "-inf")
-        print(time_intervals)
         for t in time_intervals:
-            
             if t < t_jerk:
                 print("First jerk phase: ", d_jerk1, end=' ')
                 # First jerk phase (increasing acceleration)
@@ -724,7 +620,6 @@ class DrawingWidget(QWidget):
             elif t < 2 * t_jerk + t_acc:
                 print("Second jerk phase (negative): ", d_jerk1+d_jerk2+d_acc, end=' ')
                 # Second jerk phase (decreasing acceleration)
-                # a = a_max - j_max * (t - t_jerk - t_acc)
                 a -= j_max * dt
                 v += a * dt
                 s += v * dt
@@ -737,7 +632,6 @@ class DrawingWidget(QWidget):
             elif t < 3 * t_jerk + t_acc + t_flat:
                 print("Third jerk phase(negative): ", 2*d_jerk2+d_jerk1+d_acc+d_flat, end=' ')
                 # Third jerk phase (decreasing acceleration)
-                # a = -j_max * (t - 2 * t_jerk - t_acc - t_flat)
                 a -= j_max * dt
                 v += a * dt
                 s += v * dt
@@ -750,29 +644,21 @@ class DrawingWidget(QWidget):
             elif t < 4 * t_jerk + 2*t_acc + t_flat:
                 print("Fourth jerk phase: ", 2*d_jerk2+2*d_jerk1+2*d_acc+d_flat, end=' ')
                 # Fourth jerk phase (increasing acceleration)
-                # a = -a_max + j_max * (t - 3 * t_jerk - 2 * t_acc - t_flat)
                 a += j_max * dt
                 v += a * dt
                 s += v * dt
-            print(s, " ", v, " ", a, " ", t)
-            # Append the computed values to the arrays
+            
             positions.append(s)
             velocities.append(v)
             accelerations.append(a)
-        # print(s, " ", v, " ", a, " ", t)
-        # # Append the computed values to the arrays
-        # positions.append(s)
-        # velocities.append(v)
-        # accelerations.append(a)
-        # time_intervals.append()
-        print(len(time_intervals), " ", len(positions))
+
         return time_intervals, positions, velocities, accelerations
 
                 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
 
-    window = Gui()
+    window = AutonomousPlannerGUIManager()
     window.show()
 
     sys.exit(app.exec())
