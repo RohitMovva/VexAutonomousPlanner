@@ -1,6 +1,6 @@
 import sys
 import json
-from PyQt6.QtWidgets import QApplication, QDialog, QLabel, QWidget, QVBoxLayout, QMenu, QMenuBar, QInputDialog, QMainWindow, QStackedLayout, QTextEdit, QPushButton
+from PyQt6.QtWidgets import QApplication, QDialog, QLabel, QWidget, QVBoxLayout, QMenu, QInputDialog, QMainWindow, QTextEdit, QPushButton, QFileDialog
 from PyQt6.QtGui import QPixmap, QMouseEvent, QPainter, QColor, QAction, QPen, QPainterPath
 from PyQt6.QtCore import Qt, QPoint, QLineF, QPointF
 from scipy.integrate import quad
@@ -59,6 +59,7 @@ class Node(QWidget):
         self.isEndNode = False
         self.spinIntake = False
         self.clampGoal = False
+        self.hasAction = (self.isStartNode or self.isEndNode or self.spinIntake or self.clampGoal)
         self.turn = 0
         self.setFixedSize(10, 10)
         self.move(x+5, y+5)
@@ -100,46 +101,54 @@ class Node(QWidget):
     def mouseReleaseEvent(self, event: QMouseEvent):
         if event.button() == Qt.MouseButton.LeftButton:
             self.dragging = False
+
+        self.gui_instance.auto_save()
         super().mouseReleaseEvent(event)
 
     def show_context_menu(self, pos):
         context_menu = QMenu(self)
 
+        attributes_menu = QMenu("Attributes", self)
+        node_menu = QMenu("Node Actions", self)
+
         start_action = QAction('Start Node', self, checkable=True)
         start_action.setChecked(self.isStartNode)
         start_action.triggered.connect(self.toggle_start_node)
-        context_menu.addAction(start_action)
+        attributes_menu.addAction(start_action)
 
         end_action = QAction('End Node', self, checkable=True)
         end_action.setChecked(self.isEndNode)
         end_action.triggered.connect(self.toggle_end_node)
-        context_menu.addAction(end_action)
+        attributes_menu.addAction(end_action)
 
         spin_action = QAction('Spin Intake', self, checkable=True)
         spin_action.setChecked(self.spinIntake)
         spin_action.triggered.connect(self.toggle_spin_intake)
-        context_menu.addAction(spin_action)
+        attributes_menu.addAction(spin_action)
 
         clamp_action = QAction('Clamp Goal', self, checkable=True)
         clamp_action.setChecked(self.clampGoal)
         clamp_action.triggered.connect(self.toggle_clamp_goal)
-        context_menu.addAction(clamp_action)
+        attributes_menu.addAction(clamp_action)
 
         turn_action = QAction('Turn Value: ' + str(self.turn), self)
         turn_action.triggered.connect(self.set_turn)
-        context_menu.addAction(turn_action)
+        attributes_menu.addAction(turn_action)
 
         delete_action = QAction('Delete Node', self)
         delete_action.triggered.connect(self.delete_node)
-        context_menu.addAction(delete_action)
+        node_menu.addAction(delete_action)
 
         insert_node_before_action = QAction('Insert Node Before', self)
         insert_node_before_action.triggered.connect(self.insert_node_before)
-        context_menu.addAction(insert_node_before_action)
+        node_menu.addAction(insert_node_before_action)
 
         insert_node_after_action = QAction('Insert Node After', self)
         insert_node_after_action.triggered.connect(self.insert_node_after)
-        context_menu.addAction(insert_node_after_action)
+        node_menu.addAction(insert_node_after_action)
+
+        context_menu.addMenu(attributes_menu)
+        context_menu.addMenu(node_menu)
 
         context_menu.exec(pos)
 
@@ -147,6 +156,9 @@ class Node(QWidget):
         self.isStartNode = not self.isStartNode
         if self.isStartNode:
             self.gui_instance.set_start_node(self)
+            if self.isEndNode:
+                self.gui_instance.clear_end_node()
+                self.isEndNode = False
         else:
             self.gui_instance.clear_start_node()
         self.update()
@@ -157,6 +169,9 @@ class Node(QWidget):
         self.isEndNode = not self.isEndNode
         if self.isEndNode:
             self.gui_instance.set_end_node(self)
+            if self.isStartNode:
+                self.gui_instance.clear_start_node()
+                self.isStartNode = False
         else:
             self.gui_instance.clear_end_node()
         self.update()
@@ -225,6 +240,8 @@ class AutonomousPlannerGUIManager(QMainWindow):
         self.start_node = None
         self.end_node = None
 
+        self.current_working_file = None
+
         self.layout = QVBoxLayout()
 
         self.label = ClickableLabel(parent=self.central_widget, gui_instance=self)
@@ -244,9 +261,25 @@ class AutonomousPlannerGUIManager(QMainWindow):
         file_menu = menu_bar.addMenu('File')
         tools_menu = menu_bar.addMenu('Tools')
 
-        save_nodes_action = QAction('Save Nodes as String', self)
-        save_nodes_action.triggered.connect(self.save_nodes)
-        file_menu.addAction(save_nodes_action)
+        save_nodes_file_action = QAction('Save Nodes to File', self)
+        save_nodes_file_action.triggered.connect(self.save_nodes_to_file)
+        file_menu.addAction(save_nodes_file_action)
+
+        load_nodes_file_action = QAction('Load Nodes from File', self)
+        load_nodes_file_action.triggered.connect(self.load_nodes_from_file)
+        file_menu.addAction(load_nodes_file_action)
+
+        save_nodes_string_action = QAction('Convert to String', self)
+        save_nodes_string_action.triggered.connect(self.save_nodes_to_string)
+        file_menu.addAction(save_nodes_string_action)
+
+        load_nodes_string_action = QAction('Load Nodes from String', self)
+        load_nodes_string_action.triggered.connect(self.load_nodes_from_string)
+        file_menu.addAction(load_nodes_string_action)
+
+        set_current_file_action = QAction('Set Current Working File', self)
+        set_current_file_action.triggered.connect(self.set_working_file)
+        file_menu.addAction(set_current_file_action)
 
         create_cpp_action = QAction('Create C++ File from Nodes', self)
         create_cpp_action.triggered.connect(self.create_cpp_file)
@@ -268,11 +301,6 @@ class AutonomousPlannerGUIManager(QMainWindow):
         show_velocity_graph.triggered.connect(self.velocity_graph)
         tools_menu.addAction(show_velocity_graph)
 
-
-        load_nodes_action = QAction('Load Nodes from String', self)
-        load_nodes_action.triggered.connect(self.load_nodes)
-        file_menu.addAction(load_nodes_action)
-
     def index_of(self, node):
         return (self.nodes.index(node))
 
@@ -284,6 +312,7 @@ class AutonomousPlannerGUIManager(QMainWindow):
             self.nodes.insert(pos, node)
         node.show()
         self.update_lines()
+        self.auto_save()
         print(f"Node created at ({x}, {y})")
 
     def update_lines(self):
@@ -319,8 +348,88 @@ class AutonomousPlannerGUIManager(QMainWindow):
     def clear_end_node(self):
         self.end_node = None
 
+    def save_nodes_to_string(self):
+        nodes_string = self.convert_nodes()
+        print("Nodes saved as string:", nodes_string)
+        dialog = SaveNodesDialog(nodes_string, self)
+        dialog.exec()
 
-    def save_nodes(self):
+    def load_nodes_from_string(self):
+        nodes_string, ok = QInputDialog.getText(self, "Load Nodes", "Enter nodes string:")
+        if ok and nodes_string:
+            self.load_nodes(nodes_string)
+
+    def save_nodes_to_file(self):
+        nodes_string = self.convert_nodes(True)
+        full_path = self.current_working_file
+
+        if (self.current_working_file == None):
+            file_name, ok = QInputDialog.getText(self, "Save Route to File", "Enter file name (without extension):")
+            if (not ok or not file_name):
+                return
+            
+            file_name = file_name.strip() + ".txt"
+            folder = QFileDialog.getExistingDirectory(self, "Select Directory to Save File")
+            if (not folder):
+                return
+            
+            full_path = f"{folder}/{file_name}"
+            
+        with open(full_path, 'w') as file:
+            file.write(nodes_string)
+        print(f"Route saved to {full_path}")
+
+    def load_nodes_from_file(self):
+        file_name, _ = QFileDialog.getOpenFileName(self, "Load Route from File", "", "Text Files (*.txt);;All Files (*)")
+        if file_name:
+            with open(file_name, 'r') as file:
+                nodes_string = file.read()
+            print(f"Route loaded from {file_name}")
+            self.load_nodes(nodes_string)
+
+    def set_working_file(self):
+        file_name, ok = QInputDialog.getText(self, "Current Working File (existing or new)", "Enter file name (without extension):")
+        if ok and file_name:
+            file_name = file_name.strip() + ".txt"
+            folder = QFileDialog.getExistingDirectory(self, "Select Directory to Save File")
+            if folder:
+                full_path = f"{folder}/{file_name}"
+                with open(full_path, 'w') as file:
+                    pass
+                self.current_working_file = full_path
+                print(f"Set current working file at {full_path}")
+
+    def create_cpp_file(self):
+        print("Creating C++ file from nodes...") # This is a lie
+
+    def clear_nodes(self):
+        while self.nodes:
+            node = self.nodes.pop()
+            node.delete_node()
+        self.start_node = None
+        self.end_node = None
+        self.update_lines()
+        print("Clearing all nodes...")
+
+    def load_nodes(self, str):
+        nodes_data = json.loads(str)
+        self.clear_nodes()
+        for node_data in nodes_data:
+            if (len(node_data) > 4):
+                node = Node(node_data[0], node_data[1], self.central_widget, gui_instance=self)
+                self.start_node = node if bool(node_data[2]) else self.start_node
+                node.isStartNode = bool(node_data[2])
+                self.end_node = node if bool(node_data[3]) else self.end_node
+                node.isEndNode = bool(node_data[3])
+                node.spinIntake = bool(node_data[4])
+                node.clampGoal = bool(node_data[5])
+                node.turn = node_data[6]
+                self.nodes.append(node)
+                node.show()
+
+        self.update_lines()
+
+    def convert_nodes(self, scurve=False):
         nodes_data = [
             [
                 node.x,
@@ -333,42 +442,16 @@ class AutonomousPlannerGUIManager(QMainWindow):
             ]
             for node in self.nodes
         ]
+        if (scurve):
+            time_intervals, positions, velocities, accelerations = self.central_widget.calculateScurveStuff()
+            for i in range(0, len(time_intervals)):
+                nodes_data.append([time_intervals[i], positions[i], velocities[i], accelerations[i]])
         nodes_string = json.dumps(nodes_data, separators=(',', ':'))
-        print("Nodes saved as string:", nodes_string)
-        dialog = SaveNodesDialog(nodes_string, self)
-        dialog.exec()
-
-
-    def create_cpp_file(self):
-        print("Creating C++ file from nodes...")
-
-    def clear_nodes(self):
-        while self.nodes:
-            node = self.nodes.pop()
-            node.delete_node()
-        self.start_node = None
-        self.end_node = None
-        self.update_lines()
-        print("Clearing all nodes...")
-
-    def load_nodes(self):
-        nodes_string, ok = QInputDialog.getText(self, "Load Nodes", "Enter nodes string:")
-        if ok and nodes_string:
-            nodes_data = json.loads(nodes_string)
-            self.clear_nodes()
-            for node_data in nodes_data:
-                node = Node(node_data[0], node_data[1], self.central_widget, gui_instance=self)
-                self.start_node = node if bool(node_data[2]) else self.start_node
-                node.isStartNode = bool(node_data[2])
-                self.end_node = node if bool(node_data[3]) else self.end_node
-                node.isEndNode = bool(node_data[3])
-                node.spinIntake = bool(node_data[4])
-                node.clampGoal = bool(node_data[5])
-                node.turn = node_data[6]
-                self.nodes.append(node)
-                node.show()
-
-            self.update_lines()
+        return nodes_string
+    
+    def auto_save(self):
+        if (self.current_working_file != None):
+            self.save_nodes_to_file()
 
     def acceleration_graph(self):
         self.central_widget.calculateScurveStuff()
@@ -429,16 +512,15 @@ class DrawingWidget(QWidget):
         self.all_accelerations = []
 
         current_position = 0
-        print(self.distances)
         for arc_length in self.distances:
-            print(arc_length*(0.00523261802))
-            time_intervals, positions, velocities, accelerations = self.generate_scurve_profile(arc_length*(0.00523261802))
+            time_intervals, positions, velocities, accelerations = self.generate_scurve_profile(arc_length*(12/699) * 0.3048)
             self.all_time_intervals.extend(time_intervals + (self.all_time_intervals[-1] if self.all_time_intervals else 0))
             self.all_positions.extend([p + current_position for p in positions])
             self.all_velocities.extend(velocities)
             self.all_accelerations.extend(accelerations)
-            current_position += arc_length*(0.00523261802)
-            print("CURRENT POSITION: " + str(current_position))
+            current_position += arc_length*(12/699) * 0.3048
+
+        return self.all_time_intervals, self.all_positions, self.all_velocities, self.all_accelerations
 
     def paintEvent(self, event):
         gui_instance = self.parent()
@@ -481,60 +563,56 @@ class DrawingWidget(QWidget):
 
             if p == 1:
                 P0, P1, P2 = map(np.array, [(self.path.currentPosition().x(), self.path.currentPosition().y()), (cp2.x(), cp2.y()), (current.x(), current.y())])
-                arc_length, _ = quad(quad_integrand, 0, 1, args=(P0, P1, P2))
-                print(arc_length)
+                arc_length, error = quad(quad_integrand, 0, 1, args=(P0, P1, P2))
                 self.distances.append(arc_length)
                 self.path.quadTo(cp2, current)
             else:
                 P0, P1, P2, P3 = map(np.array, [(self.path.currentPosition().x(), self.path.currentPosition().y()), (cp1.x(), cp1.y()), (cp2.x(), cp2.y()), (current.x(),
                                                                                                                                                              current.y())])
-                arc_length, _ = quad(cubic_integrand, 0, 1, args=(P0, P1, P2, P3))
-                print(arc_length)
+                arc_length, error = quad(cubic_integrand, 0, 1, args=(P0, P1, P2, P3))
                 self.distances.append(arc_length)
                 self.path.cubicTo(cp1, cp2, current)
-
             revSource = QLineF.fromPolar(target.length() * factor, angle).translated(current)
             cp1 = revSource.p2()
 
         # The final curve, that joins to the last point
         P0, P1, P2 = map(np.array, [(self.path.currentPosition().x(), self.path.currentPosition().y()), (cp1.x(), cp1.y()), (points[-1].x(), points[-1].y())])
-        arc_length, _ = quad(quad_integrand, 0, 1, args=(P0, P1, P2))
+        arc_length, error = quad(quad_integrand, 0, 1, args=(P0, P1, P2))
         self.distances.append(arc_length)
-        print(arc_length)
         self.path.quadTo(cp1, points[-1])
 
     # Function to calculate the distance covered for given v_max
     def calculate_total_distance(self, v_max, a_max, j_max):
         t_jerk = a_max / j_max
         v_after_jerk1 = 0.5 * j_max * t_jerk**2
-        t_acc = (v_max - v_after_jerk1) / a_max
+        t_acc = (v_max - v_after_jerk1*2) / a_max
         
-        d_jerk1 = (1/6) * j_max * t_jerk**3
-        d_acc = (1/2) * a_max * t_acc**2 + v_after_jerk1 * t_acc
-        d_jerk2 = (1/6) * j_max * t_jerk**3 + (v_after_jerk1 + a_max * t_acc) * t_jerk - (1/2) * a_max * t_jerk**2
+        d_jerk1 = (j_max*t_jerk**3)/6
+        d_acc = (a_max*t_acc**2)/2 + ((j_max*t_jerk**2)/2)*t_acc**1
+        d_jerk2 = ((-j_max)*t_jerk**3)/6 + (a_max*t_jerk**2)/2 + ((j_max*t_jerk**2)/2 + t_acc*a_max)*t_jerk
         
         total_distance = 2 * (d_jerk1 + d_acc + d_jerk2)
         return total_distance
 
 
     # Bisection method to find the correct v_max
-    def find_correct_v_max(self, distance, a_max, j_max, v_max_initial, tolerance=1e-6):
+    def find_correct_v_max(self, distance, a_max, j_max, v_max_initial, tolerance=1e-11):
         v_max_low = 0
-        v_max_high = v_max_initial
-        v_max = (v_max_low + v_max_high) / 2
+        v_max_high = 1e9
+        v_max = v_max_low + (v_max_high - v_max_low) / 2
         
         while abs(self.calculate_total_distance(v_max, a_max, j_max) - distance) > tolerance:
             if self.calculate_total_distance(v_max, a_max, j_max) > distance:
                 v_max_high = v_max
             else:
                 v_max_low = v_max
-            v_max = (v_max_low + v_max_high) / 2
+            v_max = v_max_low + (v_max_high - v_max_low) / 2
         
         return v_max
 
-    def find_tjerk(self, distance, t_jerk, j_max, dt=0.01, tolerance=1e-9):
+    def find_tjerk(self, distance, t_jerk, j_max, dt=0.01, tolerance=1e-11):
         l = 0
-        r = t_jerk+1
+        r = 1e9
         c = 0
         while (l <= r):
             mid = l + (r-l)/2
@@ -542,7 +620,6 @@ class DrawingWidget(QWidget):
             d_jerk1 = (j_max*mid**3)/6
             d_jerk2 = ((-j_max)*mid**3)/6 + (a_max*mid**2)/2 + ((j_max*mid**2)/2)*mid
             dist = d_jerk1 + d_jerk2
-            print(mid, " ", dist, " ", distance)
             if (abs(distance-dist) < tolerance):
                 return mid
             elif (dist < distance):
@@ -558,17 +635,15 @@ class DrawingWidget(QWidget):
         t_jerk = a_max / j_max
         t_acc = (v_max - 2 * 0.5 * j_max * t_jerk**2) / a_max
 
-        d_jerk1 = (1/6) * j_max * t_jerk**3
         d_acc = (a_max*t_acc**2)/2 + ((j_max*t_jerk**2)/2)*t_acc**1
         d_jerk1 = (j_max*t_jerk**3)/6
         d_jerk2 = ((-j_max)*t_jerk**3)/6 + (a_max*t_jerk**2)/2 + ((j_max*t_jerk**2)/2 + t_acc*a_max)*t_jerk
 
         t_flat = (distance - 2.0 * (d_jerk1 + d_acc + d_jerk2)) / v_max
-        print(t_jerk, " ", t_acc, " ", t_flat)
         if t_flat < 0:
             v_max = self.find_correct_v_max(distance, a_max, j_max, v_max)
             t_jerk = a_max / j_max
-            t_acc = (v_max - 2 * 0.5 * j_max * t_jerk**2) / a_max
+            t_acc = (v_max - (j_max*t_jerk**2)) / a_max
             t_flat = 0
 
             d_jerk1 = (j_max*t_jerk**3)/6
@@ -579,11 +654,7 @@ class DrawingWidget(QWidget):
                 t_acc = 0
                 d_acc = 0
                 d_flat = 0
-                a_max = t_jerk*j_max
-                
-            print("Dif: ", (distance / 2 / (1/6 * j_max))**(1/3)-((24*distance)/(j_max/dt))**(1/4))
-            print(t_jerk, " ", t_acc, " ", t_flat, " ", v_max)
-
+                a_max = t_jerk*j_max*2
 
 
         total_time = 4 * t_jerk + 2 * t_acc + t_flat
@@ -604,54 +675,62 @@ class DrawingWidget(QWidget):
         a = 0
         s = 0
         v = 0
+        debug = False
         for t in time_intervals:
             if t < t_jerk:
-                print("First jerk phase: ", d_jerk1, end=' ')
                 # First jerk phase (increasing acceleration)
+                if (debug):
+                    print("First jerk phase: ", d_jerk1, end=' ')
+                s += (j_max*dt**3)/6 + (a*dt**2)/2 + v*dt**1
+                v += (j_max*dt**2)/2 + a*dt
                 a += j_max * dt
-                v += a * dt
-                s += v * dt
             elif t < t_jerk + t_acc:
-                print("First acceleration phase: ", d_jerk1+d_acc, end=' ')
                 # First acceleration phase (constant acceleration)
+                if (debug):
+                    print("First acceleration phase: ", d_jerk1+d_acc, end=' ')
+                s += (a*dt**2)/2 + v*dt**1
+                v += a*dt
                 a = a_max
-                v += a * dt
-                s += v * dt
             elif t < 2 * t_jerk + t_acc:
-                print("Second jerk phase (negative): ", d_jerk1+d_jerk2+d_acc, end=' ')
                 # Second jerk phase (decreasing acceleration)
-                a -= j_max * dt
-                v += a * dt
-                s += v * dt
+                if (debug):
+                    print("Second jerk phase (negative): ", d_jerk1+d_jerk2+d_acc, end=' ')
+                s += ((-j_max)*dt**3)/6 + (a*dt**2)/2 + v*dt**1
+                v += ((-j_max)*dt**2)/2 + a*dt
+                a += -j_max * dt
             elif t < 2 * t_jerk + t_acc + t_flat:
-                print("Constant velocity phase: ", d_jerk1+d_jerk2+d_acc+d_flat, end=' ')
                 # Constant velocity phase
-                a = 0
+                if (debug):
+                    print("Constant velocity phase: ", d_jerk1+d_jerk2+d_acc+d_flat, end=' ')
+                s += v*dt**1
                 v = v_max
-                s += v * dt
+                a = 0
             elif t < 3 * t_jerk + t_acc + t_flat:
-                print("Third jerk phase(negative): ", 2*d_jerk2+d_jerk1+d_acc+d_flat, end=' ')
                 # Third jerk phase (decreasing acceleration)
-                a -= j_max * dt
-                v += a * dt
-                s += v * dt
+                if (debug):
+                    print("Third jerk phase(negative): ", 2*d_jerk2+d_jerk1+d_acc+d_flat, end=' ')
+                s += ((-j_max)*dt**3)/6 + (a*dt**2)/2 + v*dt**1
+                v += ((-j_max)*dt**2)/2 + a*dt
+                a += -j_max * dt
             elif t < 3 * t_jerk + 2*t_acc + t_flat:
-                print("Second acceleration phase: ", 2*d_jerk2+d_jerk1+2*d_acc+d_flat, end=' ')
                 # Second acceleration phase (constant negative acceleration)
+                if (debug):
+                    print("Second acceleration phase: ", 2*d_jerk2+d_jerk1+2*d_acc+d_flat, end=' ')
+                s += (a*dt**2)/2 + v*dt**1
+                v += a*dt
                 a = -a_max
-                v += a * dt
-                s += v * dt
             elif t < 4 * t_jerk + 2*t_acc + t_flat:
-                print("Fourth jerk phase: ", 2*d_jerk2+2*d_jerk1+2*d_acc+d_flat, end=' ')
                 # Fourth jerk phase (increasing acceleration)
+                if (debug):
+                    print("Fourth jerk phase: ", 2*d_jerk2+2*d_jerk1+2*d_acc+d_flat, end=' ')
+                s += (j_max*dt**3)/6 + (a*dt**2)/2 + v*dt**1 # Derive posiotion based on jerk as well
+                v += (j_max*dt**2)/2 + a*dt # Derive velocity based on jerk
                 a += j_max * dt
-                v += a * dt
-                s += v * dt
-            
+            if (debug):
+                print(s, " ", v, " ", a, " ", t)
             positions.append(s)
             velocities.append(v)
             accelerations.append(a)
-
         return time_intervals, positions, velocities, accelerations
 
                 
