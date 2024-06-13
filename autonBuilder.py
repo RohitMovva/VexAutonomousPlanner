@@ -5,11 +5,14 @@ from PyQt6.QtGui import QPixmap, QMouseEvent, QPainter, QColor, QAction, QPen, Q
 from PyQt6.QtCore import Qt, QPoint, QLineF, QPointF
 from scipy.integrate import quad
 import numpy as np
+from scipy.optimize import brentq
 import matplotlib.pyplot as plt
 
 # Calculations for length of Bezier curves (quadratic and cubic)
-def quad_bezier(t, P0, P1, P2):
-    return (1-t)**2 * P0 + 2 * (1-t) * t * P1 + t**2 * P2
+def quad_bezier_length(start, end, cp, t=1):
+    P0, P1, P2 = map(np.array, [(start.x(), start.y()), (cp.x(), cp.y()), (end.x(), end.y())])
+    arc_length, error = quad(quad_integrand, 0, t, args=(P0, P1, P2))
+    return arc_length
 
 # Derivative of the quadratic Bezier curve function
 def quad_bezier_derivative(t, P0, P1, P2):
@@ -21,8 +24,10 @@ def quad_integrand(t, P0, P1, P2):
     return np.sqrt(dx_dt**2 + dy_dt**2)
 
 # Quadratic Bezier curve function
-def cubic_bezier(t, P0, P1, P2, P3):
-    return (1-t)**3 * P0 + 3 * (1-t)**2 * t * P1 + 3 * (1-t) * t**2 * P2 + t**3 * P3
+def cubic_bezier_length(start, cp1, cp2, end, t=1):
+    P0, P1, P2, P3 = map(np.array, [(start.x(), start.y()), (cp1.x(), cp1.y()), (cp2.x(), cp2.y()), (end.x(), end.y())])
+    arc_length, error = quad(cubic_integrand, 0, t, args=(P0, P1, P2, P3))
+    return arc_length
 
 # Derivative of the cubic Bezier curve function
 def cubic_bezier_derivative(t, P0, P1, P2, P3):
@@ -32,6 +37,59 @@ def cubic_bezier_derivative(t, P0, P1, P2, P3):
 def cubic_integrand(t, P0, P1, P2, P3):
     dx_dt, dy_dt = cubic_bezier_derivative(t, P0, P1, P2, P3)
     return np.sqrt(dx_dt**2 + dy_dt**2)
+
+
+def quad_find_t_for_length(target_length, start, control, end, tol=1e-5):
+    total_length = quad_bezier_length(start, control, end)
+    
+    if target_length <= 0:
+        return 0.0
+    elif target_length >= total_length:
+        return 1.0
+    
+    def length_difference(t):
+        current_length = quad_bezier_length(start, end, control, t)*(12/699) * 0.3048
+        print(current_length-target_length)
+        return current_length - target_length
+    # print(length_difference)
+    t_value = brentq(length_difference, 0, 1, xtol=tol)
+    return t_value
+
+def cubic_find_t_for_length(target_length, start, control1, control2, end, tol=1e-5):
+    total_length = cubic_bezier_length(start, control1, control2, end)
+    
+    if target_length <= 0:
+        return 0.0
+    elif target_length >= total_length:
+        return 1.0
+    
+    def length_difference(t):
+        current_length = cubic_bezier_length(start, end, control1, control2, t)
+        # current_length, _ = quad(cubic_integrand, 0.0, t, args=(start, control1, control2, end))
+        return current_length - target_length
+    
+    t_value = brentq(length_difference, 0, 1, xtol=tol)
+    return t_value
+
+def angle_at_length(target_length, start, control1, end, control2=None, distance=None):
+    if (control2 == None): # Quadratic
+        # t = quad_find_t_for_length(target_length, start, control1, end)
+        t = target_length/distance
+        print(target_length, " ", distance, " ", t)
+        derivative = quad_bezier_derivative(t, start, control1, end)
+        angle = np.arctan2(derivative.y(), derivative.x())
+        angle = np.degrees(angle)
+        if (angle < 0):
+            angle += 360
+        return angle
+    
+    # Cubic
+    t = target_length/distance
+    # t = cubic_find_t_for_length(target_length, start, control1, end)
+    print(t)
+    derivative = cubic_bezier_derivative(t, start, control1, end)
+    angle = np.arctan2(derivative.y(), derivative.x())
+    return np.degrees(angle)
 
 
 # Click listener object
@@ -306,6 +364,10 @@ class AutonomousPlannerGUIManager(QMainWindow):
         show_velocity_graph.triggered.connect(self.velocity_graph)
         tools_menu.addAction(show_velocity_graph)
 
+        show_heading_graph = QAction('Show Heading Graph', self)
+        show_heading_graph.triggered.connect(self.heading_graph)
+        tools_menu.addAction(show_heading_graph)
+
     def index_of(self, node):
         return (self.nodes.index(node))
 
@@ -448,9 +510,9 @@ class AutonomousPlannerGUIManager(QMainWindow):
             for node in self.nodes
         ]
         if (scurve):
-            time_intervals, positions, velocities, accelerations = self.central_widget.calculateScurveStuff()
+            time_intervals, positions, velocities, accelerations, headings = self.central_widget.calculateScurveStuff()
             for i in range(0, len(time_intervals)):
-                nodes_data.append([time_intervals[i], positions[i], velocities[i], accelerations[i]])
+                nodes_data.append(velocities[i], headings[i])
         nodes_string = json.dumps(nodes_data, separators=(',', ':'))
         return nodes_string
     
@@ -501,6 +563,21 @@ class AutonomousPlannerGUIManager(QMainWindow):
         plt.tight_layout()
         plt.show()
 
+    def heading_graph(self):
+        self.central_widget.calculateScurveStuff()
+        plt.figure(figsize=(12, 8))
+
+        # Heading profile
+        plt.subplot(3, 1, 1)
+        plt.plot(self.central_widget.all_positions, self.central_widget.all_headings)
+        plt.title('Heading Profile')
+        plt.xlabel('Position (m)')
+        plt.ylabel('Heading (degrees)')
+
+
+        plt.tight_layout()
+        plt.show()
+
 
 
 class DrawingWidget(QWidget):
@@ -515,17 +592,20 @@ class DrawingWidget(QWidget):
         self.all_positions = []
         self.all_velocities = []
         self.all_accelerations = []
+        self.all_headings = []
 
         current_position = 0
-        for arc_length in self.distances:
-            time_intervals, positions, velocities, accelerations = self.generate_scurve_profile(arc_length*(12/699) * 0.3048)
+        for line in self.line_data:
+            arc_length = line[0]
+            time_intervals, positions, velocities, accelerations, headings = self.generate_scurve_profile(arc_length*(12/699) * 0.3048, line[1:])
             self.all_time_intervals.extend(time_intervals + (self.all_time_intervals[-1] if self.all_time_intervals else 0))
             self.all_positions.extend([p + current_position for p in positions])
             self.all_velocities.extend(velocities)
             self.all_accelerations.extend(accelerations)
+            self.all_headings.extend(headings)
             current_position += arc_length*(12/699) * 0.3048
 
-        return self.all_time_intervals, self.all_positions, self.all_velocities, self.all_accelerations
+        return self.all_time_intervals, self.all_positions, self.all_velocities, self.all_accelerations, self.all_headings
 
     def paintEvent(self, event):
         gui_instance = self.parent()
@@ -552,6 +632,7 @@ class DrawingWidget(QWidget):
         factor = 0.25
         self.path = QPainterPath(points[0])
         self.distances = []
+        self.line_data = []
         for p, current in enumerate(points[1:-1], 1):
             # previous segment
             source = QLineF(points[p - 1], current)
@@ -567,23 +648,22 @@ class DrawingWidget(QWidget):
             cp2 = revTarget.p2()
 
             if p == 1:
-                P0, P1, P2 = map(np.array, [(self.path.currentPosition().x(), self.path.currentPosition().y()), (cp2.x(), cp2.y()), (current.x(), current.y())])
-                arc_length, error = quad(quad_integrand, 0, 1, args=(P0, P1, P2))
+                arc_length = quad_bezier_length(self.path.currentPosition(), current, cp2)
                 self.distances.append(arc_length)
+                self.line_data.append([arc_length, self.path.currentPosition(), current, cp2])
                 self.path.quadTo(cp2, current)
             else:
-                P0, P1, P2, P3 = map(np.array, [(self.path.currentPosition().x(), self.path.currentPosition().y()), (cp1.x(), cp1.y()), (cp2.x(), cp2.y()), (current.x(),
-                                                                                                                                                             current.y())])
-                arc_length, error = quad(cubic_integrand, 0, 1, args=(P0, P1, P2, P3))
+                arc_length = cubic_bezier_length(self.path.currentPosition(), cp1, cp2, current)
                 self.distances.append(arc_length)
+                self.line_data.append([arc_length, self.path.currentPosition(), cp1, cp2, current])
                 self.path.cubicTo(cp1, cp2, current)
             revSource = QLineF.fromPolar(target.length() * factor, angle).translated(current)
             cp1 = revSource.p2()
 
         # The final curve, that joins to the last point
-        P0, P1, P2 = map(np.array, [(self.path.currentPosition().x(), self.path.currentPosition().y()), (cp1.x(), cp1.y()), (points[-1].x(), points[-1].y())])
-        arc_length, error = quad(quad_integrand, 0, 1, args=(P0, P1, P2))
+        arc_length = quad_bezier_length(self.path.currentPosition(), points[-1], cp1)
         self.distances.append(arc_length)
+        self.line_data.append([arc_length, self.path.currentPosition(), points[-1], cp1])
         self.path.quadTo(cp1, points[-1])
 
     # Function to calculate the distance covered for given v_max
@@ -636,9 +716,9 @@ class DrawingWidget(QWidget):
                 break
         return t_jerk
 
-    def generate_scurve_profile(self, distance, v_max=.25, a_max=0.125, j_max=0.08, dt=0.01):
+    def generate_scurve_profile(self, distance, line_data, v_max=.25, a_max=0.125, j_max=0.08, dt=0.01):
         t_jerk = a_max / j_max
-        t_acc = (v_max - 2 * 0.5 * j_max * t_jerk**2) / a_max
+        t_acc = (v_max - j_max * t_jerk**2) / a_max
 
         d_acc = (a_max*t_acc**2)/2 + ((j_max*t_jerk**2)/2)*t_acc**1
         d_jerk1 = (j_max*t_jerk**3)/6
@@ -655,7 +735,6 @@ class DrawingWidget(QWidget):
             d_jerk2 = ((-j_max)*t_jerk**3)/6 + (a_max*t_jerk**2)/2 + ((j_max*t_jerk**2)/2 + t_acc*a_max)*t_jerk
             if (t_acc < 0):
                 t_jerk = self.find_tjerk(distance/2, t_jerk, j_max)
-
                 t_acc = 0
                 d_acc = 0
                 d_flat = 0
@@ -664,12 +743,11 @@ class DrawingWidget(QWidget):
 
         total_time = 4 * t_jerk + 2 * t_acc + t_flat
         time_intervals = np.arange(0, total_time, dt)
-        positions, velocities, accelerations = [], [], []
+        positions, velocities, accelerations, headings = [], [], [], []
         s = 0
         if (t_acc == 0):
             a_max = j_max*t_jerk
             v_max = 0.5 * j_max * t_jerk**2 + a_max*t_acc
-
         d_jerk1 = (j_max*t_jerk**3)/6
         d_acc = (1/2) * a_max * t_acc**2 + 0.5 * j_max * t_jerk**2 * t_acc
         d_jerk2 = ((-j_max)*t_jerk**3)/6 + (a_max*t_jerk**2)/2 + ((j_max*t_jerk**2)/2 + t_acc*a_max)*t_jerk
@@ -736,7 +814,13 @@ class DrawingWidget(QWidget):
             positions.append(s)
             velocities.append(v)
             accelerations.append(a)
-        return time_intervals, positions, velocities, accelerations
+
+            if (len(line_data) == 3):
+                headings.append(angle_at_length(s, line_data[0], line_data[1], line_data[2], distance=distance))
+            else:
+                headings.append(angle_at_length(s, line_data[0], line_data[1], line_data[2], line_data[3], distance=distance))
+
+        return time_intervals, positions, velocities, accelerations, headings
 
                 
 if __name__ == '__main__':
