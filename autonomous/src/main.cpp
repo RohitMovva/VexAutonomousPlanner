@@ -1,4 +1,52 @@
 #include "main.h"
+#include <iostream>
+#include <fstream>
+#include <string>
+#include <sstream>
+#include <vector>
+
+std::string program_type = "close_side";
+// std::string program_type = "far_side"
+// std::string program_type = "autonomous_skills"
+// std::string program_type = "driver_skills"
+
+std::vector<std::vector<double>> parseJSONData(const std::string& input) {
+    std::vector<std::vector<double>> result;
+    std::string cleanedInput;
+    std::stringstream ss(input);
+    std::string segment;
+    
+    // Iterate through the input string to find sublists
+    while (std::getline(ss, segment, '[')) {
+        std::stringstream sublistStream(segment);
+        std::string sublistSegment;
+        
+        while (std::getline(sublistStream, sublistSegment, ']')) {
+            if (!sublistSegment.empty()) {
+                std::vector<double> sublist;
+                std::stringstream sublistContent(sublistSegment);
+                std::string value;
+				int n = 0;
+
+                // Remove commas and parse doubles
+                while (std::getline(sublistContent, value, ',')) {
+                    if (!value.empty()) {
+                        sublist.push_back(std::stod(value));
+						n++;
+                    }
+					if (n > 4){
+						continue;
+					}
+                }
+
+                if (!sublist.empty()) {
+                    result.push_back(sublist);
+                }
+            }
+        }
+    }
+	return result;
+}
 
 /**
  * A callback function for LLEMU's center button.
@@ -25,8 +73,23 @@ void on_center_button() {
 void initialize() {
 	pros::lcd::initialize();
 	pros::lcd::set_text(1, "Hello PROS User!");
-
 	pros::lcd::register_btn1_cb(on_center_button);
+
+
+	// Code for loading route from file
+	if (program_type == "driver_skills"){
+		return;
+	}
+	std::string filepath = "../routes/" + program_type;
+	std::ifstream ifs(filepath);
+
+	// Method to read file contents into string in one line from Martijn Pieters and Maik Beckmann
+  	std::string content( (std::istreambuf_iterator<char>(ifs)),
+                       (std::istreambuf_iterator<char>()));
+
+	std::vector<std::vector<double>> pathData = parseJSONData(content);
+
+	
 }
 
 /**
