@@ -59,7 +59,7 @@ class Node(QWidget):
         self.isEndNode = False
         self.spinIntake = False
         self.clampGoal = False
-        self.hasAction = (self.isStartNode or self.isEndNode or self.spinIntake or self.clampGoal)
+        self.hasAction = (self.spinIntake or self.clampGoal)
         self.turn = 0
         self.setFixedSize(10, 10)
         self.move(x+5, y+5)
@@ -74,8 +74,11 @@ class Node(QWidget):
             painter.setBrush(QColor("green"))
         elif self.isEndNode:
             painter.setBrush(QColor("red"))
+        elif self.hasAction:
+            painter.setBrush(QColor("#1338BE"))
         else:
-            painter.setBrush(QColor("blue"))
+            painter.setBrush(QColor("#1F456E"))
+
 
         painter.drawEllipse(0,0,100,140)
         painter.drawEllipse(0, 0, self.width(), self.height())
@@ -180,10 +183,12 @@ class Node(QWidget):
 
     def toggle_spin_intake(self):
         self.spinIntake = not self.spinIntake
+        self.hasAction = (self.spinIntake or self.clampGoal)
         print(f"Spin Intake: {self.spinIntake}")
 
     def toggle_clamp_goal(self):
         self.clampGoal = not self.clampGoal
+        self.hasAction = (self.spinIntake or self.clampGoal)
         print(f"Clamp Goal: {self.clampGoal}")
 
     def set_turn(self):
