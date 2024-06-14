@@ -533,13 +533,13 @@ class AutonomousPlannerGUIManager(QMainWindow):
         ]
         if (scurve):
             time_intervals, positions, velocities, accelerations, headings = self.central_widget.calculateScurveStuff()
-            for i in range(0, len(time_intervals)):
-                nodes_data.append(velocities[i], headings[i])
+            for i in range(0, len(time_intervals), 20):
+                nodes_data.append([time_intervals[i], velocities[i], headings[i]])
         nodes_string = json.dumps(nodes_data, separators=(',', ':'))
         return nodes_string
     
     def auto_save(self):
-        if (self.current_working_file != None):
+        if (self.current_working_file != None and self.start_node and self.end_node):
             self.save_nodes_to_file()
 
     def acceleration_graph(self):
