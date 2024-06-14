@@ -105,14 +105,16 @@ def distToTime(distance, segments):
             r = mid-1
         else:
             break
+        
     return mid/1000.0
 
 def getHeading(distance, segments, start, end, cp1, cp2=None):
     t = distToTime(distance, segments)
+    print(t, end=" ")
     if (cp2 == None):
-        print(distance, ", ", segments[0], "-", segments[-1], ", ", t, ", ", quad_bezier_angle(t, start, cp1, end))
+        # print(distance, ", ", segments[0], "-", segments[-1], ", ", t, ", ", quad_bezier_angle(t, start, cp1, end))
         return quad_bezier_angle(t, start, cp1, end)
-    print(distance, ", ", segments[0], "-", segments[-1], ", ", t, ", ", cubic_bezier_angle(t, start, cp1, cp2, end))
+    # print(distance, ", ", segments[0], "-", segments[-1], ", ", t, ", ", cubic_bezier_angle(t, start, cp1, cp2, end))
     return cubic_bezier_angle(t, start, cp1, cp2, end)
 
 # Click listener object
@@ -794,28 +796,28 @@ class DrawingWidget(QWidget):
         a = 0
         s = 0
         v = 0
-        debug = False
+        debug = True
 
         for t in time_intervals:
             if t < t_jerk:
                 # First jerk phase (increasing acceleration)
                 if (debug):
                     print("First jerk phase: ", d_jerk1, end=' ')
-                s += (j_max*dt**3)/6 + (a*dt**2)/2 + v*dt**1
+                s += (j_max*dt**3)/6 + (a*dt**2)/2 + v*dt
                 v += (j_max*dt**2)/2 + a*dt
                 a += j_max * dt
             elif t < t_jerk + t_acc:
                 # First acceleration phase (constant acceleration)
                 if (debug):
                     print("First acceleration phase: ", d_jerk1+d_acc, end=' ')
-                s += (a*dt**2)/2 + v*dt**1
+                s += (a*dt**2)/2 + v*dt
                 v += a*dt
                 a = a_max
             elif t < 2 * t_jerk + t_acc:
                 # Second jerk phase (decreasing acceleration)
                 if (debug):
                     print("Second jerk phase (negative): ", d_jerk1+d_jerk2+d_acc, end=' ')
-                s += ((-j_max)*dt**3)/6 + (a*dt**2)/2 + v*dt**1
+                s += ((-j_max)*dt**3)/6 + (a*dt**2)/2 + v*dt
                 v += ((-j_max)*dt**2)/2 + a*dt
                 a += -j_max * dt
             elif t < 2 * t_jerk + t_acc + t_flat:
@@ -829,7 +831,7 @@ class DrawingWidget(QWidget):
                 # Third jerk phase (decreasing acceleration)
                 if (debug):
                     print("Third jerk phase(negative): ", 2*d_jerk2+d_jerk1+d_acc+d_flat, end=' ')
-                s += ((-j_max)*dt**3)/6 + (a*dt**2)/2 + v*dt**1
+                s += ((-j_max)*dt**3)/6 + (a*dt**2)/2 + v*dt
                 v += ((-j_max)*dt**2)/2 + a*dt
                 a += -j_max * dt
             elif t < 3 * t_jerk + 2*t_acc + t_flat:
@@ -847,13 +849,14 @@ class DrawingWidget(QWidget):
                 v += (j_max*dt**2)/2 + a*dt # Derive velocity based on jerk
                 a += j_max * dt
             if (debug):
-                print(s, " ", v, " ", a, " ", t)
+                pass
+                # print(s, " ", v, " ", a, " ", t)
             positions.append(s)
             velocities.append(v)
             accelerations.append(a)
 
             headings.append(getHeading(s, segments, line_data[0], line_data[1], line_data[2], line_data[3]))
-            print(s, " ", distance, " ", headings[-1], end=" ")            
+            print(s, " ", distance, " ", headings[-1])            
         return time_intervals, positions, velocities, accelerations, headings
 
                 
