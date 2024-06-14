@@ -390,6 +390,10 @@ class AutonomousPlannerGUIManager(QMainWindow):
         show_heading_graph.triggered.connect(self.heading_graph)
         tools_menu.addAction(show_heading_graph)
 
+        show_coordinate_graph = QAction('Show Coordinate Graph', self)
+        show_coordinate_graph.triggered.connect(self.coordinate_graph)
+        tools_menu.addAction(show_coordinate_graph)
+
     def index_of(self, node):
         return (self.nodes.index(node))
 
@@ -600,6 +604,23 @@ class AutonomousPlannerGUIManager(QMainWindow):
         plt.tight_layout()
         plt.show()
 
+    def coordinate_graph(self):
+        self.central_widget.calculateScurveStuff()
+        plt.figure(figsize=(12, 8))
+        
+        # Coordinate profile
+        plt.subplot(3, 1, 1)
+        plt.plot(self.central_widget.all_xcoords, self.central_widget.all_ycoords)
+        plt.title('Coordinate Profile')
+        plt.xlabel('x (meters)')
+        plt.ylabel('y (meters)')
+        ax = plt.gca()
+        ax.set_xlim([0, 4])
+        ax.set_ylim([0, 4])
+
+        plt.tight_layout()
+        plt.show()
+
 
 
 class DrawingWidget(QWidget):
@@ -617,6 +638,8 @@ class DrawingWidget(QWidget):
         self.all_velocities = []
         self.all_accelerations = []
         self.all_headings = []
+        self.all_xcoords = []
+        self.all_ycoords = []
         
         current_position = 0
         for i in range (0, len(self.line_data)):            
@@ -629,12 +652,14 @@ class DrawingWidget(QWidget):
                                 getHeading(oline[0], createCurveSegments(oline[1], oline[2],
                                 oline[3], oline[4]), oline[1], oline[2], oline[3], oline[4]))
             segments = createCurveSegments(line[1], line[2], line[3], line[4])
-            time_intervals, positions, velocities, accelerations, headings = self.generate_scurve_profile(segments, line[1:])
+            time_intervals, positions, velocities, accelerations, headings, xcoords, ycoords = self.generate_scurve_profile(segments, line[1:])
             self.all_time_intervals.extend(time_intervals + (self.all_time_intervals[-1] if self.all_time_intervals else 0))
             self.all_positions.extend([p + current_position for p in positions])
             self.all_velocities.extend(velocities)
             self.all_accelerations.extend(accelerations)
             self.all_headings.extend(headings)
+            self.all_xcoords.extend([(xcoord*(12/699) * 0.3048) for xcoord in xcoords])
+            self.all_ycoords.extend([(ycoord*(12/699) * 0.3048) for ycoord in ycoords])
             current_position += segments[-1]
 
         return self.all_time_intervals, self.all_positions, self.all_velocities, self.all_accelerations, self.all_headings
@@ -772,7 +797,7 @@ class DrawingWidget(QWidget):
 
         total_time = 4 * t_jerk + 2 * t_acc + t_flat
         time_intervals = np.arange(0, total_time, dt)
-        positions, velocities, accelerations, headings = [], [], [], []
+        positions, velocities, accelerations, headings, xcoords, ycoords = [], [], [], [], [], []
         s = 0
         if (t_acc == 0):
             a_max = j_max*t_jerk
@@ -840,15 +865,23 @@ class DrawingWidget(QWidget):
                 v += (j_max*dt**2)/2 + a*dt # Derive velocity based on jerk
                 a += j_max * dt
             if (debug):
-                pass
-                # print(s, " ", v, " ", a, " ", t)
+                print(s, " ", v, " ", a, " ", t)
             positions.append(s)
             velocities.append(v)
             accelerations.append(a)
 
             headings.append(getHeading(s, segments, line_data[0], line_data[1], line_data[2], line_data[3]))
+            tv = distToTime(s, segments)
+            x, y = None, None
+            if (line_data[3]):
+                x, y = cubic_bezier_point(line_data[0], line_data[1], line_data[2], line_data[3], tv)
+            else:
+                x, y = quadratic_bezier_point(line_data[0], line_data[1], line_data[2], tv)
+            xcoords.append(x)
+            ycoords.append(y)
+            print(x, " ", y)
             # print(s, " ", distance, " ", headings[-1])
-        return time_intervals, positions, velocities, accelerations, headings
+        return time_intervals, positions, velocities, accelerations, headings, xcoords, ycoords
 
                 
 if __name__ == '__main__':
