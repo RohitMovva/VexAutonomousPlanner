@@ -10,6 +10,34 @@ std::string program_type = "close_side";
 // std::string program_type = "autonomous_skills"
 // std::string program_type = "driver_skills"
 
+std::vector<std::vector<double>> pathData;
+
+pros::Imu imu_sensor(1); // Replace 1 with inertial sensor port
+
+double initial_heading;
+
+class PIDController {
+public:
+    PIDController(double kp, double ki, double kd)
+        : kp(kp), ki(ki), kd(kd), integral(0), previous_error(0) {}
+
+    double compute(double setpoint, double current_value, double dt) {
+        double error = setpoint - current_value;
+        integral += error * dt;
+        double derivative = (error - previous_error) / dt;
+        
+        double output = kp * error + ki * integral + kd * derivative;
+        previous_error = error;
+        
+        return output;
+    }
+
+private:
+    double kp, ki, kd;
+    double integral;
+    double previous_error;
+};
+
 std::vector<std::vector<double>> parseJSONData(const std::string& input) {
     std::vector<std::vector<double>> result;
     std::string cleanedInput;
@@ -87,9 +115,10 @@ void initialize() {
   	std::string content( (std::istreambuf_iterator<char>(ifs)),
                        (std::istreambuf_iterator<char>()));
 
-	std::vector<std::vector<double>> pathData = parseJSONData(content);
+	pathData = parseJSONData(content);
 
-	
+  	imu_sensor.reset();
+	initial_heading = imu_sensor.get_heading();
 }
 
 /**
@@ -108,7 +137,9 @@ void disabled() {}
  * This task will exit when the robot is enabled and autonomous or opcontrol
  * starts.
  */
-void competition_initialize() {}
+void competition_initialize() {
+
+}
 
 /**
  * Runs the user autonomous code. This function will be started in its own task
