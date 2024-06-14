@@ -2,7 +2,7 @@ import sys
 import json
 from PyQt6.QtWidgets import QApplication, QDialog, QLabel, QWidget, QVBoxLayout, QMenu, QInputDialog, QMainWindow, QTextEdit, QPushButton, QFileDialog
 from PyQt6.QtGui import QPixmap, QMouseEvent, QPainter, QColor, QAction, QPen, QPainterPath
-from PyQt6.QtCore import Qt, QPoint, QLineF, QPointF
+from PyQt6.QtCore import Qt, QPoint, QLineF, QPointF, Qt
 from scipy.integrate import quad
 import numpy as np
 from scipy.optimize import brentq
@@ -66,16 +66,16 @@ def cubic_bezier_angle(t, P0, P1, P2, P3):
     return -1*np.arctan2(tangentY, tangentX)*(180/np.pi)
 
 def createCurveSegments(start, end, control1, control2=None):
-    numsegments = 10001
+    numsegments = 1001
     segments = [0]
     print("CREATING CURVE SEGMENTS: ", start, " ", end, " ", control1, " ", control2, end=" ")
     ox, oy = None, None
     if (control2):
         ox, oy = cubic_bezier_point(start, control1, control2, end, 0)
-        print(cubic_bezier_point(start, control1, control2, end, 1))
+        print(cubic_bezier_length(start, control1, control2, end, 1)*(12/699) * 0.3048)
     else:
         ox, oy = quadratic_bezier_point(start, control1, end, 0)
-        print(quadratic_bezier_point(start, control1, end, 1))
+        print(quad_bezier_length(start, control1, end, 1)*(12/699) * 0.3048)
     dx, dy = None, None
     currlen = 0
     for i in range(1, numsegments):
@@ -105,14 +105,14 @@ def distToTime(distance, segments):
             r = mid-1
         else:
             break
-    return mid/10000.0
+    return mid/1000.0
 
 def getHeading(distance, segments, start, end, cp1, cp2=None):
     t = distToTime(distance, segments)
     if (cp2 == None):
-        # print(distance, ", ", segments[0], "-", segments[-1], ", ", t, ", ", quad_bezier_angle(t, start, cp1, end))
+        print(distance, ", ", segments[0], "-", segments[-1], ", ", t, ", ", quad_bezier_angle(t, start, cp1, end))
         return quad_bezier_angle(t, start, cp1, end)
-    # print(distance, ", ", segments[0], "-", segments[-1], ", ", t, ", ", cubic_bezier_angle(t, start, cp1, cp2, end))
+    print(distance, ", ", segments[0], "-", segments[-1], ", ", t, ", ", cubic_bezier_angle(t, start, cp1, cp2, end))
     return cubic_bezier_angle(t, start, cp1, cp2, end)
 
 # Click listener object
@@ -317,10 +317,11 @@ class AutonomousPlannerGUIManager(QMainWindow):
         super().__init__()
 
         self.setWindowTitle('Image Viewer')
-        self.setGeometry(100, 100, 699, 699)
+        # self.setGeometry(100, 100, 699, 699+25)
 
         self.central_widget = DrawingWidget(self)
         self.setCentralWidget(self.central_widget)
+        self.central_widget.setFixedSize(699, 699)
 
         self.nodes = []
         self.start_node = None
@@ -333,6 +334,7 @@ class AutonomousPlannerGUIManager(QMainWindow):
         self.label = ClickableLabel(parent=self.central_widget, gui_instance=self)
 
         pixmap = QPixmap('assets/top_down_cropped_high_stakes_field.png')  # Replace with your image path
+        # self.label.setPixmap(pixmap)
 
         self.update()
         self.layout.addWidget(self.label)
@@ -608,6 +610,8 @@ class DrawingWidget(QWidget):
         super().__init__(parent)
         self.setGeometry(0, 0, 699, 699)
         self.image = QPixmap(image_path) if image_path else None
+        # self.image = self.image.scaled(699, 699, Qt.AspectRatioMode.KeepAspectRatio)
+        # self.lab.setFixedSize(699, 699)  # Ensure the label maintains the correct size
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
 
     def calculateScurveStuff(self):
@@ -746,6 +750,8 @@ class DrawingWidget(QWidget):
         return t_jerk
 
     def generate_scurve_profile(self, distance, line_data, v_max=.25, a_max=0.125, j_max=0.08, dt=0.01):
+        segments = createCurveSegments(line_data[0], line_data[1], line_data[2], line_data[3])
+        distance = segments[-1]
         t_jerk = a_max / j_max
         t_acc = (v_max - j_max * t_jerk**2) / a_max
 
@@ -781,6 +787,7 @@ class DrawingWidget(QWidget):
         d_acc = (1/2) * a_max * t_acc**2 + 0.5 * j_max * t_jerk**2 * t_acc
         d_jerk2 = ((-j_max)*t_jerk**3)/6 + (a_max*t_jerk**2)/2 + ((j_max*t_jerk**2)/2 + t_acc*a_max)*t_jerk
         d_flat = v_max * t_flat
+        print("DISTANCE DIFF: ", distance, " ", 2*(d_jerk1 + d_acc + d_jerk2) + d_flat)
         if (d_acc < 0):
             d_acc = 0
 
@@ -788,8 +795,6 @@ class DrawingWidget(QWidget):
         s = 0
         v = 0
         debug = False
-
-        segments = createCurveSegments(line_data[0], line_data[1], line_data[2], line_data[3])
 
         for t in time_intervals:
             if t < t_jerk:
@@ -817,7 +822,7 @@ class DrawingWidget(QWidget):
                 # Constant velocity phase
                 if (debug):
                     print("Constant velocity phase: ", d_jerk1+d_jerk2+d_acc+d_flat, end=' ')
-                s += v*dt**1
+                s += v*dt
                 v = v_max
                 a = 0
             elif t < 3 * t_jerk + t_acc + t_flat:
@@ -831,14 +836,14 @@ class DrawingWidget(QWidget):
                 # Second acceleration phase (constant negative acceleration)
                 if (debug):
                     print("Second acceleration phase: ", 2*d_jerk2+d_jerk1+2*d_acc+d_flat, end=' ')
-                s += (a*dt**2)/2 + v*dt**1
+                s += (a*dt**2)/2 + v*dt
                 v += a*dt
                 a = -a_max
             elif t < 4 * t_jerk + 2*t_acc + t_flat:
                 # Fourth jerk phase (increasing acceleration)
                 if (debug):
                     print("Fourth jerk phase: ", 2*d_jerk2+2*d_jerk1+2*d_acc+d_flat, end=' ')
-                s += (j_max*dt**3)/6 + (a*dt**2)/2 + v*dt**1 # Derive posiotion based on jerk as well
+                s += (j_max*dt**3)/6 + (a*dt**2)/2 + v*dt # Derive posiotion based on jerk as well
                 v += (j_max*dt**2)/2 + a*dt # Derive velocity based on jerk
                 a += j_max * dt
             if (debug):
@@ -848,7 +853,7 @@ class DrawingWidget(QWidget):
             accelerations.append(a)
 
             headings.append(getHeading(s, segments, line_data[0], line_data[1], line_data[2], line_data[3]))
-            # print(s, " ", distance, " ", headings[-1])            
+            print(s, " ", distance, " ", headings[-1], end=" ")            
         return time_intervals, positions, velocities, accelerations, headings
 
                 
