@@ -7,6 +7,9 @@ from scipy.integrate import quad
 import numpy as np
 from scipy.optimize import brentq
 import matplotlib.pyplot as plt
+from math import sqrt
+
+# QUADRATIC
 
 # Calculations for length of Bezier curves (quadratic and cubic)
 def quad_bezier_length(start, end, cp, t=1):
@@ -23,74 +26,94 @@ def quad_integrand(t, P0, P1, P2):
     dx_dt, dy_dt = quad_bezier_derivative(t, P0, P1, P2)
     return np.sqrt(dx_dt**2 + dy_dt**2)
 
+def quad_bezier_angle(t, P0, P1, P2):
+    tangentX = (2*(1-t)*(P1.x()-P0.x())) + (2*t*(P2.x()-P1.x()))
+    tangentY = (2*(1-t)*(P1.y()-P0.y())) + (2*t*(P2.y()-P1.y()))
+    return -1*np.arctan2(tangentY, tangentX)*(180/np.pi)
+
+def quadratic_bezier_point(P0, P1, P2, t):
+    x = (1 - t)**2 * P0.x() + 2 * (1 - t) * t * P1.x() + t**2 * P2.x()
+    y = (1 - t)**2 * P0.y() + 2 * (1 - t) * t * P1.y() + t**2 * P2.y()
+    return x, y
+
+# CUBIC
+
 # Quadratic Bezier curve function
 def cubic_bezier_length(start, cp1, cp2, end, t=1):
     P0, P1, P2, P3 = map(np.array, [(start.x(), start.y()), (cp1.x(), cp1.y()), (cp2.x(), cp2.y()), (end.x(), end.y())])
     arc_length, error = quad(cubic_integrand, 0, t, args=(P0, P1, P2, P3))
-    return arc_length
+    return arc_length*2
 
 # Derivative of the cubic Bezier curve function
 def cubic_bezier_derivative(t, P0, P1, P2, P3):
-    return 3 * (1-t)**2 * (P1 - P0) + 6 * (1-t) * t * (P2 - P1) + 3 * t**2 * (P3 - P2)
+    # return 3 * (1-t)**2 * (P1 - P0) + 6 * (1-t) * t * (P2 - P1) + 3 * t**2 * (P3 - P2)
+    return (1-t)*2*(P1-P0)+2*t*(1-t)*(P2-P1)+t**2*(P3-P2)
 
 # Integrand for the cubic arc length calculation
 def cubic_integrand(t, P0, P1, P2, P3):
     dx_dt, dy_dt = cubic_bezier_derivative(t, P0, P1, P2, P3)
     return np.sqrt(dx_dt**2 + dy_dt**2)
 
+def cubic_bezier_point(P0, P1, P2, P3, t):
+    x = (1 - t)**3 * P0.x() + 3 * (1 - t)**2 * t * P1.x() + 3 * (1 - t) * t**2 * P2.x() + t**3 * P3.x()
+    y = (1 - t)**3 * P0.y() + 3 * (1 - t)**2 * t * P1.y() + 3 * (1 - t) * t**2 * P2.y() + t**3 * P3.y()
+    return x, y
 
-def quad_find_t_for_length(target_length, start, control, end, tol=1e-5):
-    total_length = quad_bezier_length(start, control, end)
-    
-    if target_length <= 0:
-        return 0.0
-    elif target_length >= total_length:
-        return 1.0
-    
-    def length_difference(t):
-        current_length = quad_bezier_length(start, end, control, t)*(12/699) * 0.3048
-        print(current_length-target_length)
-        return current_length - target_length
-    # print(length_difference)
-    t_value = brentq(length_difference, 0, 1, xtol=tol)
-    return t_value
+# 3(1- t)^2(P1 - P0) + 6(1 - t)t(P2 - P1) + 3t^2(P3 - P2)
+def cubic_bezier_angle(t, P0, P1, P2, P3):
+    tangentX = 3*(1-t)**2*(P1.x()-P0.x()) + 6*(1-t)*t*(P2.x()-P1.x()) + 3*t**2*(P3.x()-P2.x())
+    tangentY = 3*(1-t)**2*(P1.y()-P0.y()) + 6*(1-t)*t*(P2.y()-P1.y()) + 3*t**2*(P3.y()-P2.y())
+    return -1*np.arctan2(tangentY, tangentX)*(180/np.pi)
 
-def cubic_find_t_for_length(target_length, start, control1, control2, end, tol=1e-5):
-    total_length = cubic_bezier_length(start, control1, control2, end)
-    
-    if target_length <= 0:
-        return 0.0
-    elif target_length >= total_length:
-        return 1.0
-    
-    def length_difference(t):
-        current_length = cubic_bezier_length(start, end, control1, control2, t)
-        # current_length, _ = quad(cubic_integrand, 0.0, t, args=(start, control1, control2, end))
-        return current_length - target_length
-    
-    t_value = brentq(length_difference, 0, 1, xtol=tol)
-    return t_value
+def createCurveSegments(start, end, control1, control2=None):
+    numsegments = 10001
+    segments = [0]
+    print("CREATING CURVE SEGMENTS: ", start, " ", end, " ", control1, " ", control2, end=" ")
+    ox, oy = None, None
+    if (control2):
+        ox, oy = cubic_bezier_point(start, control1, control2, end, 0)
+        print(cubic_bezier_point(start, control1, control2, end, 1))
+    else:
+        ox, oy = quadratic_bezier_point(start, control1, end, 0)
+        print(quadratic_bezier_point(start, control1, end, 1))
+    dx, dy = None, None
+    currlen = 0
+    for i in range(1, numsegments):
+        t = (i+1)/numsegments
+        cx, cy = None, None
+        if (control2):
+            cx, cy = cubic_bezier_point(start, control1, control2, end, t)
+        else:
+            cx, cy = quadratic_bezier_point(start, control1, end, t)
+        dx, dy = ox-cx, oy-cy
+        currlen += sqrt(dx**2 + dy**2)
+        segments.append(currlen*(12/699) * 0.3048)
 
-def angle_at_length(target_length, start, control1, end, control2=None, distance=None):
-    if (control2 == None): # Quadratic
-        # t = quad_find_t_for_length(target_length, start, control1, end)
-        t = target_length/distance
-        print(target_length, " ", distance, " ", t)
-        derivative = quad_bezier_derivative(t, start, control1, end)
-        angle = np.arctan2(derivative.y(), derivative.x())
-        angle = np.degrees(angle)
-        if (angle < 0):
-            angle += 360
-        return angle
-    
-    # Cubic
-    t = target_length/distance
-    # t = cubic_find_t_for_length(target_length, start, control1, end)
-    print(t)
-    derivative = cubic_bezier_derivative(t, start, control1, end)
-    angle = np.arctan2(derivative.y(), derivative.x())
-    return np.degrees(angle)
+        ox, oy = cx, cy
+    print(segments[-1])
+    return segments
 
+def distToTime(distance, segments):
+    l = 0
+    r = len(segments)-1
+    mid = None
+    while (l <= r):
+        mid = int(l + (r-l)/2)
+        if (segments[mid] < distance):
+            l = mid+1
+        elif (segments[mid] > distance):
+            r = mid-1
+        else:
+            break
+    return mid/10000.0
+
+def getHeading(distance, segments, start, end, cp1, cp2=None):
+    t = distToTime(distance, segments)
+    if (cp2 == None):
+        # print(distance, ", ", segments[0], "-", segments[-1], ", ", t, ", ", quad_bezier_angle(t, start, cp1, end))
+        return quad_bezier_angle(t, start, cp1, end)
+    # print(distance, ", ", segments[0], "-", segments[-1], ", ", t, ", ", cubic_bezier_angle(t, start, cp1, cp2, end))
+    return cubic_bezier_angle(t, start, cp1, cp2, end)
 
 # Click listener object
 class ClickableLabel(QLabel):
@@ -593,9 +616,19 @@ class DrawingWidget(QWidget):
         self.all_velocities = []
         self.all_accelerations = []
         self.all_headings = []
-
+        
         current_position = 0
-        for line in self.line_data:
+        for i in range (0, len(self.line_data)):
+            print(self.line_data[i])
+            
+            line = self.line_data[i]
+            line.append(None) # Prevents out of range error
+            if (i > 0):
+                oline = self.line_data[i-1]
+                print("DIFF HEADINGS: ", getHeading(0, createCurveSegments(line[1], line[2], line[3], line[4])
+                                , line[1], line[2], line[3], line[4]), " ", 
+                                getHeading(oline[0], createCurveSegments(oline[1], oline[2],
+                                oline[3], oline[4]), oline[1], oline[2], oline[3], oline[4]))
             arc_length = line[0]
             time_intervals, positions, velocities, accelerations, headings = self.generate_scurve_profile(arc_length*(12/699) * 0.3048, line[1:])
             self.all_time_intervals.extend(time_intervals + (self.all_time_intervals[-1] if self.all_time_intervals else 0))
@@ -631,7 +664,6 @@ class DrawingWidget(QWidget):
     def buildPath(self, points):
         factor = 0.25
         self.path = QPainterPath(points[0])
-        self.distances = []
         self.line_data = []
         for p, current in enumerate(points[1:-1], 1):
             # previous segment
@@ -649,20 +681,17 @@ class DrawingWidget(QWidget):
 
             if p == 1:
                 arc_length = quad_bezier_length(self.path.currentPosition(), current, cp2)
-                self.distances.append(arc_length)
                 self.line_data.append([arc_length, self.path.currentPosition(), current, cp2])
                 self.path.quadTo(cp2, current)
             else:
                 arc_length = cubic_bezier_length(self.path.currentPosition(), cp1, cp2, current)
-                self.distances.append(arc_length)
-                self.line_data.append([arc_length, self.path.currentPosition(), cp1, cp2, current])
+                self.line_data.append([arc_length, self.path.currentPosition(), current, cp1, cp2])
                 self.path.cubicTo(cp1, cp2, current)
             revSource = QLineF.fromPolar(target.length() * factor, angle).translated(current)
             cp1 = revSource.p2()
 
         # The final curve, that joins to the last point
         arc_length = quad_bezier_length(self.path.currentPosition(), points[-1], cp1)
-        self.distances.append(arc_length)
         self.line_data.append([arc_length, self.path.currentPosition(), points[-1], cp1])
         self.path.quadTo(cp1, points[-1])
 
@@ -759,6 +788,9 @@ class DrawingWidget(QWidget):
         s = 0
         v = 0
         debug = False
+
+        segments = createCurveSegments(line_data[0], line_data[1], line_data[2], line_data[3])
+
         for t in time_intervals:
             if t < t_jerk:
                 # First jerk phase (increasing acceleration)
@@ -815,11 +847,8 @@ class DrawingWidget(QWidget):
             velocities.append(v)
             accelerations.append(a)
 
-            if (len(line_data) == 3):
-                headings.append(angle_at_length(s, line_data[0], line_data[1], line_data[2], distance=distance))
-            else:
-                headings.append(angle_at_length(s, line_data[0], line_data[1], line_data[2], line_data[3], distance=distance))
-
+            headings.append(getHeading(s, segments, line_data[0], line_data[1], line_data[2], line_data[3]))
+            # print(s, " ", distance, " ", headings[-1])            
         return time_intervals, positions, velocities, accelerations, headings
 
                 
