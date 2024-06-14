@@ -68,7 +68,6 @@ def cubic_bezier_angle(t, P0, P1, P2, P3):
 def createCurveSegments(start, end, control1, control2=None):
     numsegments = 1001
     segments = [0]
-    print("CREATING CURVE SEGMENTS: ", start, " ", end, " ", control1, " ", control2, end=" ")
     ox, oy = None, None
     if (control2):
         ox, oy = cubic_bezier_point(start, control1, control2, end, 0)
@@ -90,7 +89,6 @@ def createCurveSegments(start, end, control1, control2=None):
         segments.append(currlen*(12/699) * 0.3048)
 
         ox, oy = cx, cy
-    print(segments[-1])
     return segments
 
 def distToTime(distance, segments):
@@ -110,11 +108,8 @@ def distToTime(distance, segments):
 
 def getHeading(distance, segments, start, end, cp1, cp2=None):
     t = distToTime(distance, segments)
-    print(t, end=" ")
     if (cp2 == None):
-        # print(distance, ", ", segments[0], "-", segments[-1], ", ", t, ", ", quad_bezier_angle(t, start, cp1, end))
         return quad_bezier_angle(t, start, cp1, end)
-    # print(distance, ", ", segments[0], "-", segments[-1], ", ", t, ", ", cubic_bezier_angle(t, start, cp1, cp2, end))
     return cubic_bezier_angle(t, start, cp1, cp2, end)
 
 # Click listener object
@@ -624,9 +619,7 @@ class DrawingWidget(QWidget):
         self.all_headings = []
         
         current_position = 0
-        for i in range (0, len(self.line_data)):
-            print(self.line_data[i])
-            
+        for i in range (0, len(self.line_data)):            
             line = self.line_data[i]
             line.append(None) # Prevents out of range error
             if (i > 0):
@@ -635,14 +628,14 @@ class DrawingWidget(QWidget):
                                 , line[1], line[2], line[3], line[4]), " ", 
                                 getHeading(oline[0], createCurveSegments(oline[1], oline[2],
                                 oline[3], oline[4]), oline[1], oline[2], oline[3], oline[4]))
-            arc_length = line[0]
-            time_intervals, positions, velocities, accelerations, headings = self.generate_scurve_profile(arc_length*(12/699) * 0.3048, line[1:])
+            segments = createCurveSegments(line[1], line[2], line[3], line[4])
+            time_intervals, positions, velocities, accelerations, headings = self.generate_scurve_profile(segments, line[1:])
             self.all_time_intervals.extend(time_intervals + (self.all_time_intervals[-1] if self.all_time_intervals else 0))
             self.all_positions.extend([p + current_position for p in positions])
             self.all_velocities.extend(velocities)
             self.all_accelerations.extend(accelerations)
             self.all_headings.extend(headings)
-            current_position += arc_length*(12/699) * 0.3048
+            current_position += segments[-1]
 
         return self.all_time_intervals, self.all_positions, self.all_velocities, self.all_accelerations, self.all_headings
 
@@ -730,7 +723,7 @@ class DrawingWidget(QWidget):
         
         return v_max
 
-    def find_tjerk(self, distance, t_jerk, j_max, dt=0.01, tolerance=1e-11):
+    def find_tjerk(self, distance, t_jerk, j_max, tolerance=1e-11):
         l = 0
         r = 1e9
         c = 0
@@ -751,8 +744,7 @@ class DrawingWidget(QWidget):
                 break
         return t_jerk
 
-    def generate_scurve_profile(self, distance, line_data, v_max=.25, a_max=0.125, j_max=0.08, dt=0.01):
-        segments = createCurveSegments(line_data[0], line_data[1], line_data[2], line_data[3])
+    def generate_scurve_profile(self, segments, line_data, v_max=.25, a_max=0.125, j_max=0.08, dt=0.0005):
         distance = segments[-1]
         t_jerk = a_max / j_max
         t_acc = (v_max - j_max * t_jerk**2) / a_max
@@ -789,14 +781,13 @@ class DrawingWidget(QWidget):
         d_acc = (1/2) * a_max * t_acc**2 + 0.5 * j_max * t_jerk**2 * t_acc
         d_jerk2 = ((-j_max)*t_jerk**3)/6 + (a_max*t_jerk**2)/2 + ((j_max*t_jerk**2)/2 + t_acc*a_max)*t_jerk
         d_flat = v_max * t_flat
-        print("DISTANCE DIFF: ", distance, " ", 2*(d_jerk1 + d_acc + d_jerk2) + d_flat)
         if (d_acc < 0):
             d_acc = 0
 
         a = 0
         s = 0
         v = 0
-        debug = True
+        debug = False
 
         for t in time_intervals:
             if t < t_jerk:
@@ -856,7 +847,7 @@ class DrawingWidget(QWidget):
             accelerations.append(a)
 
             headings.append(getHeading(s, segments, line_data[0], line_data[1], line_data[2], line_data[3]))
-            print(s, " ", distance, " ", headings[-1])            
+            # print(s, " ", distance, " ", headings[-1])
         return time_intervals, positions, velocities, accelerations, headings
 
                 
