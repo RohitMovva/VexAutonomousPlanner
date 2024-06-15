@@ -22,6 +22,7 @@ std::string program_type = "close_side";
 // std::string program_type = "far_side"
 // std::string program_type = "autonomous_skills"
 // std::string program_type = "driver_skills"
+// std::string program_type = "calibrate_metrics";
 
 std::vector<std::vector<double>> pathData;
 
@@ -77,8 +78,8 @@ private:
 };
 
 // Function to convert encoder ticks to distance in inches
-double ticks_to_inches(int ticks) {
-    return (ticks / TICKS_PER_ROTATION) * (M_PI * WHEEL_DIAMETER);
+double ticks_to_feet(int ticks) {
+    return (ticks / TICKS_PER_ROTATION) * (M_PI * WHEEL_DIAMETER) / 12;
 }
 
 // Function to get the robot's current position using encoders
@@ -102,9 +103,9 @@ Position get_robot_position(Position& current_position) {
     int side_ticks = side_encoder.get_value();
 
     // Calculate distances
-    double left_distance = ticks_to_inches(left_tick_avg);
-    double right_distance = ticks_to_inches(right_tick_avg);
-    double side_distance = ticks_to_inches(side_ticks);
+    double left_distance = ticks_to_feet(left_tick_avg);
+    double right_distance = ticks_to_feet(right_tick_avg);
+    double side_distance = ticks_to_feet(side_ticks);
 
     // Calculate the forward and lateral displacement
     double forward_distance = (left_distance + right_distance) / 2.0;
@@ -136,6 +137,128 @@ void apply_control_signal(double linear_velocity, double angular_velocity) {
 
     left_mg.move_velocity(left_speed);
     right_mg.move_velocity(right_speed);
+}
+
+void PID_controller(){
+	double dt = DT;  // Time step in seconds (100 ms)
+
+    static double goal_x = 0.0;
+    static double goal_y = 0.0;
+	static double initial_heading = pathData[0][1];
+    Position current_position = {0.0, 0.0, 0.0};
+
+    int index = 0;  // Index to iterate over the velocity_heading vector
+
+    while (index < pathData.size()) {
+        // Get the setpoints from the velocity_heading vector
+        double setpoint_velocity = pathData[index][0];
+        double setpoint_heading = pathData[index][1] - initial_heading;
+
+        // Update the goal position based on setpoint_velocity and setpoint_heading
+        goal_x += setpoint_velocity * DT * cos(setpoint_heading * M_PI / 180.0);
+        goal_y += setpoint_velocity * DT * sin(setpoint_heading * M_PI / 180.0);
+
+        // Get the current position and heading
+        current_position = get_robot_position(current_position);
+
+        // Compute the control signals for x, y, and heading
+        double x_control_signal = x_pid.compute(goal_x, current_position.x, dt);
+        double y_control_signal = y_pid.compute(goal_y, current_position.y, dt);
+        double heading_control_signal = heading_pid.compute(setpoint_heading, current_position.heading, dt);
+
+        // Combine x and y control signals to get the overall linear velocity
+        double linear_velocity = sqrt(pow(x_control_signal, 2) + pow(y_control_signal, 2));
+
+        // Apply the control signals to the motors
+        apply_control_signal(linear_velocity, heading_control_signal);
+
+        // Sleep for the time step duration
+        pros::delay(dt * 1000);
+
+        // Move to the next setpoint
+        index++;
+    }
+}
+
+// Structure to store velocity, acceleration, and jerk
+struct MotionMetrics {
+    double max_velocity;
+    double max_acceleration;
+    double max_jerk;
+};
+
+// Function to measure motion metrics
+void measure_motion_metrics() {
+    std::vector<double> velocities;
+    std::vector<double> accelerations;
+
+    double max_velocity = 0.0;
+    double max_acceleration = 0.0;
+    double max_jerk = 0.0;
+
+    // Start the motors at maximum speed
+    left_mg.move_velocity(200);  // Max velocity in RPM for VEX V5 motors
+    left_mg.move_velocity(200);
+
+    for (int i = 0; i < 200; ++i) {  // Run for 2 seconds (200 * 10ms)
+        std::vector<double> left_ticks = left_mg.get_position_all();
+		std::vector<double> right_ticks = right_mg.get_position_all();
+
+		int left_tick_avg = 0;
+		for (auto& tick: left_ticks){
+			left_tick_avg += tick;
+		}
+		left_tick_avg /= left_ticks.size();
+
+		int right_tick_avg = 0;
+		for (auto& tick: right_ticks){
+			right_tick_avg += tick;
+		}
+		right_tick_avg /= right_ticks.size();
+
+        double left_distance = ticks_to_feet(left_tick_avg);
+        double right_distance = ticks_to_feet(right_tick_avg);
+
+        double velocity = (left_distance + right_distance) / 2.0 / DT;
+        velocities.push_back(velocity);
+
+        if (velocity > max_velocity) {
+            max_velocity = velocity;
+        }
+
+        pros::delay(DT * 1000);  // Delay for DT seconds
+
+        left_mg.tare_position_all();
+        right_mg.tare_position_all();
+    }
+
+    // Stop the motors
+    left_mg.move_velocity(0);
+    right_mg.move_velocity(0);
+
+    // Calculate accelerations
+    for (size_t i = 1; i < velocities.size(); ++i) {
+        double acceleration = (velocities[i] - velocities[i - 1]) / DT;
+        accelerations.push_back(acceleration);
+
+        if (acceleration > max_acceleration) {
+            max_acceleration = acceleration;
+        }
+    }
+
+    // Calculate jerk
+    for (size_t i = 1; i < accelerations.size(); ++i) {
+        double jerk = (accelerations[i] - accelerations[i - 1]) / DT;
+
+        if (jerk > max_jerk) {
+            max_jerk = jerk;
+        }
+    }
+
+	pros::lcd::initialize();
+    pros::lcd::print(0, "Max Velocity: %.2f ft/s", max_velocity);
+    pros::lcd::print(1, "Max Acceleration: %.2f ft/s^2", max_acceleration);
+    pros::lcd::print(2, "Max Jerk: %.2f ft/s^3", max_jerk);
 }
 
 std::vector<std::vector<double>> parseJSONData(const std::string& input) {
@@ -210,7 +333,7 @@ void initialize() {
     imu_sensor.reset();
 
 	// Code for loading route from file
-	if (program_type == "driver_skills"){
+	if (program_type == "driver_skills" || program_type == "calibrate_metrics"){
 		return;
 	}
 	std::string filepath = "../routes/" + program_type;
@@ -260,44 +383,11 @@ void competition_initialize() {
  * from where it left off.
  */
 void autonomous() {
-    double dt = DT;  // Time step in seconds (100 ms)
-
-    static double goal_x = 0.0;
-    static double goal_y = 0.0;
-	static double initial_heading = pathData[0][1];
-    Position current_position = {0.0, 0.0, 0.0};
-
-    int index = 0;  // Index to iterate over the velocity_heading vector
-
-    while (index < pathData.size()) {
-        // Get the setpoints from the velocity_heading vector
-        double setpoint_velocity = pathData[index][0];
-        double setpoint_heading = pathData[index][1] - initial_heading;
-
-        // Update the goal position based on setpoint_velocity and setpoint_heading
-        goal_x += setpoint_velocity * DT * cos(setpoint_heading * M_PI / 180.0);
-        goal_y += setpoint_velocity * DT * sin(setpoint_heading * M_PI / 180.0);
-
-        // Get the current position and heading
-        current_position = get_robot_position(current_position);
-
-        // Compute the control signals for x, y, and heading
-        double x_control_signal = x_pid.compute(goal_x, current_position.x, dt);
-        double y_control_signal = y_pid.compute(goal_y, current_position.y, dt);
-        double heading_control_signal = heading_pid.compute(setpoint_heading, current_position.heading, dt);
-
-        // Combine x and y control signals to get the overall linear velocity
-        double linear_velocity = sqrt(pow(x_control_signal, 2) + pow(y_control_signal, 2));
-
-        // Apply the control signals to the motors
-        apply_control_signal(linear_velocity, heading_control_signal);
-
-        // Sleep for the time step duration
-        pros::delay(dt * 1000);
-
-        // Move to the next setpoint
-        index++;
-    }
+	if (program_type == "calibrate_metrics"){
+		measure_motion_metrics();
+	} else {
+    	PID_controller();
+	}
 }
 
 /**
