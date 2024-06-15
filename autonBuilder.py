@@ -71,10 +71,8 @@ def createCurveSegments(start, end, control1, control2=None):
     ox, oy = None, None
     if (control2):
         ox, oy = cubic_bezier_point(start, control1, control2, end, 0)
-        print(cubic_bezier_length(start, control1, control2, end, 1)*(12/699) * 0.3048)
     else:
         ox, oy = quadratic_bezier_point(start, control1, end, 0)
-        print(quad_bezier_length(start, control1, end, 1)*(12/699) * 0.3048)
     dx, dy = None, None
     currlen = 0
     for i in range(1, numsegments):
@@ -86,7 +84,7 @@ def createCurveSegments(start, end, control1, control2=None):
             cx, cy = quadratic_bezier_point(start, control1, end, t)
         dx, dy = ox-cx, oy-cy
         currlen += sqrt(dx**2 + dy**2)
-        segments.append(currlen*(12/699) * 0.3048)
+        segments.append(currlen*(12/699))
 
         ox, oy = cx, cy
     return segments
@@ -313,8 +311,7 @@ class AutonomousPlannerGUIManager(QMainWindow):
     def __init__(self):
         super().__init__()
 
-        self.setWindowTitle('Image Viewer')
-        # self.setGeometry(100, 100, 699, 699+25)
+        self.setWindowTitle('Path Planner') # Totally not inspired by Pronounce that
 
         self.central_widget = DrawingWidget(self)
         self.setCentralWidget(self.central_widget)
@@ -374,10 +371,6 @@ class AutonomousPlannerGUIManager(QMainWindow):
         clear_nodes_action.triggered.connect(self.clear_nodes)
         tools_menu.addAction(clear_nodes_action)
 
-        show_acceleration_graph = QAction('Show Acceleration Graph', self)
-        show_acceleration_graph.triggered.connect(self.acceleration_graph)
-        tools_menu.addAction(show_acceleration_graph)
-
         show_position_graph = QAction('Show Position Graph', self)
         show_position_graph.triggered.connect(self.position_graph)
         tools_menu.addAction(show_position_graph)
@@ -386,13 +379,13 @@ class AutonomousPlannerGUIManager(QMainWindow):
         show_velocity_graph.triggered.connect(self.velocity_graph)
         tools_menu.addAction(show_velocity_graph)
 
+        show_acceleration_graph = QAction('Show Acceleration Graph', self)
+        show_acceleration_graph.triggered.connect(self.acceleration_graph)
+        tools_menu.addAction(show_acceleration_graph)
+
         show_heading_graph = QAction('Show Heading Graph', self)
         show_heading_graph.triggered.connect(self.heading_graph)
         tools_menu.addAction(show_heading_graph)
-
-        show_coordinate_graph = QAction('Show Coordinate Graph', self)
-        show_coordinate_graph.triggered.connect(self.coordinate_graph)
-        tools_menu.addAction(show_coordinate_graph)
 
     def index_of(self, node):
         return (self.nodes.index(node))
@@ -491,6 +484,7 @@ class AutonomousPlannerGUIManager(QMainWindow):
                     pass
                 self.current_working_file = full_path
                 print(f"Set current working file at {full_path}")
+                self.auto_save()
 
     def create_cpp_file(self):
         print("Creating C++ file from nodes...") # This is a lie
@@ -537,28 +531,14 @@ class AutonomousPlannerGUIManager(QMainWindow):
         ]
         if (scurve):
             time_intervals, positions, velocities, accelerations, headings = self.central_widget.calculateScurveStuff()
-            for i in range(0, len(time_intervals), 20):
-                nodes_data.append([time_intervals[i], velocities[i], headings[i]])
+            for i in range(0, len(time_intervals), 200): # Every 100ms save data
+                nodes_data.append([velocities[i], headings[i]])
         nodes_string = json.dumps(nodes_data, separators=(',', ':'))
         return nodes_string
     
     def auto_save(self):
         if (self.current_working_file != None and self.start_node and self.end_node):
             self.save_nodes_to_file()
-
-    def acceleration_graph(self):
-        self.central_widget.calculateScurveStuff()
-        plt.figure(figsize=(12, 8))
-
-        # Acceleration profile
-        plt.subplot(3, 1, 1)
-        plt.plot(self.central_widget.all_time_intervals, self.central_widget.all_accelerations)
-        plt.title('Acceleration Profile')
-        plt.xlabel('Time (s)')
-        plt.ylabel('Acceleration (m/s²)')
-
-        plt.tight_layout()
-        plt.show()
 
     def position_graph(self):
         self.central_widget.calculateScurveStuff()
@@ -569,7 +549,7 @@ class AutonomousPlannerGUIManager(QMainWindow):
         plt.plot(self.central_widget.all_time_intervals, self.central_widget.all_positions)
         plt.title('Position Profile')
         plt.xlabel('Time (s)')
-        plt.ylabel('Position (m)')
+        plt.ylabel('Position (ft)')
 
         plt.tight_layout()
         plt.show()
@@ -583,8 +563,22 @@ class AutonomousPlannerGUIManager(QMainWindow):
         plt.plot(self.central_widget.all_time_intervals, self.central_widget.all_velocities)
         plt.title('Velocity Profile')
         plt.xlabel('Time (s)')
-        plt.ylabel('Velocity (m/s)')
+        plt.ylabel('Velocity (ft/s)')
 
+
+        plt.tight_layout()
+        plt.show()
+
+    def acceleration_graph(self):
+        self.central_widget.calculateScurveStuff()
+        plt.figure(figsize=(12, 8))
+
+        # Acceleration profile
+        plt.subplot(3, 1, 1)
+        plt.plot(self.central_widget.all_time_intervals, self.central_widget.all_accelerations)
+        plt.title('Acceleration Profile')
+        plt.xlabel('Time (s)')
+        plt.ylabel('Acceleration (ft/s²)')
 
         plt.tight_layout()
         plt.show()
@@ -597,31 +591,12 @@ class AutonomousPlannerGUIManager(QMainWindow):
         plt.subplot(3, 1, 1)
         plt.plot(self.central_widget.all_positions, self.central_widget.all_headings)
         plt.title('Heading Profile')
-        plt.xlabel('Position (m)')
+        plt.xlabel('Position (ft)')
         plt.ylabel('Heading (degrees)')
 
 
         plt.tight_layout()
         plt.show()
-
-    def coordinate_graph(self):
-        self.central_widget.calculateScurveStuff()
-        plt.figure(figsize=(12, 8))
-        
-        # Coordinate profile
-        plt.subplot(3, 1, 1)
-        plt.plot(self.central_widget.all_xcoords, self.central_widget.all_ycoords)
-        plt.title('Coordinate Profile')
-        plt.xlabel('x (meters)')
-        plt.ylabel('y (meters)')
-        ax = plt.gca()
-        ax.set_xlim([0, 4])
-        ax.set_ylim([0, 4])
-
-        plt.tight_layout()
-        plt.show()
-
-
 
 class DrawingWidget(QWidget):
     def __init__(self, parent=None, image_path="assets/top_down_cropped_high_stakes_field.png"):
@@ -638,28 +613,18 @@ class DrawingWidget(QWidget):
         self.all_velocities = []
         self.all_accelerations = []
         self.all_headings = []
-        self.all_xcoords = []
-        self.all_ycoords = []
         
         current_position = 0
         for i in range (0, len(self.line_data)):            
             line = self.line_data[i]
             line.append(None) # Prevents out of range error
-            if (i > 0):
-                oline = self.line_data[i-1]
-                print("DIFF HEADINGS: ", getHeading(0, createCurveSegments(line[1], line[2], line[3], line[4])
-                                , line[1], line[2], line[3], line[4]), " ", 
-                                getHeading(oline[0], createCurveSegments(oline[1], oline[2],
-                                oline[3], oline[4]), oline[1], oline[2], oline[3], oline[4]))
             segments = createCurveSegments(line[1], line[2], line[3], line[4])
-            time_intervals, positions, velocities, accelerations, headings, xcoords, ycoords = self.generate_scurve_profile(segments, line[1:])
+            time_intervals, positions, velocities, accelerations, headings = self.generate_scurve_profile(segments, line[1:])
             self.all_time_intervals.extend(time_intervals + (self.all_time_intervals[-1] if self.all_time_intervals else 0))
             self.all_positions.extend([p + current_position for p in positions])
             self.all_velocities.extend(velocities)
             self.all_accelerations.extend(accelerations)
             self.all_headings.extend(headings)
-            self.all_xcoords.extend([(xcoord*(12/699) * 0.3048) for xcoord in xcoords])
-            self.all_ycoords.extend([(ycoord*(12/699) * 0.3048) for ycoord in ycoords])
             current_position += segments[-1]
 
         return self.all_time_intervals, self.all_positions, self.all_velocities, self.all_accelerations, self.all_headings
@@ -797,7 +762,7 @@ class DrawingWidget(QWidget):
 
         total_time = 4 * t_jerk + 2 * t_acc + t_flat
         time_intervals = np.arange(0, total_time, dt)
-        positions, velocities, accelerations, headings, xcoords, ycoords = [], [], [], [], [], []
+        positions, velocities, accelerations, headings = [], [], [], []
         s = 0
         if (t_acc == 0):
             a_max = j_max*t_jerk
@@ -871,17 +836,7 @@ class DrawingWidget(QWidget):
             accelerations.append(a)
 
             headings.append(getHeading(s, segments, line_data[0], line_data[1], line_data[2], line_data[3]))
-            tv = distToTime(s, segments)
-            x, y = None, None
-            if (line_data[3]):
-                x, y = cubic_bezier_point(line_data[0], line_data[1], line_data[2], line_data[3], tv)
-            else:
-                x, y = quadratic_bezier_point(line_data[0], line_data[1], line_data[2], tv)
-            xcoords.append(x)
-            ycoords.append(y)
-            print(x, " ", y)
-            # print(s, " ", distance, " ", headings[-1])
-        return time_intervals, positions, velocities, accelerations, headings, xcoords, ycoords
+        return time_intervals, positions, velocities, accelerations, headings
 
                 
 if __name__ == '__main__':
