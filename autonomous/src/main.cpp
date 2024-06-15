@@ -44,10 +44,6 @@ double kp_heading = 1.0;
 double ki_heading = 0.1;
 double kd_heading = 0.05;
 
-PIDController x_pid(kp_position, ki_position, kd_position);
-PIDController y_pid(kp_position, ki_position, kd_position);
-PIDController heading_pid(kp_heading, ki_heading, kd_heading);
-
 // Structure to store the robot's position
 struct Position {
     double x;
@@ -76,6 +72,12 @@ private:
     double integral;
     double previous_error;
 };
+
+
+PIDController x_pid(kp_position, ki_position, kd_position);
+PIDController y_pid(kp_position, ki_position, kd_position);
+PIDController heading_pid(kp_heading, ki_heading, kd_heading);
+
 
 // Function to convert encoder ticks to distance in inches
 double ticks_to_feet(int ticks) {
