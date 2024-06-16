@@ -1,5 +1,7 @@
 import sys
+import os
 import json
+from pathlib import Path
 from PyQt6.QtWidgets import QApplication, QDialog, QLabel, QWidget, QVBoxLayout, QMenu, QInputDialog, QMainWindow, QTextEdit, QPushButton, QFileDialog
 from PyQt6.QtGui import QPixmap, QMouseEvent, QPainter, QColor, QAction, QPen, QPainterPath
 from PyQt6.QtCore import Qt, QPoint, QLineF, QPointF, Qt
@@ -327,7 +329,7 @@ class AutonomousPlannerGUIManager(QMainWindow):
 
         self.label = ClickableLabel(parent=self.central_widget, gui_instance=self)
 
-        pixmap = QPixmap('assets/top_down_cropped_high_stakes_field.png')  # Replace with your image path
+        pixmap = QPixmap('../assets/top_down_cropped_high_stakes_field.png')
         # self.label.setPixmap(pixmap)
 
         self.update()
@@ -455,7 +457,8 @@ class AutonomousPlannerGUIManager(QMainWindow):
                 return
             
             file_name = file_name.strip() + ".txt"
-            folder = QFileDialog.getExistingDirectory(self, "Select Directory to Save File")
+            folder = QFileDialog.getExistingDirectory(self, "Select Directory to Save File",
+                                                      str(Path(os.getcwd()).parent.absolute()))
             if (not folder):
                 return
             
@@ -482,10 +485,11 @@ class AutonomousPlannerGUIManager(QMainWindow):
         if ok and file_name:
             self.current_working_file = file_name
             file_name = file_name.strip() + ".txt"
-            folder = QFileDialog.getExistingDirectory(self, "Select Directory to Save File")
+            folder = QFileDialog.getExistingDirectory(self, "Select Directory to Save File", 
+                                                      str(Path(os.getcwd()).parent.absolute()))
             if folder:
                 full_path = f"{folder}/{file_name}"
-                with open(full_path, 'w') as file:
+                with open(full_path, 'w') as file: # Creates file if it isn't already created
                     pass
                 self.current_working_file_path = full_path
                 print(f"Set current working file at {full_path}")
@@ -644,7 +648,7 @@ class AutonomousPlannerGUIManager(QMainWindow):
         plt.show()
 
 class DrawingWidget(QWidget):
-    def __init__(self, parent=None, image_path="assets/top_down_cropped_high_stakes_field.png"):
+    def __init__(self, parent=None, image_path="../assets/top_down_cropped_high_stakes_field.png"):
         super().__init__(parent)
         self.setGeometry(0, 0, 699, 699)
         self.image = QPixmap(image_path) if image_path else None
