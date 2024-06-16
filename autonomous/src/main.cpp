@@ -269,44 +269,6 @@ void measure_motion_metrics() {
     pros::lcd::print(2, "Max Jerk: %.2f ft/s^3", max_jerk);
 }
 
-std::vector<std::vector<double>> parseJSONData(const std::string& input) {
-    std::vector<std::vector<double>> result;
-    std::string cleanedInput;
-    std::stringstream ss(input);
-    std::string segment;
-    
-    // Iterate through the input string to find sublists
-    while (std::getline(ss, segment, '[')) {
-        std::stringstream sublistStream(segment);
-        std::string sublistSegment;
-        
-        while (std::getline(sublistStream, sublistSegment, ']')) {
-            if (!sublistSegment.empty()) {
-                std::vector<double> sublist;
-                std::stringstream sublistContent(sublistSegment);
-                std::string value;
-				int n = 0;
-
-                // Remove commas and parse doubles
-                while (std::getline(sublistContent, value, ',')) {
-                    if (!value.empty()) {
-                        sublist.push_back(std::stod(value));
-						n++;
-                    }
-					if (n > 4){
-						continue;
-					}
-                }
-
-                if (!sublist.empty()) {
-                    result.push_back(sublist);
-                }
-            }
-        }
-    }
-	return result;
-}
-
 /**
  * A callback function for LLEMU's center button.
  *
