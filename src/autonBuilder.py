@@ -685,12 +685,8 @@ class DrawingWidget(QWidget):
             segment_data[0].append(line)
             segment_data[1].append(segments)
             segment_length += segments[-1]
-            print(self.parent.nodes[i+1], ": ", self.parent.nodes[i+1].hasAction)
             if ((not self.parent.nodes[i+1].hasAction) and i < len(self.line_data)-1):
-                print("continuing...")
                 continue
-            else:
-                print("drawing...")
             time_intervals, positions, velocities, accelerations, headings = self.generate_scurve_profile(segment_length, segment_data[1], segment_data[0])
             self.all_time_intervals.extend(time_intervals + (self.all_time_intervals[-1] if self.all_time_intervals else 0))
             self.all_positions.extend([p + current_position for p in positions])
