@@ -181,8 +181,8 @@ class Node(QWidget):
     def mouseReleaseEvent(self, event: QMouseEvent):
         if event.button() == Qt.MouseButton.LeftButton:
             self.dragging = False
-
-        self.gui_instance.auto_save()
+        if (self.gui_instance.current_working_file_path != None):
+            self.gui_instance.auto_save()
         super().mouseReleaseEvent(event)
 
     def show_context_menu(self, pos):
@@ -400,7 +400,8 @@ class AutonomousPlannerGUIManager(QMainWindow):
             self.nodes.insert(pos, node)
         node.show()
         self.update_lines()
-        self.auto_save()
+        if (self.current_working_file_path != None):
+            self.auto_save()
         print(f"Node created at ({x}, {y})")
 
     def update_lines(self):
@@ -472,8 +473,12 @@ class AutonomousPlannerGUIManager(QMainWindow):
             file.write(nodes_string)
         print(f"Route saved to {full_path}")
 
-    def load_nodes_from_file(self):
-        file_name, _ = QFileDialog.getOpenFileName(self, "Load Route from File", "", "Text Files (*.txt);;All Files (*)")
+    def load_nodes_from_file(self, dialogue=True):
+        file_name = None
+        if (dialogue):
+            file_name, _ = QFileDialog.getOpenFileName(self, "Load Route from File", "", "Text Files (*.txt);;All Files (*)")
+        else:
+            file_name = self.current_working_file_path
         if file_name:
             with open(file_name, 'r') as file:
                 nodes_string = file.read()
@@ -489,11 +494,15 @@ class AutonomousPlannerGUIManager(QMainWindow):
                                                       str(Path(os.getcwd()).parent.absolute()))
             if folder:
                 full_path = f"{folder}/{file_name}"
-                with open(full_path, 'w') as file: # Creates file if it isn't already created
-                    pass
+                if not os.path.exists(full_path):
+                    with open(full_path, 'w+') as file: # Creates file if it isn't already created
+                        pass
                 self.current_working_file_path = full_path
                 print(f"Set current working file at {full_path}")
-                self.auto_save()
+                if (len(self.nodes) > 0 or os.stat(full_path).st_size == 0):
+                    self.auto_save()
+                else:
+                    self.load_nodes_from_file(False)
 
     def create_cpp_file(self):
         print("Creating C++ file from nodes...") # This is a lie
@@ -543,7 +552,10 @@ class AutonomousPlannerGUIManager(QMainWindow):
     
     def auto_save(self):
         if (self.current_working_file != None and self.start_node and self.end_node):
-            self.save_nodes_to_file()
+            if (len(self.nodes) > 0):
+                self.save_nodes_to_file()
+            else:
+                self.load_nodes_from_file(False)
 
     def fill_template(self, nodes_data):
         # Ensure velocities and headings are of the same length
