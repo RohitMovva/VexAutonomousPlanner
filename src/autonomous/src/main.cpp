@@ -159,6 +159,12 @@ void PID_controller(){
 
     while (index < route.size()) {
         // Get the setpoints from the velocity_heading vector
+        if (route[index].size() > 2){
+            // Spin here
+            intake.move(127*route[index][0]);
+            // Clamp goal here
+            index++;
+        }
         double setpoint_velocity = route[index][0];
         double setpoint_heading = route[index][1] - initial_heading;
 

@@ -465,9 +465,21 @@ class AutonomousPlannerGUIManager(QMainWindow):
             
             full_path = f"{folder}/{file_name}"
         nodes_data = []
-        time_intervals, positions, velocities, accelerations, headings = self.central_widget.calculateScurveStuff()
+        time_intervals, positions, velocities, accelerations, headings, nodes_map = self.central_widget.calculateScurveStuff()
         for i in range(0, len(time_intervals), 200): # Every 100ms save data
             nodes_data.append([velocities[i], headings[i]])
+
+        nodes_actions = [
+                [
+                    int(node.spinIntake),
+                    int(node.clampGoal),
+                    node.turn
+                ]
+                for node in self.nodes
+            ]
+        for i in range(0, len(nodes_map)):
+            nodes_data.insert(int(nodes_map[i]/200), nodes_actions[i])
+
         self.fill_template(nodes_data)
         with open(full_path, 'w') as file:
             file.write(nodes_string)
@@ -534,7 +546,7 @@ class AutonomousPlannerGUIManager(QMainWindow):
 
         self.update_lines()
 
-    def convert_nodes(self, scurve=False):
+    def convert_nodes(self, as_list=False):
         nodes_data = [
             [
                 node.x,
@@ -547,6 +559,8 @@ class AutonomousPlannerGUIManager(QMainWindow):
             ]
             for node in self.nodes
         ]
+        if (as_list):
+            return nodes_data
         nodes_string = json.dumps(nodes_data, separators=(',', ':'))
         return nodes_string
     
@@ -557,14 +571,22 @@ class AutonomousPlannerGUIManager(QMainWindow):
             else:
                 self.load_nodes_from_file(False)
 
-    def fill_template(self, nodes_data):
-        # Ensure velocities and headings are of the same length
-        if len(nodes_data[0]) != len(nodes_data[1]):
-            raise ValueError("The lengths of velocities and headings must be the same.")
-        
+    def fill_template(self, nodes_data):  
         # Create the string to insert
-        pairs = [f"{{{v}, {h}}}" for v, h in nodes_data]
-        insertion = f"std::vector<std::vector<double>> {self.current_working_file} = {{{', '.join(pairs)}}};\n"
+        stringified = []
+        for i in range(0, len(nodes_data)):
+            if (len(nodes_data[i]) > 2):
+                stringified.append(f"{{")
+                for j in range(0, len(nodes_data[i])):
+                    stringified[-1] += f"{nodes_data[i][j]}"
+                    if (j < len(nodes_data[i])-1):
+                        stringified[-1] += f", "
+                stringified[-1] += f"}}"
+            else:
+                stringified.append(f"{{{nodes_data[i][0]}, {nodes_data[i][1]}}}")
+
+        # pairs = [f"{{{v}, {h}}}" for v, h in nodes_data]
+        insertion = f"std::vector<std::vector<double>> {self.current_working_file} = {{{', '.join(stringified)}}};\n"
         
         try:
             # Read the content of routes.h
@@ -673,6 +695,7 @@ class DrawingWidget(QWidget):
         self.all_velocities = []
         self.all_accelerations = []
         self.all_headings = []
+        self.all_nodes_map = [] # Represents index of node n in any of the above lists
         
         current_position = 0
         segment_data = [[], []]
@@ -687,17 +710,19 @@ class DrawingWidget(QWidget):
             segment_length += segments[-1]
             if ((not self.parent.nodes[i+1].hasAction) and i < len(self.line_data)-1):
                 continue
-            time_intervals, positions, velocities, accelerations, headings = self.generate_scurve_profile(segment_length, segment_data[1], segment_data[0])
+            time_intervals, positions, velocities, accelerations, headings, nodes_map = self.generate_scurve_profile(segment_length, segment_data[1], segment_data[0])
             self.all_time_intervals.extend(time_intervals + (self.all_time_intervals[-1] if self.all_time_intervals else 0))
             self.all_positions.extend([p + current_position for p in positions])
             self.all_velocities.extend(velocities)
             self.all_accelerations.extend(accelerations)
             self.all_headings.extend(headings)
+            self.all_nodes_map.extend((mapping+len(self.all_time_intervals)-len(time_intervals)) for mapping in nodes_map)
             current_position += segment_length
             segment_data = [[], []]
             segment_length = 0
+        self.all_nodes_map.append(len(self.all_time_intervals))
 
-        return self.all_time_intervals, self.all_positions, self.all_velocities, self.all_accelerations, self.all_headings
+        return self.all_time_intervals, self.all_positions, self.all_velocities, self.all_accelerations, self.all_headings, self.all_nodes_map
 
     def paintEvent(self, event):
         gui_instance = self.parent
@@ -831,7 +856,7 @@ class DrawingWidget(QWidget):
 
         total_time = 4 * t_jerk + 2 * t_acc + t_flat
         time_intervals = np.arange(0, total_time, dt)
-        positions, velocities, accelerations, headings = [], [], [], []
+        positions, velocities, accelerations, headings, nodes_map = [], [], [], [], []
         s = 0
         if (t_acc == 0):
             a_max = j_max*t_jerk
@@ -849,7 +874,9 @@ class DrawingWidget(QWidget):
         debug = False
 
         curr_segment = 0
-        for t in time_intervals:
+        nodes_map.append(0)
+        for i in range(len(time_intervals)):
+            t = time_intervals[i]
             if t < t_jerk:
                 # First jerk phase (increasing acceleration)
                 if (debug):
@@ -907,10 +934,13 @@ class DrawingWidget(QWidget):
 
             # MAKE DEPENDENT ON DISTANCE
             if (s > segments[curr_segment][-1] and len(segments)-curr_segment > 1):
+                nodes_map.append(i)
                 curr_segment += 1
             headings.append(getHeading(s, segments[curr_segment], 
                                        line_data[curr_segment][1], line_data[curr_segment][2], line_data[curr_segment][3], line_data[curr_segment][4]))
-        return time_intervals, positions, velocities, accelerations, headings
+
+        # nodes_map.append(len(line_data))
+        return time_intervals, positions, velocities, accelerations, headings, nodes_map
 
                 
 if __name__ == '__main__':
