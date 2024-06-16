@@ -15,7 +15,7 @@ pros::Motor intake(1);
 
 pros::Imu imu_sensor(1); // Replace 1 with inertial sensor port
 
-pros::ADIEncoder side_encoder('A', 'B', false);  // Ports 'A' and 'B' for the shaft encoder
+pros::adi::Encoder side_encoder('A', 'B', false);  // Ports 'A' and 'B' for the shaft encoder
 
 // Program types
 std::string program_type = "close_side";

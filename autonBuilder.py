@@ -5,7 +5,6 @@ from PyQt6.QtGui import QPixmap, QMouseEvent, QPainter, QColor, QAction, QPen, Q
 from PyQt6.QtCore import Qt, QPoint, QLineF, QPointF, Qt
 from scipy.integrate import quad
 import numpy as np
-from scipy.optimize import brentq
 import matplotlib.pyplot as plt
 from math import sqrt
 
@@ -321,6 +320,7 @@ class AutonomousPlannerGUIManager(QMainWindow):
         self.start_node = None
         self.end_node = None
 
+        self.current_working_file_path = None
         self.current_working_file = None
 
         self.layout = QVBoxLayout()
@@ -446,10 +446,10 @@ class AutonomousPlannerGUIManager(QMainWindow):
             self.load_nodes(nodes_string)
 
     def save_nodes_to_file(self):
-        nodes_string = self.convert_nodes(True)
-        full_path = self.current_working_file
+        nodes_string = self.convert_nodes()
+        full_path = self.current_working_file_path
 
-        if (self.current_working_file == None):
+        if (self.current_working_file_path == None):
             file_name, ok = QInputDialog.getText(self, "Save Route to File", "Enter file name (without extension):")
             if (not ok or not file_name):
                 return
@@ -460,7 +460,11 @@ class AutonomousPlannerGUIManager(QMainWindow):
                 return
             
             full_path = f"{folder}/{file_name}"
-            
+        nodes_data = []
+        time_intervals, positions, velocities, accelerations, headings = self.central_widget.calculateScurveStuff()
+        for i in range(0, len(time_intervals), 200): # Every 100ms save data
+            nodes_data.append([velocities[i], headings[i]])
+        self.fill_template(nodes_data)
         with open(full_path, 'w') as file:
             file.write(nodes_string)
         print(f"Route saved to {full_path}")
@@ -476,13 +480,14 @@ class AutonomousPlannerGUIManager(QMainWindow):
     def set_working_file(self):
         file_name, ok = QInputDialog.getText(self, "Current Working File (existing or new)", "Enter file name (without extension):")
         if ok and file_name:
+            self.current_working_file = file_name
             file_name = file_name.strip() + ".txt"
             folder = QFileDialog.getExistingDirectory(self, "Select Directory to Save File")
             if folder:
                 full_path = f"{folder}/{file_name}"
                 with open(full_path, 'w') as file:
                     pass
-                self.current_working_file = full_path
+                self.current_working_file_path = full_path
                 print(f"Set current working file at {full_path}")
                 self.auto_save()
 
@@ -529,16 +534,54 @@ class AutonomousPlannerGUIManager(QMainWindow):
             ]
             for node in self.nodes
         ]
-        if (scurve):
-            time_intervals, positions, velocities, accelerations, headings = self.central_widget.calculateScurveStuff()
-            for i in range(0, len(time_intervals), 200): # Every 100ms save data
-                nodes_data.append([velocities[i], headings[i]])
         nodes_string = json.dumps(nodes_data, separators=(',', ':'))
         return nodes_string
     
     def auto_save(self):
         if (self.current_working_file != None and self.start_node and self.end_node):
             self.save_nodes_to_file()
+
+    def fill_template(self, nodes_data):
+        # Ensure velocities and headings are of the same length
+        if len(nodes_data[0]) != len(nodes_data[1]):
+            raise ValueError("The lengths of velocities and headings must be the same.")
+        
+        # Create the string to insert
+        pairs = [f"{{{v}, {h}}}" for v, h in nodes_data]
+        insertion = f"std::vector<std::vector<double>> {self.current_working_file} = {{{', '.join(pairs)}}};\n"
+        
+        try:
+            # Read the content of routes.h
+            with open("routes.h", "r") as routes_file:
+                content = routes_file.readlines()
+            
+            # Find the line with the specified route name
+            for i, line in enumerate(content):
+                if line.strip().startswith(f"std::vector<std::vector<double>> {self.current_working_file} ="):
+                    content[i] = insertion
+                    break
+            else:
+                # Insert before the #endif line
+                for i, line in enumerate(content):
+                    if line.strip() == "#endif":
+                        content.insert(i, insertion)
+                        break
+        
+        except FileNotFoundError:
+            # If routes.h does not exist, create a new one with the necessary structure
+            content = [
+                "#ifndef ROUTES_H\n",
+                "#define ROUTES_H\n",
+                "#include <vector>\n",
+                "\n",
+                insertion,
+                "\n",
+                "#endif\n"
+            ]
+        
+        # Write the updated content to routes.h
+        with open("routes.h", "w") as routes_file:
+            routes_file.writelines(content)
 
     def position_graph(self):
         self.central_widget.calculateScurveStuff()
