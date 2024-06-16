@@ -662,10 +662,9 @@ class AutonomousPlannerGUIManager(QMainWindow):
 class DrawingWidget(QWidget):
     def __init__(self, parent=None, image_path="../assets/top_down_cropped_high_stakes_field.png"):
         super().__init__(parent)
+        self.parent = parent
         self.setGeometry(0, 0, 699, 699)
         self.image = QPixmap(image_path) if image_path else None
-        # self.image = self.image.scaled(699, 699, Qt.AspectRatioMode.KeepAspectRatio)
-        # self.lab.setFixedSize(699, 699)  # Ensure the label maintains the correct size
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
 
     def calculateScurveStuff(self):
@@ -676,22 +675,36 @@ class DrawingWidget(QWidget):
         self.all_headings = []
         
         current_position = 0
-        for i in range (0, len(self.line_data)):            
+        segment_data = [[], []]
+        segment_length = 0
+        for i in range (0, len(self.line_data)):
             line = self.line_data[i]
             line.append(None) # Prevents out of range error
             segments = createCurveSegments(line[1], line[2], line[3], line[4])
-            time_intervals, positions, velocities, accelerations, headings = self.generate_scurve_profile(segments, line[1:])
+
+            segment_data[0].append(line)
+            segment_data[1].append(segments)
+            segment_length += segments[-1]
+            print(self.parent.nodes[i+1], ": ", self.parent.nodes[i+1].hasAction)
+            if ((not self.parent.nodes[i+1].hasAction) and i < len(self.line_data)-1):
+                print("continuing...")
+                continue
+            else:
+                print("drawing...")
+            time_intervals, positions, velocities, accelerations, headings = self.generate_scurve_profile(segment_length, segment_data[1], segment_data[0])
             self.all_time_intervals.extend(time_intervals + (self.all_time_intervals[-1] if self.all_time_intervals else 0))
             self.all_positions.extend([p + current_position for p in positions])
             self.all_velocities.extend(velocities)
             self.all_accelerations.extend(accelerations)
             self.all_headings.extend(headings)
-            current_position += segments[-1]
+            current_position += segment_length
+            segment_data = [[], []]
+            segment_length = 0
 
         return self.all_time_intervals, self.all_positions, self.all_velocities, self.all_accelerations, self.all_headings
 
     def paintEvent(self, event):
-        gui_instance = self.parent()
+        gui_instance = self.parent
 
         painter = QPainter(self)
         painter.drawPixmap(self.rect(), self.image)
@@ -795,8 +808,7 @@ class DrawingWidget(QWidget):
                 break
         return t_jerk
 
-    def generate_scurve_profile(self, segments, line_data, v_max=.25, a_max=0.125, j_max=0.08, dt=0.0005):
-        distance = segments[-1]
+    def generate_scurve_profile(self, distance, segments, line_data, v_max=.25, a_max=0.125, j_max=0.08, dt=0.0005):
         t_jerk = a_max / j_max
         t_acc = (v_max - j_max * t_jerk**2) / a_max
 
@@ -840,6 +852,7 @@ class DrawingWidget(QWidget):
         v = 0
         debug = False
 
+        curr_segment = 0
         for t in time_intervals:
             if t < t_jerk:
                 # First jerk phase (increasing acceleration)
@@ -896,7 +909,11 @@ class DrawingWidget(QWidget):
             velocities.append(v)
             accelerations.append(a)
 
-            headings.append(getHeading(s, segments, line_data[0], line_data[1], line_data[2], line_data[3]))
+            # MAKE DEPENDENT ON DISTANCE
+            if (s > segments[curr_segment][-1] and len(segments)-curr_segment > 1):
+                curr_segment += 1
+            headings.append(getHeading(s, segments[curr_segment], 
+                                       line_data[curr_segment][1], line_data[curr_segment][2], line_data[curr_segment][3], line_data[curr_segment][4]))
         return time_intervals, positions, velocities, accelerations, headings
 
                 
