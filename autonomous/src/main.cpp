@@ -4,6 +4,7 @@
 #include <string>
 #include <sstream>
 #include <vector>
+#include "routes.h"
 
 // Global Vars
 
@@ -18,13 +19,18 @@ pros::Imu imu_sensor(1); // Replace 1 with inertial sensor port
 pros::adi::Encoder side_encoder('A', 'B', false);  // Ports 'A' and 'B' for the shaft encoder
 
 // Program types
-std::string program_type = "close_side";
-// std::string program_type = "far_side"
-// std::string program_type = "autonomous_skills"
-// std::string program_type = "driver_skills"
+std::string program_type = "autonomous";
+// std::string program_type = "driver"
 // std::string program_type = "calibrate_metrics";
 
-std::vector<std::vector<double>> pathData;
+// Routes
+std::vector<std::vector<double>> route = test_route; // For testing purposes
+// std::vector<std::vector<double>> route = close_side;
+// std::vector<std::vector<double>> route = far_side;
+// std::vector<std::vector<double>> route = skills;
+// std::vector<std::vector<double>> route = {}; // Driver or Calibration
+
+
 
 double initial_heading;
 
@@ -146,15 +152,15 @@ void PID_controller(){
 
     static double goal_x = 0.0;
     static double goal_y = 0.0;
-	static double initial_heading = pathData[0][1];
+	static double initial_heading = route[0][1];
     Position current_position = {0.0, 0.0, 0.0};
 
     int index = 0;  // Index to iterate over the velocity_heading vector
 
-    while (index < pathData.size()) {
+    while (index < route.size()) {
         // Get the setpoints from the velocity_heading vector
-        double setpoint_velocity = pathData[index][0];
-        double setpoint_heading = pathData[index][1] - initial_heading;
+        double setpoint_velocity = route[index][0];
+        double setpoint_heading = route[index][1] - initial_heading;
 
         // Update the goal position based on setpoint_velocity and setpoint_heading
         goal_x += setpoint_velocity * DT * cos(setpoint_heading * M_PI / 180.0);
@@ -333,19 +339,6 @@ void initialize() {
 
 	// Calibrate the inertial sensor
     imu_sensor.reset();
-
-	// Code for loading route from file
-	if (program_type == "driver_skills" || program_type == "calibrate_metrics"){
-		return;
-	}
-	std::string filepath = "../routes/" + program_type;
-	std::ifstream ifs(filepath);
-
-	// Method to read file contents into string in one line from Martijn Pieters and Maik Beckmann
-  	std::string content( (std::istreambuf_iterator<char>(ifs)),
-                       (std::istreambuf_iterator<char>()));
-
-	pathData = parseJSONData(content);
 
   	imu_sensor.reset();
 	initial_heading = imu_sensor.get_heading();

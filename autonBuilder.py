@@ -580,7 +580,7 @@ class AutonomousPlannerGUIManager(QMainWindow):
             ]
         
         # Write the updated content to routes.h
-        with open("routes.h", "w") as routes_file:
+        with open("autonomous/routes.h", "w") as routes_file:
             routes_file.writelines(content)
 
     def position_graph(self):
