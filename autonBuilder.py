@@ -552,15 +552,17 @@ class AutonomousPlannerGUIManager(QMainWindow):
         
         try:
             # Read the content of routes.h
-            with open("routes.h", "r") as routes_file:
+            with open("autonomous/src/routes.h", "r") as routes_file:
                 content = routes_file.readlines()
             
             # Find the line with the specified route name
+            inserted = False
             for i, line in enumerate(content):
                 if line.strip().startswith(f"std::vector<std::vector<double>> {self.current_working_file} ="):
                     content[i] = insertion
+                    inserted = True
                     break
-            else:
+            if not inserted:
                 # Insert before the #endif line
                 for i, line in enumerate(content):
                     if line.strip() == "#endif":
@@ -580,7 +582,7 @@ class AutonomousPlannerGUIManager(QMainWindow):
             ]
         
         # Write the updated content to routes.h
-        with open("autonomous/routes.h", "w") as routes_file:
+        with open("autonomous/src/routes.h", "w") as routes_file:
             routes_file.writelines(content)
 
     def position_graph(self):
