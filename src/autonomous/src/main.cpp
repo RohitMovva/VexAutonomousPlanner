@@ -165,8 +165,8 @@ void PID_controller(){
             // Clamp goal here
             index++;
         }
-        double setpoint_velocity = route[index][0];
-        double setpoint_heading = route[index][1] - initial_heading;
+        double setpoint_velocity = route[index][0] + initial_heading;
+        double setpoint_heading = route[index][1];
 
         // Update the goal position based on setpoint_velocity and setpoint_heading
         goal_x += setpoint_velocity * DT * cos(setpoint_heading * M_PI / 180.0);
