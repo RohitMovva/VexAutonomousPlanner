@@ -19,14 +19,15 @@ def resource_path(relative_path):
     print(os.path.join(base_path, relative_path))
     return os.path.join(base_path, relative_path)
 
-def create_directories():
-    directories = [
+def create_files():
+    files = [
         'routes/',
+        'config.yaml',
     ]
-    for directory in directories:
-        if not os.path.exists(directory):
-            os.makedirs(directory)
-            print(f"Created directory: {directory}")
+    for file in files:
+        if not os.path.exists(file):
+            os.makedirs(file)
+            print(f"Created file: {file}")
 
 # QUADRATIC
 def quad_bezier_angle(t, P0, P1, P2):
@@ -947,7 +948,7 @@ class DrawingWidget(QWidget):
                 
 if __name__ == '__main__':
     if getattr(sys, 'frozen', False):
-        create_directories()
+        create_files()
     app = QApplication(sys.argv)
 
     window = AutonomousPlannerGUIManager()
