@@ -2,4 +2,4 @@ PyQt6
 scipy
 numpy
 matplotlib
-GitPython
+pyyaml

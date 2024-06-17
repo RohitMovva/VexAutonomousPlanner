@@ -1,6 +1,7 @@
 import sys
 import os
 import json
+import yaml
 from pathlib import Path
 from PyQt6.QtWidgets import QApplication, QDialog, QLabel, QWidget, QVBoxLayout, QMenu, QInputDialog, QMainWindow, QTextEdit, QPushButton, QFileDialog
 from PyQt6.QtGui import QPixmap, QMouseEvent, QPainter, QColor, QAction, QPen, QPainterPath
@@ -8,7 +9,6 @@ from PyQt6.QtCore import Qt, QPoint, QLineF, QPointF, Qt
 import numpy as np
 import matplotlib.pyplot as plt
 from math import sqrt
-import git
 
 def resource_path(relative_path):
     try:
@@ -27,13 +27,6 @@ def create_directories():
         if not os.path.exists(directory):
             os.makedirs(directory)
             print(f"Created directory: {directory}")
-
-def clone_repository(repo_url="https://github.com/RohitMovva/HighStakesAutonomous", clone_dir="HighStakesAutonomous"):
-    if not os.path.exists(clone_dir):
-        print(f"Cloning repository {repo_url} into {clone_dir}")
-        git.Repo.clone_from(repo_url, clone_dir)
-    else:
-        print(f"Repository already exists in {clone_dir}")
 
 # QUADRATIC
 def quad_bezier_angle(t, P0, P1, P2):
@@ -316,6 +309,24 @@ class AutonomousPlannerGUIManager(QMainWindow):
 
         self.current_working_file_path = None
         self.current_working_file = None
+        self.routes_header_path = None
+        with open('config.yaml', 'r') as file:
+            config = yaml.safe_load(file)
+        # Check if the repository_path exists in the config
+        if 'autonomous_repository_path' not in config:
+            autonomous_path = QFileDialog.getExistingDirectory(self, "Select Autonomous Program Directory", 
+                                                      str(Path(os.getcwd()).parent.parent.absolute()))
+            
+            config['autonomous_repository_path'] = autonomous_path + "/routes.h"
+
+            # Write the updated config back to the YAML file
+            with open('config.yaml', 'w') as file:
+                yaml.safe_dump(config, file)
+
+            print(f"Added repository path: {autonomous_path + "/routes.h"}")
+        else:
+            self.routes_header_path = config['autonomous_repository_path']
+            print(f"Repository path already exists: {self.routes_header_path}")
 
         self.layout = QVBoxLayout()
 
@@ -490,7 +501,7 @@ class AutonomousPlannerGUIManager(QMainWindow):
             self.load_nodes(nodes_string)
 
     def set_working_file(self):
-        file_name, ok = QInputDialog.getText(self, "Current Working File (existing or new)", "Enter file name (without extension):")
+        file_name, ok = QInputDialog.getText(self, "File to save route to", "Enter file name (without extension):")
         if ok and file_name:
             self.current_working_file = file_name
             file_name = file_name.strip() + ".txt"
@@ -582,7 +593,7 @@ class AutonomousPlannerGUIManager(QMainWindow):
         
         try:
             # Read the content of routes.h
-            with open(resource_path("HighStakesAutonomous/src/routes.h"), "r") as routes_file:
+            with open(self.routes_header_path, "r") as routes_file:
                 content = routes_file.readlines()
             
             # Find the line with the specified route name
@@ -612,7 +623,7 @@ class AutonomousPlannerGUIManager(QMainWindow):
             ]
         
         # Write the updated content to routes.h
-        with open(resource_path("HighStakesAutonomous/src/routes.h"), "w") as routes_file:
+        with open(self.routes_header_path, "w") as routes_file:
             routes_file.writelines(content)
 
     def position_graph(self):
@@ -935,7 +946,6 @@ class DrawingWidget(QWidget):
 if __name__ == '__main__':
     if getattr(sys, 'frozen', False):
         create_directories()
-        clone_repository()
     app = QApplication(sys.argv)
 
     window = AutonomousPlannerGUIManager()
