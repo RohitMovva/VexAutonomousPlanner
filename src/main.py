@@ -5,7 +5,6 @@ from pathlib import Path
 from PyQt6.QtWidgets import QApplication, QDialog, QLabel, QWidget, QVBoxLayout, QMenu, QInputDialog, QMainWindow, QTextEdit, QPushButton, QFileDialog
 from PyQt6.QtGui import QPixmap, QMouseEvent, QPainter, QColor, QAction, QPen, QPainterPath
 from PyQt6.QtCore import Qt, QPoint, QLineF, QPointF, Qt
-from scipy.integrate import quad
 import numpy as np
 import matplotlib.pyplot as plt
 from math import sqrt
