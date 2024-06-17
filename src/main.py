@@ -22,7 +22,6 @@ def resource_path(relative_path):
 def create_files():
     files = [
         'routes/',
-        'config.yaml',
     ]
     for file in files:
         if not os.path.exists(file):

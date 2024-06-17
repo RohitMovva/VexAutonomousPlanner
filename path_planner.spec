@@ -7,6 +7,7 @@ a = Analysis(
     binaries=[],
     datas=[
         ('assets', 'assets'),
+        ('config.yaml', '.'),
         ('README.md', '.'),
         ('LICENSE', '.')
     ],
