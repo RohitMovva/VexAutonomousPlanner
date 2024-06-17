@@ -11,14 +11,6 @@ a = Analysis(
         ('LICENSE', '.')
     ],
     hiddenimports=[
-        'numpy',
-        'numpy.f2py',  # Add this line
-        'numpy.f2py.f2py2e',  # Add this line
-        'scipy',
-        'scipy.integrate',
-        'scipy.special',
-        'scipy._lib._array_api',
-        'scipy._lib.array_api_compat.numpy'
     ],
     hookspath=[],
     hooksconfig={},

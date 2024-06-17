@@ -37,22 +37,6 @@ def clone_repository(repo_url="https://github.com/RohitMovva/HighStakesAutonomou
         print(f"Repository already exists in {clone_dir}")
 
 # QUADRATIC
-
-# Calculations for length of Bezier curves (quadratic and cubic)
-def quad_bezier_length(start, end, cp, t=1):
-    P0, P1, P2 = map(np.array, [(start.x(), start.y()), (cp.x(), cp.y()), (end.x(), end.y())])
-    arc_length, error = quad(quad_integrand, 0, t, args=(P0, P1, P2))
-    return arc_length
-
-# Derivative of the quadratic Bezier curve function
-def quad_bezier_derivative(t, P0, P1, P2):
-    return 2 * (1-t) * (P1 - P0) + 2 * t * (P2 - P1)
-
-# Integrand for the quadratic arc length calculation
-def quad_integrand(t, P0, P1, P2):
-    dx_dt, dy_dt = quad_bezier_derivative(t, P0, P1, P2)
-    return np.sqrt(dx_dt**2 + dy_dt**2)
-
 def quad_bezier_angle(t, P0, P1, P2):
     tangentX = (2*(1-t)*(P1.x()-P0.x())) + (2*t*(P2.x()-P1.x()))
     tangentY = (2*(1-t)*(P1.y()-P0.y())) + (2*t*(P2.y()-P1.y()))
@@ -64,23 +48,6 @@ def quadratic_bezier_point(P0, P1, P2, t):
     return x, y
 
 # CUBIC
-
-# Quadratic Bezier curve function
-def cubic_bezier_length(start, cp1, cp2, end, t=1):
-    P0, P1, P2, P3 = map(np.array, [(start.x(), start.y()), (cp1.x(), cp1.y()), (cp2.x(), cp2.y()), (end.x(), end.y())])
-    arc_length, error = quad(cubic_integrand, 0, t, args=(P0, P1, P2, P3))
-    return arc_length*2
-
-# Derivative of the cubic Bezier curve function
-def cubic_bezier_derivative(t, P0, P1, P2, P3):
-    # return 3 * (1-t)**2 * (P1 - P0) + 6 * (1-t) * t * (P2 - P1) + 3 * t**2 * (P3 - P2)
-    return (1-t)*2*(P1-P0)+2*t*(1-t)*(P2-P1)+t**2*(P3-P2)
-
-# Integrand for the cubic arc length calculation
-def cubic_integrand(t, P0, P1, P2, P3):
-    dx_dt, dy_dt = cubic_bezier_derivative(t, P0, P1, P2, P3)
-    return np.sqrt(dx_dt**2 + dy_dt**2)
-
 def cubic_bezier_point(P0, P1, P2, P3, t):
     x = (1 - t)**3 * P0.x() + 3 * (1 - t)**2 * t * P1.x() + 3 * (1 - t) * t**2 * P2.x() + t**3 * P3.x()
     y = (1 - t)**3 * P0.y() + 3 * (1 - t)**2 * t * P1.y() + 3 * (1 - t) * t**2 * P2.y() + t**3 * P3.y()
@@ -729,7 +696,7 @@ class DrawingWidget(QWidget):
         for i in range (0, len(self.line_data)):
             line = self.line_data[i]
             line.append(None) # Prevents out of range error
-            segments = createCurveSegments(line[1], line[2], line[3], line[4])
+            segments = createCurveSegments(line[0], line[1], line[2], line[3])
 
             segment_data[0].append(line)
             segment_data[1].append(segments)
@@ -790,19 +757,16 @@ class DrawingWidget(QWidget):
             cp2 = revTarget.p2()
 
             if p == 1:
-                arc_length = quad_bezier_length(self.path.currentPosition(), current, cp2)
-                self.line_data.append([arc_length, self.path.currentPosition(), current, cp2])
+                self.line_data.append([self.path.currentPosition(), current, cp2])
                 self.path.quadTo(cp2, current)
             else:
-                arc_length = cubic_bezier_length(self.path.currentPosition(), cp1, cp2, current)
-                self.line_data.append([arc_length, self.path.currentPosition(), current, cp1, cp2])
+                self.line_data.append([self.path.currentPosition(), current, cp1, cp2])
                 self.path.cubicTo(cp1, cp2, current)
             revSource = QLineF.fromPolar(target.length() * factor, angle).translated(current)
             cp1 = revSource.p2()
 
         # The final curve, that joins to the last point
-        arc_length = quad_bezier_length(self.path.currentPosition(), points[-1], cp1)
-        self.line_data.append([arc_length, self.path.currentPosition(), points[-1], cp1])
+        self.line_data.append([self.path.currentPosition(), points[-1], cp1])
         self.path.quadTo(cp1, points[-1])
 
     # Function to calculate the distance covered for given v_max
@@ -963,7 +927,7 @@ class DrawingWidget(QWidget):
                 nodes_map.append(i)
                 curr_segment += 1
             headings.append(getHeading(s, segments[curr_segment], 
-                                       line_data[curr_segment][1], line_data[curr_segment][2], line_data[curr_segment][3], line_data[curr_segment][4]))
+                                       line_data[curr_segment][0], line_data[curr_segment][1], line_data[curr_segment][2], line_data[curr_segment][3]))
 
         # nodes_map.append(len(line_data))
         return time_intervals, positions, velocities, accelerations, headings, nodes_map
