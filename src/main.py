@@ -311,7 +311,7 @@ class AutonomousPlannerGUIManager(QMainWindow):
         self.current_working_file_path = None
         self.current_working_file = None
         self.routes_header_path = None
-        with open('../config.yaml', 'r') as file:
+        with open(resource_path('../config.yaml'), 'r') as file:
             config = yaml.safe_load(file)
         if (config == None):
             config = {}
@@ -323,7 +323,7 @@ class AutonomousPlannerGUIManager(QMainWindow):
             config['autonomous_repository_path'] = autonomous_path + "/routes.h"
             self.routes_header_path = autonomous_path + "/routes.h"
             # Write the updated config back to the YAML file
-            with open('../config.yaml', 'w') as file:
+            with open(resource_path('../config.yaml'), 'w') as file:
                 yaml.safe_dump(config, file)
 
             print(f"Added repository path: {autonomous_path}/routes.h")
