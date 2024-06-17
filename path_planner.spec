@@ -13,6 +13,7 @@ a = Analysis(
     hiddenimports=[
         'numpy',
         'numpy.f2py',  # Add this line
+        'numpy.f2py.f2py2e',  # Add this line
         'scipy',
         'scipy.integrate',
         'scipy.special',
