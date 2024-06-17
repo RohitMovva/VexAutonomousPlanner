@@ -10,7 +10,15 @@ a = Analysis(
         ('README.md', '.'),
         ('LICENSE', '.')
     ],
-    hiddenimports=[],
+    hiddenimports=[
+        'numpy',
+        'numpy.f2py',  # Add this line
+        'scipy',
+        'scipy.integrate',
+        'scipy.special',
+        'scipy._lib._array_api',
+        'scipy._lib.array_api_compat.numpy'
+    ],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
