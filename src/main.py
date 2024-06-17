@@ -4,11 +4,17 @@ import json
 import yaml
 from pathlib import Path
 from PyQt6.QtWidgets import QApplication, QDialog, QLabel, QWidget, QVBoxLayout, QMenu, QInputDialog, QMainWindow, QTextEdit, QPushButton, QFileDialog
-from PyQt6.QtGui import QPixmap, QMouseEvent, QPainter, QColor, QAction, QPen, QPainterPath
+from PyQt6.QtGui import QPixmap, QMouseEvent, QPainter, QColor, QAction, QPen, QPainterPath, QFontDatabase
 from PyQt6.QtCore import Qt, QPoint, QLineF, QPointF, Qt
 import numpy as np
 import matplotlib.pyplot as plt
 from math import sqrt
+
+def load_fonts():
+    font_dir = os.path.join(os.path.dirname(__file__), 'fonts')
+    print(font_dir)
+    for font_file in os.listdir(font_dir):
+        QFontDatabase.addApplicationFont(os.path.join(font_dir, font_file))
 
 def resource_path(relative_path):
     try:
@@ -949,6 +955,7 @@ if __name__ == '__main__':
     if getattr(sys, 'frozen', False):
         create_files()
     app = QApplication(sys.argv)
+    load_fonts()
 
     window = AutonomousPlannerGUIManager()
     window.show()
