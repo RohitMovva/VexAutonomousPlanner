@@ -482,7 +482,7 @@ class AutonomousPlannerGUIManager(QMainWindow):
             
             full_path = f"{folder}/{file_name}"
         else:
-            full_path = self.routes_folder_path + self.current_working_file
+            full_path = self.routes_folder_path + "/" + self.current_working_file + ".txt"
         nodes_data = []
         time_intervals, positions, velocities, accelerations, headings, nodes_map = self.central_widget.calculateScurveStuff()
         for i in range(0, len(time_intervals), 200): # Every 100ms save data
@@ -519,7 +519,7 @@ class AutonomousPlannerGUIManager(QMainWindow):
     def set_working_file(self):
         file_name, ok = QInputDialog.getText(self, "File to save route to", "Enter file name (without extension):")
         if ok and file_name:
-            self.current_working_file = file_name + ".txt"
+            self.current_working_file = file_name
             folder = self.routes_folder_path
             if (folder == None):
                 folder = QFileDialog.getExistingDirectory(self, "Select Directory to Save File", 
@@ -527,7 +527,7 @@ class AutonomousPlannerGUIManager(QMainWindow):
                 
             if folder:
                 self.routes_folder_path = folder
-                full_path = f"{folder}/{self.current_working_file}"
+                full_path = f"{folder}/{self.current_working_file}.txt"
                 if not os.path.exists(full_path):
                     with open(full_path, 'w+') as file: # Creates file if it isn't already created
                         pass
