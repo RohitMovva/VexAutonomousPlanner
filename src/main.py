@@ -172,7 +172,7 @@ class Node(QWidget):
     def mouseReleaseEvent(self, event: QMouseEvent):
         if event.button() == Qt.MouseButton.LeftButton:
             self.dragging = False
-        if (self.gui_instance.current_working_file_path != None):
+        if (self.gui_instance.current_working_file != None):
             self.gui_instance.auto_save()
         super().mouseReleaseEvent(event)
 
@@ -313,28 +313,32 @@ class AutonomousPlannerGUIManager(QMainWindow):
         self.start_node = None
         self.end_node = None
 
-        self.current_working_file_path = None
         self.current_working_file = None
         self.routes_header_path = None
+        self.routes_folder_path = None
         with open(resource_path('../config.yaml'), 'r') as file:
             config = yaml.safe_load(file)
         if (config == None):
             config = {}
         # Check if the repository_path exists in the config
-        if config == None or 'autonomous_repository_path' not in config:
+        if 'autonomous_repository_path' not in config:
             autonomous_path = QFileDialog.getExistingDirectory(self, "Select Autonomous Program Directory", 
                                                       str(Path(os.getcwd()).parent.parent.absolute()))
             
             config['autonomous_repository_path'] = autonomous_path + "/routes.h"
-            self.routes_header_path = autonomous_path + "/routes.h"
-            # Write the updated config back to the YAML file
-            with open(resource_path('../config.yaml'), 'w') as file:
-                yaml.safe_dump(config, file)
+            print(f"Added autonomous repository path: {autonomous_path}/routes.h")
 
-            print(f"Added repository path: {autonomous_path}/routes.h")
-        else:
-            self.routes_header_path = config['autonomous_repository_path']
-            print(f"Repository path already exists: {self.routes_header_path}")
+        if 'routes_folder_path' not in config:
+            routes_path = QFileDialog.getExistingDirectory(self, "Select Routes Folder", 
+                                                      str(Path(os.getcwd()).parent.parent.absolute()))
+            
+            config['routes_folder_path'] = routes_path
+            print(f"Added routes folder path: {routes_path}")
+        
+        self.routes_header_path = config['autonomous_repository_path']
+        self.routes_folder_path = config['routes_folder_path']
+        with open(resource_path('../config.yaml'), 'w') as file:
+                yaml.safe_dump(config, file)
 
         self.layout = QVBoxLayout()
 
@@ -411,7 +415,7 @@ class AutonomousPlannerGUIManager(QMainWindow):
             self.nodes.insert(pos, node)
         node.show()
         self.update_lines()
-        if (self.current_working_file_path != None):
+        if (self.current_working_file != None):
             self.auto_save()
         print(f"Node created at ({x}, {y})")
 
@@ -427,6 +431,8 @@ class AutonomousPlannerGUIManager(QMainWindow):
             if node == self.end_node:
                 self.end_node = None
             self.update_lines()
+            if (self.current_working_file != None):
+                self.auto_save()
 
     def set_start_node(self, node):
         if self.start_node:
@@ -461,9 +467,9 @@ class AutonomousPlannerGUIManager(QMainWindow):
 
     def save_nodes_to_file(self):
         nodes_string = self.convert_nodes()
-        full_path = self.current_working_file_path
+        full_path = None
 
-        if (self.current_working_file_path == None):
+        if (self.current_working_file == None):
             file_name, ok = QInputDialog.getText(self, "Save Route to File", "Enter file name (without extension):")
             if (not ok or not file_name):
                 return
@@ -475,6 +481,8 @@ class AutonomousPlannerGUIManager(QMainWindow):
                 return
             
             full_path = f"{folder}/{file_name}"
+        else:
+            full_path = self.routes_folder_path + self.current_working_file
         nodes_data = []
         time_intervals, positions, velocities, accelerations, headings, nodes_map = self.central_widget.calculateScurveStuff()
         for i in range(0, len(time_intervals), 200): # Every 100ms save data
@@ -501,8 +509,8 @@ class AutonomousPlannerGUIManager(QMainWindow):
         if (dialogue):
             file_name, _ = QFileDialog.getOpenFileName(self, "Load Route from File", "", "Text Files (*.txt);;All Files (*)")
         else:
-            file_name = self.current_working_file_path
-        if file_name:
+            file_name = self.routes_folder_path + self.current_working_file
+        if file_name != None:
             with open(file_name, 'r') as file:
                 nodes_string = file.read()
             print(f"Route loaded from {file_name}")
@@ -511,16 +519,18 @@ class AutonomousPlannerGUIManager(QMainWindow):
     def set_working_file(self):
         file_name, ok = QInputDialog.getText(self, "File to save route to", "Enter file name (without extension):")
         if ok and file_name:
-            self.current_working_file = file_name
-            file_name = file_name.strip() + ".txt"
-            folder = QFileDialog.getExistingDirectory(self, "Select Directory to Save File", 
+            self.current_working_file = file_name + ".txt"
+            folder = self.routes_folder_path
+            if (folder == None):
+                folder = QFileDialog.getExistingDirectory(self, "Select Directory to Save File", 
                                                       str(Path(os.getcwd()).parent.absolute()))
+                
             if folder:
-                full_path = f"{folder}/{file_name}"
+                self.routes_folder_path = folder
+                full_path = f"{folder}/{self.current_working_file}"
                 if not os.path.exists(full_path):
                     with open(full_path, 'w+') as file: # Creates file if it isn't already created
                         pass
-                self.current_working_file_path = full_path
                 print(f"Set current working file at {full_path}")
                 if (len(self.nodes) > 0 or os.stat(full_path).st_size == 0):
                     self.auto_save()
@@ -952,10 +962,10 @@ class DrawingWidget(QWidget):
 
                 
 if __name__ == '__main__':
+    app = QApplication(sys.argv)
     if getattr(sys, 'frozen', False):
         create_files()
-    app = QApplication(sys.argv)
-    load_fonts()
+        load_fonts()
 
     window = AutonomousPlannerGUIManager()
     window.show()
