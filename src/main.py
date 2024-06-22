@@ -12,7 +12,6 @@ from math import sqrt
 
 def load_fonts():
     font_dir = os.path.join(os.path.dirname(__file__), 'fonts')
-    print(font_dir)
     for font_file in os.listdir(font_dir):
         QFontDatabase.addApplicationFont(os.path.join(font_dir, font_file))
 
@@ -431,7 +430,6 @@ class AutonomousPlannerGUIManager(QMainWindow):
                 self.start_node = None
             if node == self.end_node:
                 self.end_node = None
-        print("REMOVED: ", len(self.nodes))
         self.update_lines()
         if (self.current_working_file != None):
             self.auto_save()
@@ -498,8 +496,6 @@ class AutonomousPlannerGUIManager(QMainWindow):
                 ]
                 for node in self.nodes
             ]
-        print(nodes_map)
-        print(len(self.central_widget.line_data), " ", len(nodes_map), " ", len(nodes_actions), " ", len(self.nodes), " ", len(time_intervals))
         for i in range(0, len(nodes_map)):
             nodes_data.insert(int(nodes_map[i]/50), nodes_actions[i])
 
@@ -742,17 +738,14 @@ class DrawingWidget(QWidget):
             self.all_accelerations.extend(accelerations)
             self.all_headings.extend(headings)
             self.all_nodes_map.extend((mapping+len(self.all_time_intervals)-len(time_intervals)) for mapping in nodes_map)
-            print(self.all_nodes_map)
             current_position += segment_length
             segment_data = [[], []]
             segment_length = 0
         self.all_nodes_map.append(len(self.all_time_intervals))
-        print(self.all_nodes_map)
 
         return self.all_time_intervals, self.all_positions, self.all_velocities, self.all_accelerations, self.all_headings, self.all_nodes_map
 
     def paintEvent(self, event):
-        print("Painting, doo doo doOoooO")
         gui_instance = self.parent
 
         painter = QPainter(self)
@@ -765,7 +758,6 @@ class DrawingWidget(QWidget):
                     continue
                 points.append(QPointF(node.x+10, node.y+10))
             points.append(QPointF(gui_instance.end_node.x+10, gui_instance.end_node.y+10))
-            print("POINTS SIZE: ", len(points), " ", len(gui_instance.nodes))
             self.buildPath(points)
             painter.setRenderHint(QPainter.RenderHint.Antialiasing)
             pen = QPen(QColor("black"), 2)
@@ -964,7 +956,6 @@ class DrawingWidget(QWidget):
                 nodes_map.append(i)
                 curr_segment += 1
                 prev_dist = s
-                print(curr_segment, ": ", i)
             headings.append(getHeading(s-prev_dist, segments[curr_segment], 
                                        line_data[curr_segment][0], line_data[curr_segment][1], line_data[curr_segment][2], line_data[curr_segment][3]))
 
