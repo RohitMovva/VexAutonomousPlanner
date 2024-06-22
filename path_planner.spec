@@ -1,6 +1,7 @@
 # -*- mode: python ; coding: utf-8 -*-
 
 import os
+import sys
 
 def get_system_fonts():
     font_paths = []
@@ -15,6 +16,12 @@ def get_system_fonts():
                 if file.lower().endswith(('.ttf', '.otf')):
                     font_paths.append(os.path.join(root, file))
     return font_paths
+
+# Determine the icon path based on the operating system
+if sys.platform == "win32":
+    icon_path = 'assets/windows_icon.ico'  # Windows icon
+else:
+    icon_path = 'assets/linux_icon.png'  # Linux icon
 
 a = Analysis(
     ['src/main.py'],
@@ -54,6 +61,7 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
+    icon=icon_path,  # Use the icon path based on the OS
 )
 
 coll = COLLECT(
