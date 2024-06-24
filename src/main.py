@@ -76,7 +76,7 @@ def createCurveSegments(start, end, control1, control2=None):
             cx, cy = quadratic_bezier_point(start, control1, end, t)
         dx, dy = ox-cx, oy-cy
         currlen += sqrt(dx**2 + dy**2)
-        segments.append(currlen*(12/699))
+        segments.append(currlen*(12/700))
 
         ox, oy = cx, cy
     return segments
@@ -122,6 +122,10 @@ class Node(QWidget):
         super().__init__(parent)
         self.x = x
         self.y = y
+        # Scale pix value to number between 0 and 1, subtract 0.5 to center and multiply by number of inches on field
+        self.scale = 700/2000
+        self.absX = ((x-10)/(self.scale*2000-self.scale*34*2)-0.5) * 12**2
+        self.absY = ((y-10)/(self.scale*2000-self.scale*34*2)-0.5) * 12**2
         self.gui_instance = gui_instance
         self.isStartNode = False
         self.isEndNode = False
@@ -165,6 +169,8 @@ class Node(QWidget):
             new_pos = self.mapToParent(event.position().toPoint() - self.offset)
             self.x = new_pos.x()-5
             self.y = new_pos.y()-5
+            self.absX = ((self.x-10)/(self.scale*2000-self.scale*34*2)-0.5) * 12**2
+            self.absY = ((self.y-10)/(self.scale*2000-self.scale*34*2)-0.5) * 12**2
             self.move(new_pos)
             self.gui_instance.update_lines()
         super().mouseMoveEvent(event)
@@ -307,7 +313,7 @@ class AutonomousPlannerGUIManager(QMainWindow):
 
         self.central_widget = DrawingWidget(self)
         self.setCentralWidget(self.central_widget)
-        self.central_widget.setFixedSize(699, 699)
+        self.central_widget.setFixedSize(700, 700)
 
         self.nodes = []
         self.start_node = None
@@ -344,7 +350,7 @@ class AutonomousPlannerGUIManager(QMainWindow):
 
         self.label = ClickableLabel(parent=self.central_widget, gui_instance=self)
 
-        pixmap = QPixmap(resource_path('../assets/top_down_cropped_high_stakes_field.png'))
+        pixmap = QPixmap(resource_path('../assets/V5RC-HighStakes-Match-2000x2000.png'))
         # self.label.setPixmap(pixmap)
 
         self.update()
@@ -380,10 +386,6 @@ class AutonomousPlannerGUIManager(QMainWindow):
         set_current_file_action.triggered.connect(self.set_working_file)
         file_menu.addAction(set_current_file_action)
 
-        create_cpp_action = QAction('Create C++ File from Nodes', self)
-        create_cpp_action.triggered.connect(self.create_cpp_file)
-        file_menu.addAction(create_cpp_action)
-
         clear_nodes_action = QAction('Clear All Nodes', self)
         clear_nodes_action.triggered.connect(self.clear_nodes)
         tools_menu.addAction(clear_nodes_action)
@@ -417,7 +419,7 @@ class AutonomousPlannerGUIManager(QMainWindow):
         self.update_lines()
         if (self.current_working_file != None):
             self.auto_save()
-        print(f"Node created at ({x}, {y})")
+        print(f"Node created at ({node.absX}, {node.absY})")
 
     def update_lines(self):
         self.central_widget.update()
@@ -536,9 +538,6 @@ class AutonomousPlannerGUIManager(QMainWindow):
                     self.auto_save()
                 else:
                     self.load_nodes_from_file(False)
-
-    def create_cpp_file(self):
-        print("Creating C++ file from nodes...") # This is a lie
 
     def clear_nodes(self):
         while self.nodes:
@@ -703,10 +702,10 @@ class AutonomousPlannerGUIManager(QMainWindow):
         plt.show()
 
 class DrawingWidget(QWidget):
-    def __init__(self, parent=None, image_path=resource_path('../assets/top_down_cropped_high_stakes_field.png')):
+    def __init__(self, parent=None, image_path=resource_path('../assets/V5RC-HighStakes-Match-2000x2000.png')):
         super().__init__(parent)
         self.parent = parent
-        self.setGeometry(0, 0, 699, 699)
+        self.setGeometry(0, 0, 700, 700)
         self.image = QPixmap(image_path) if image_path else None
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
 
@@ -847,7 +846,7 @@ class DrawingWidget(QWidget):
                 break
         return t_jerk
 
-    def generate_scurve_profile(self, distance, segments, line_data, v_max=.25, a_max=0.125, j_max=0.08, dt=0.0005):
+    def generate_scurve_profile(self, distance, segments, line_data, v_max=20, a_max=8, j_max=45, dt=0.0005):
         t_jerk = a_max / j_max
         t_acc = (v_max - j_max * t_jerk**2) / a_max
 
