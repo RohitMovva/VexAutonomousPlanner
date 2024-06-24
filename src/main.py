@@ -12,7 +12,6 @@ from math import sqrt
 
 def load_fonts():
     font_dir = os.path.join(os.path.dirname(__file__), 'fonts')
-    print(font_dir)
     for font_file in os.listdir(font_dir):
         QFontDatabase.addApplicationFont(os.path.join(font_dir, font_file))
 
@@ -422,7 +421,8 @@ class AutonomousPlannerGUIManager(QMainWindow):
         print(f"Node created at ({node.absX}, {node.absY})")
 
     def update_lines(self):
-        self.central_widget.update()
+        print("Updating lines...")
+        self.central_widget.repaint()
         self.central_widget.show()
 
     def remove_node(self, node):
@@ -432,9 +432,9 @@ class AutonomousPlannerGUIManager(QMainWindow):
                 self.start_node = None
             if node == self.end_node:
                 self.end_node = None
-            self.update_lines()
-            if (self.current_working_file != None):
-                self.auto_save()
+        self.update_lines()
+        if (self.current_working_file != None):
+            self.auto_save()
 
     def set_start_node(self, node):
         if self.start_node:
@@ -484,10 +484,10 @@ class AutonomousPlannerGUIManager(QMainWindow):
             
             full_path = f"{folder}/{file_name}"
         else:
-            full_path = self.routes_folder_path + self.current_working_file
+            full_path = self.routes_folder_path + "/" + self.current_working_file + ".txt"
         nodes_data = []
         time_intervals, positions, velocities, accelerations, headings, nodes_map = self.central_widget.calculateScurveStuff()
-        for i in range(0, len(time_intervals), 200): # Every 100ms save data
+        for i in range(0, len(time_intervals), 50): # Every 25ms save data
             nodes_data.append([velocities[i], headings[i]])
 
         nodes_actions = [
@@ -499,7 +499,7 @@ class AutonomousPlannerGUIManager(QMainWindow):
                 for node in self.nodes
             ]
         for i in range(0, len(nodes_map)):
-            nodes_data.insert(int(nodes_map[i]/200), nodes_actions[i])
+            nodes_data.insert(int(nodes_map[i]/50), nodes_actions[i])
 
         self.fill_template(nodes_data)
         with open(full_path, 'w') as file:
@@ -511,7 +511,7 @@ class AutonomousPlannerGUIManager(QMainWindow):
         if (dialogue):
             file_name, _ = QFileDialog.getOpenFileName(self, "Load Route from File", "", "Text Files (*.txt);;All Files (*)")
         else:
-            file_name = self.routes_folder_path + self.current_working_file
+            file_name = self.routes_folder_path + "/" + self.current_working_file + ".txt"
         if file_name != None:
             with open(file_name, 'r') as file:
                 nodes_string = file.read()
@@ -521,7 +521,7 @@ class AutonomousPlannerGUIManager(QMainWindow):
     def set_working_file(self):
         file_name, ok = QInputDialog.getText(self, "File to save route to", "Enter file name (without extension):")
         if ok and file_name:
-            self.current_working_file = file_name + ".txt"
+            self.current_working_file = file_name
             folder = self.routes_folder_path
             if (folder == None):
                 folder = QFileDialog.getExistingDirectory(self, "Select Directory to Save File", 
@@ -529,7 +529,7 @@ class AutonomousPlannerGUIManager(QMainWindow):
                 
             if folder:
                 self.routes_folder_path = folder
-                full_path = f"{folder}/{self.current_working_file}"
+                full_path = f"{folder}/{self.current_working_file}.txt"
                 if not os.path.exists(full_path):
                     with open(full_path, 'w+') as file: # Creates file if it isn't already created
                         pass
@@ -606,7 +606,7 @@ class AutonomousPlannerGUIManager(QMainWindow):
                 stringified.append(f"{{{nodes_data[i][0]}, {nodes_data[i][1]}}}")
 
         # pairs = [f"{{{v}, {h}}}" for v, h in nodes_data]
-        insertion = f"std::vector<std::vector<double>> {self.current_working_file} = {{{', '.join(stringified)}}};\n"
+        insertion = f"std::vector<std::vector<float>> {self.current_working_file} = {{{', '.join(stringified)}}};\n"
         
         try:
             # Read the content of routes.h
@@ -616,7 +616,7 @@ class AutonomousPlannerGUIManager(QMainWindow):
             # Find the line with the specified route name
             inserted = False
             for i, line in enumerate(content):
-                if line.strip().startswith(f"std::vector<std::vector<double>> {self.current_working_file} ="):
+                if line.strip().startswith(f"std::vector<std::vector<float>> {self.current_working_file} ="):
                     content[i] = insertion
                     inserted = True
                     break
@@ -728,7 +728,7 @@ class DrawingWidget(QWidget):
             segment_data[0].append(line)
             segment_data[1].append(segments)
             segment_length += segments[-1]
-            if ((not self.parent.nodes[i+1].hasAction) and i < len(self.line_data)-1):
+            if (i < len(self.line_data)-1 and (not self.parent.nodes[i+1].hasAction)):
                 continue
             time_intervals, positions, velocities, accelerations, headings, nodes_map = self.generate_scurve_profile(segment_length, segment_data[1], segment_data[0])
             self.all_time_intervals.extend(time_intervals + (self.all_time_intervals[-1] if self.all_time_intervals else 0))
@@ -751,9 +751,9 @@ class DrawingWidget(QWidget):
         painter.drawPixmap(self.rect(), self.image)
 
         if gui_instance.start_node and gui_instance.end_node and len(gui_instance.nodes) > 1:
-            points = []
+            points = [QPointF(gui_instance.start_node.x+10, gui_instance.start_node.y+10)]
             for node in gui_instance.nodes:
-                if node.isEndNode:
+                if node.isEndNode or node.isStartNode:
                     continue
                 points.append(QPointF(node.x+10, node.y+10))
             points.append(QPointF(gui_instance.end_node.x+10, gui_instance.end_node.y+10))
@@ -892,6 +892,7 @@ class DrawingWidget(QWidget):
 
         curr_segment = 0
         nodes_map.append(0)
+        prev_dist = 0
         for i in range(len(time_intervals)):
             t = time_intervals[i]
             if t < t_jerk:
@@ -950,10 +951,11 @@ class DrawingWidget(QWidget):
             accelerations.append(a)
 
             # MAKE DEPENDENT ON DISTANCE
-            if (s > segments[curr_segment][-1] and len(segments)-curr_segment > 1):
+            if (s-prev_dist > segments[curr_segment][-1] and curr_segment < len(segments)-1):
                 nodes_map.append(i)
                 curr_segment += 1
-            headings.append(getHeading(s, segments[curr_segment], 
+                prev_dist = s
+            headings.append(getHeading(s-prev_dist, segments[curr_segment], 
                                        line_data[curr_segment][0], line_data[curr_segment][1], line_data[curr_segment][2], line_data[curr_segment][3]))
 
         # nodes_map.append(len(line_data))
