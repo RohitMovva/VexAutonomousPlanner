@@ -101,6 +101,22 @@ def getHeading(distance, segments, start, end, cp1, cp2=None):
         return quad_bezier_angle(t, start, cp1, end)
     return cubic_bezier_angle(t, start, cp1, cp2, end)
 
+def getConfigValue(keyname):
+    with open(resource_path('../config.yaml'), 'r') as file:
+        config = yaml.safe_load(file)
+    if (config == None):
+        config = {}
+    return config.get(keyname) # Prevents error if key doesn't exist in dict
+
+def setConfigValue(keyname, value):
+    with open(resource_path('../config.yaml'), 'r') as file:
+        config = yaml.safe_load(file)
+    if (config == None):
+        config = {}
+    config[keyname] = value
+    with open(resource_path('../config.yaml'), 'w') as file:
+                yaml.safe_dump(config, file)
+
 # Click listener object
 class ClickableLabel(QLabel):
     def __init__(self, parent=None, gui_instance=None):
@@ -326,13 +342,46 @@ class AutonomousPlannerGUIManager(QMainWindow):
         self.setWindowTitle('Path Planner') # Totally not inspired by Pronounce that
         self.layout = QVBoxLayout()
 
+        self.nodes = []
+        self.start_node = None
+        self.end_node = None
+
+        self.current_working_file = None
+        self.routes_header_path = None
+        self.routes_folder_path = None
+
+
+        autonomous_path = getConfigValue('autonomous_repository_path')
+        if autonomous_path == None:
+            autonomous_path = QFileDialog.getExistingDirectory(self, "Select Autonomous Program Directory", 
+                                                      str(Path(os.getcwd()).parent.parent.absolute()))
+            
+            setConfigValue('autonomous_repository_path', autonomous_path + "/routes.h")
+            print(f"Added autonomous repository path: {autonomous_path}/routes.h")
+
+
+        routes_path = getConfigValue('routes_folder_path')
+        if autonomous_path == None:
+            routes_path = QFileDialog.getExistingDirectory(self, "Select Routes Folder", 
+                                                      str(Path(os.getcwd()).parent.parent.absolute()))
+            
+            setConfigValue('routes_folder_path', routes_path)
+            print(f"Added routes folder path: {routes_path}")
+        
+        self.routes_header_path = autonomous_path
+        self.routes_folder_path = routes_path
+
+        self.max_velocity = getConfigValue('max_velocity')
+        self.max_acceleration = getConfigValue('max_acceleration')
+        self.max_jerk = getConfigValue('max_jerk')
+
         # Image and path widget
         self.central_widget = DrawingWidget(self)
         self.setCentralWidget(self.central_widget)
         self.central_widget.setFixedSize(700, 700)
 
         # Settings Dock Widget
-        self.settings_dock_widget = SettingsDockWidget(self)
+        self.settings_dock_widget = SettingsDockWidget(self.max_velocity, self.max_acceleration, self.max_jerk, self)
 
         # Click listener
         self.label = ClickableLabel(parent=self.central_widget, gui_instance=self)
@@ -344,39 +393,6 @@ class AutonomousPlannerGUIManager(QMainWindow):
         self.layout.addWidget(self.label)
 
         self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self.settings_dock_widget)
-
-        self.nodes = []
-        self.start_node = None
-        self.end_node = None
-
-        self.current_working_file = None
-        self.routes_header_path = None
-        self.routes_folder_path = None
-
-
-        with open(resource_path('../config.yaml'), 'r') as file:
-            config = yaml.safe_load(file)
-        if (config == None):
-            config = {}
-        # Check if the repository_path exists in the config
-        if 'autonomous_repository_path' not in config:
-            autonomous_path = QFileDialog.getExistingDirectory(self, "Select Autonomous Program Directory", 
-                                                      str(Path(os.getcwd()).parent.parent.absolute()))
-            
-            config['autonomous_repository_path'] = autonomous_path + "/routes.h"
-            print(f"Added autonomous repository path: {autonomous_path}/routes.h")
-
-        if 'routes_folder_path' not in config:
-            routes_path = QFileDialog.getExistingDirectory(self, "Select Routes Folder", 
-                                                      str(Path(os.getcwd()).parent.parent.absolute()))
-            
-            config['routes_folder_path'] = routes_path
-            print(f"Added routes folder path: {routes_path}")
-        
-        self.routes_header_path = config['autonomous_repository_path']
-        self.routes_folder_path = config['routes_folder_path']
-        with open(resource_path('../config.yaml'), 'w') as file:
-                yaml.safe_dump(config, file)
 
         self.update()
         self.create_menu_bar()
@@ -433,6 +449,13 @@ class AutonomousPlannerGUIManager(QMainWindow):
     
     def update_coordinate_display(self, x, y):
         self.settings_dock_widget.set_current_coordinates(x, y)
+    
+    def set_max_velocity(self, new_velocity):
+        self.max_velocity = new_velocity
+    def set_max_acceleration(self, new_acceleration):
+        self.max_acceleration = new_acceleration
+    def set_max_jerk(self, new_jerk):
+        self.max_jerk = new_jerk
 
     def add_node(self, x, y, pos=-1):
         node = Node(x, y, self.central_widget, gui_instance=self)
@@ -512,7 +535,8 @@ class AutonomousPlannerGUIManager(QMainWindow):
         else:
             full_path = self.routes_folder_path + "/" + self.current_working_file + ".txt"
         nodes_data = []
-        time_intervals, positions, velocities, accelerations, headings, nodes_map = self.central_widget.calculateScurveStuff()
+        time_intervals, positions, velocities, accelerations, headings, nodes_map = self.central_widget.calculateScurveStuff(self.max_velocity, self.max_acceleration,
+                                                                                                                              self.max_jerk)
         for i in range(0, len(time_intervals), 50): # Every 25ms save data
             nodes_data.append([velocities[i], headings[i]])
 
@@ -669,8 +693,27 @@ class AutonomousPlannerGUIManager(QMainWindow):
         with open(self.routes_header_path, "w") as routes_file:
             routes_file.writelines(content)
 
+    def changeField(self, fieldType):
+        if (fieldType == "High Stakes Match"):
+            self.central_widget.update_image_path(resource_path('../assets/V5RC-HighStakes-Match-2000x2000.png'))
+        else:
+            self.central_widget.update_image_path(resource_path('../assets/V5RC-HighStakes-Skills-2000x2000.png'))
+
+    def setVelocity(self, newVelocity):
+        self.max_velocity = newVelocity
+        setConfigValue("max_velocity", self.max_velocity)
+        
+    def setAcceleration(self, newAcceleration):
+        self.max_acceleration = newAcceleration
+        setConfigValue("max_acceleration", self.max_acceleration)
+
+    def setJerk(self, newJerk):
+        self.max_jerk = newJerk
+        setConfigValue("max_jerk", self.max_jerk)
+
+
     def position_graph(self):
-        self.central_widget.calculateScurveStuff()
+        self.central_widget.calculateScurveStuff(self.max_velocity, self.max_acceleration, self.max_jerk)
         plt.figure(figsize=(12, 8))
 
         # Position profile
@@ -684,7 +727,7 @@ class AutonomousPlannerGUIManager(QMainWindow):
         plt.show()
 
     def velocity_graph(self):
-        self.central_widget.calculateScurveStuff()
+        self.central_widget.calculateScurveStuff(self.max_velocity, self.max_acceleration, self.max_jerk)
         plt.figure(figsize=(12, 8))
 
         # Velocity profile
@@ -699,7 +742,7 @@ class AutonomousPlannerGUIManager(QMainWindow):
         plt.show()
 
     def acceleration_graph(self):
-        self.central_widget.calculateScurveStuff()
+        self.central_widget.calculateScurveStuff(self.max_velocity, self.max_acceleration, self.max_jerk)
         plt.figure(figsize=(12, 8))
 
         # Acceleration profile
@@ -713,7 +756,7 @@ class AutonomousPlannerGUIManager(QMainWindow):
         plt.show()
 
     def heading_graph(self):
-        self.central_widget.calculateScurveStuff()
+        self.central_widget.calculateScurveStuff(self.max_velocity, self.max_acceleration, self.max_jerk)
         plt.figure(figsize=(12, 8))
 
         # Heading profile
@@ -728,9 +771,10 @@ class AutonomousPlannerGUIManager(QMainWindow):
         plt.show()
 
 class SettingsDockWidget(QDockWidget):
-    def __init__(self, parent=None):
+    def __init__(self, max_velocity, max_acceleration, max_jerk, parent=None):
         super().__init__("Settings", parent)
 
+        self.parent = parent
         # Create the settings widget
         settings_widget = QWidget()
         settings_layout = QFormLayout()
@@ -740,32 +784,33 @@ class SettingsDockWidget(QDockWidget):
         self.field_type_combo.addItems(["High Stakes Match", "High Stakes Skills"])
         self.field_type_combo.setCurrentIndex(0)
         settings_layout.addRow("Field Type:", self.field_type_combo)
+        self.field_type_combo.currentIndexChanged.connect(self.on_field_type_changed)
 
-        # Add max velocity, acceleration, and jerk inputs
+        # Add max jerk, acceleration, and velocity inputs
+
         self.velocity_input = QSpinBox()
         self.velocity_input.setRange(0, 100)  # Adjust range as needed
-        self.velocity_input.setValue(20)
+        self.velocity_input.setValue(max_velocity)
         settings_layout.addRow("Max Velocity (ft/s):", self.velocity_input)
+        self.velocity_input.valueChanged.connect(self.on_velocity_changed)
 
         self.acceleration_input = QSpinBox()
         self.acceleration_input.setRange(0, 100)  # Adjust range as needed
-        self.acceleration_input.setValue(8)
-        settings_layout.addRow("Max Acceleration (ft/s²):", self.acceleration_input)
+        self.acceleration_input.setValue(max_acceleration)
+        settings_layout.addRow("Max Acceleration (ft/s^2):", self.acceleration_input)
+        self.acceleration_input.valueChanged.connect(self.on_acceleration_changed)
 
         self.jerk_input = QSpinBox()
         self.jerk_input.setRange(0, 100)  # Adjust range as needed
-        self.jerk_input.setValue(45)
-        settings_layout.addRow("Max Jerk (ft/s³):", self.jerk_input)
-
-        
+        self.jerk_input.setValue(max_jerk)
+        settings_layout.addRow("Max Jerk (ft/s^3):", self.jerk_input)
+        self.jerk_input.valueChanged.connect(self.on_jerk_changed)
 
         # Add labels to display current x and y coordinates
         self.current_x_label = QLabel("0")
-        # self.current_x_label.setStyleSheet("background-color: lightgray;")
         settings_layout.addRow("Current X:", self.current_x_label)
 
         self.current_y_label = QLabel("0")
-        # self.current_y_label.setStyleSheet("background-color: lightgray;")
         settings_layout.addRow("Current Y:", self.current_y_label)
 
         # Set the layout for the settings widget
@@ -776,6 +821,27 @@ class SettingsDockWidget(QDockWidget):
         self.current_x_label.setText(str(x))
         self.current_y_label.setText(str(y))
 
+    def on_field_type_changed(self):
+        field_type = self.field_type_combo.currentText()
+        print(f"Field Type changed: {field_type}")
+        self.parent.changeField(field_type)
+
+    def on_velocity_changed(self):
+        max_velocity = self.velocity_input.value()
+        print(f"Max Velocity changed: {max_velocity} ft/s")
+        self.parent.setVelocity(max_velocity)
+
+    def on_acceleration_changed(self):
+        max_acceleration = self.acceleration_input.value()
+        print(f"Max Acceleration changed: {max_acceleration} ft/s^2")
+        self.parent.setAcceleration(max_acceleration)
+
+    def on_jerk_changed(self):
+        max_jerk = self.jerk_input.value()
+        print(f"Max Jerk changed: {max_jerk} ft/s^3")
+        self.parent.setJerk(max_jerk)
+
+
 class DrawingWidget(QWidget):
     def __init__(self, parent=None, image_path=resource_path('../assets/V5RC-HighStakes-Match-2000x2000.png')):
         super().__init__(parent)
@@ -784,7 +850,11 @@ class DrawingWidget(QWidget):
         self.image = QPixmap(image_path) if image_path else None
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
 
-    def calculateScurveStuff(self):
+    def update_image_path(self, new_path):
+        self.image = QPixmap(new_path)
+        self.update()
+
+    def calculateScurveStuff(self, v_max=20, a_max=8, j_max=45):
         self.all_time_intervals = []
         self.all_positions = []
         self.all_velocities = []
@@ -805,7 +875,8 @@ class DrawingWidget(QWidget):
             segment_length += segments[-1]
             if (i < len(self.line_data)-1 and (not self.parent.nodes[i+1].hasAction)):
                 continue
-            time_intervals, positions, velocities, accelerations, headings, nodes_map = self.generate_scurve_profile(segment_length, segment_data[1], segment_data[0])
+            time_intervals, positions, velocities, accelerations, headings, nodes_map = self.generate_scurve_profile(segment_length, segment_data[1], segment_data[0],
+                                                                                                                     v_max, a_max, j_max)
             self.all_time_intervals.extend(time_intervals + (self.all_time_intervals[-1] if self.all_time_intervals else 0))
             self.all_positions.extend([p + current_position for p in positions])
             self.all_velocities.extend(velocities)
@@ -921,7 +992,7 @@ class DrawingWidget(QWidget):
                 break
         return t_jerk
 
-    def generate_scurve_profile(self, distance, segments, line_data, v_max=20, a_max=8, j_max=45, dt=0.0005):
+    def generate_scurve_profile(self, distance, segments, line_data, v_max, a_max, j_max, dt=0.0005):
         t_jerk = a_max / j_max
         t_acc = (v_max - j_max * t_jerk**2) / a_max
 
