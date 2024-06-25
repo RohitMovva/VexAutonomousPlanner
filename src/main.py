@@ -137,8 +137,8 @@ class ClickableLabel(QLabel):
         x = int(event.position().x()) + 7
         y = int(event.position().y()) + 7
         scale = 700/2000
-        x = round(((x * (scale*2000-scale*34*2)/(scale*2000)) / (scale*2000-scale*34*2) - 0.5) * 12**2, 2)
-        y = round(((y * (scale*2000-scale*34*2)/(scale*2000)) / (scale*2000-scale*34*2) - 0.5) * 12**2, 2)
+        # x = round(((x * (scale*2000-scale*34*2)/(scale*2000)) / (scale*2000-scale*34*2) - 0.5) * 12**2, 2)
+        # y = round(((y * (scale*2000-scale*34*2)/(scale*2000)) / (scale*2000-scale*34*2) - 0.5) * 12**2, 2)
 
         self.gui_instance.update_coordinate_display(x, y)
         super().mouseMoveEvent(event)
@@ -197,8 +197,8 @@ class Node(QWidget):
     def mouseMoveEvent(self, event: QMouseEvent):
         if self.dragging:
             new_pos = self.mapToParent(event.position().toPoint() - self.offset)
-            self.x = new_pos.x()-5
-            self.y = new_pos.y()-5
+            self.x = new_pos.x()+5
+            self.y = new_pos.y()+5
             self.absX = ((self.x * (self.scale*2000-self.scale*34*2)/(self.scale*2000)) / (self.scale*2000-self.scale*34*2) - 0.5) * 12**2
             self.absY = ((self.y * (self.scale*2000-self.scale*34*2)/(self.scale*2000)) / (self.scale*2000-self.scale*34*2) - 0.5) * 12**2
             self.move(new_pos)
@@ -470,7 +470,6 @@ class AutonomousPlannerGUIManager(QMainWindow):
         print(f"Node created at ({node.absX}, {node.absY})")
 
     def update_lines(self):
-        print("Updating lines...")
         self.central_widget.repaint()
         self.central_widget.show()
 
@@ -797,13 +796,13 @@ class SettingsDockWidget(QDockWidget):
         self.acceleration_input = QSpinBox()
         self.acceleration_input.setRange(0, 100)  # Adjust range as needed
         self.acceleration_input.setValue(max_acceleration)
-        settings_layout.addRow("Max Acceleration (ft/s^2):", self.acceleration_input)
+        settings_layout.addRow("Max Acceleration (ft/s²):", self.acceleration_input)
         self.acceleration_input.valueChanged.connect(self.on_acceleration_changed)
 
         self.jerk_input = QSpinBox()
         self.jerk_input.setRange(0, 100)  # Adjust range as needed
         self.jerk_input.setValue(max_jerk)
-        settings_layout.addRow("Max Jerk (ft/s^3):", self.jerk_input)
+        settings_layout.addRow("Max Jerk (ft/s³):", self.jerk_input)
         self.jerk_input.valueChanged.connect(self.on_jerk_changed)
 
         # Add labels to display current x and y coordinates
@@ -897,12 +896,12 @@ class DrawingWidget(QWidget):
         painter.drawPixmap(self.rect(), self.image)
 
         if gui_instance.start_node and gui_instance.end_node and len(gui_instance.nodes) > 1:
-            points = [QPointF(gui_instance.start_node.x+10, gui_instance.start_node.y+10)]
+            points = [QPointF(gui_instance.start_node.x, gui_instance.start_node.y)]
             for node in gui_instance.nodes:
                 if node.isEndNode or node.isStartNode:
                     continue
-                points.append(QPointF(node.x+10, node.y+10))
-            points.append(QPointF(gui_instance.end_node.x+10, gui_instance.end_node.y+10))
+                points.append(QPointF(node.x, node.y))
+            points.append(QPointF(gui_instance.end_node.x, gui_instance.end_node.y))
             self.buildPath(points)
             painter.setRenderHint(QPainter.RenderHint.Antialiasing)
             pen = QPen(QColor("black"), 2)
