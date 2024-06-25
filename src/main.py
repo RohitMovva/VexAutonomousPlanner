@@ -3,7 +3,7 @@ import os
 import json
 import yaml
 from pathlib import Path
-from PyQt6.QtWidgets import QApplication, QDialog, QLabel, QWidget, QVBoxLayout, QMenu, QInputDialog, QMainWindow, QTextEdit, QPushButton, QFileDialog
+from PyQt6.QtWidgets import QApplication, QDialog, QLabel, QWidget, QVBoxLayout, QMenu, QInputDialog, QMainWindow, QTextEdit, QPushButton, QFileDialog, QDockWidget, QFormLayout, QSlider, QSpinBox, QLineEdit, QComboBox
 from PyQt6.QtGui import QPixmap, QMouseEvent, QPainter, QColor, QAction, QPen, QPainterPath, QFontDatabase
 from PyQt6.QtCore import Qt, QPoint, QLineF, QPointF, Qt
 import numpy as np
@@ -107,13 +107,25 @@ class ClickableLabel(QLabel):
         super().__init__(parent)
         self.gui_instance = gui_instance
 
+        self.setMouseTracking(True)
+
     def mousePressEvent(self, event: QMouseEvent):
         if event.button() == Qt.MouseButton.LeftButton:
-            x = int(event.position().x())
-            y = int(event.position().y())
+            x = int(event.position().x()) + 7 # I have no clue on God's green earth on why this is needed but it is
+            y = int(event.position().y()) + 7
             print(f"Mouse clicked at ({x}, {y})")
             self.gui_instance.add_node(x, y)
         super().mousePressEvent(event)
+    
+    def mouseMoveEvent(self, event: QMouseEvent):
+        x = int(event.position().x()) + 7
+        y = int(event.position().y()) + 7
+        scale = 700/2000
+        x = round(((x * (scale*2000-scale*34*2)/(scale*2000)) / (scale*2000-scale*34*2) - 0.5) * 12**2, 2)
+        y = round(((y * (scale*2000-scale*34*2)/(scale*2000)) / (scale*2000-scale*34*2) - 0.5) * 12**2, 2)
+
+        self.gui_instance.update_coordinate_display(x, y)
+        super().mouseMoveEvent(event)
 
 # Node that stores data for auton route
 class Node(QWidget):
@@ -121,10 +133,14 @@ class Node(QWidget):
         super().__init__(parent)
         self.x = x
         self.y = y
-        # Scale pix value to number between 0 and 1, subtract 0.5 to center and multiply by number of inches on field
+        print(x, y)
+        # Scale pixel value down to account for the extra padding that isn't part of the field on either side, scale to between 0-1, subtract 0.5 to center and turn into inches
         self.scale = 700/2000
-        self.absX = ((x-10)/(self.scale*2000-self.scale*34*2)-0.5) * 12**2
-        self.absY = ((y-10)/(self.scale*2000-self.scale*34*2)-0.5) * 12**2
+        self.absX = ((self.x * (self.scale*2000-self.scale*34*2)/(self.scale*2000)) / (self.scale*2000-self.scale*34*2) - 0.5) * 12**2
+        self.absY = ((self.y * (self.scale*2000-self.scale*34*2)/(self.scale*2000)) / (self.scale*2000-self.scale*34*2) - 0.5) * 12**2
+        print("INFO: ", self.x, " ", (self.x * (self.scale*2000-self.scale*34*2)/(self.scale*2000)), 
+            (self.x * (self.scale*2000-self.scale*34*2)/(self.scale*2000)) / (self.scale*2000-self.scale*34*2), self.absX)
+
         self.gui_instance = gui_instance
         self.isStartNode = False
         self.isEndNode = False
@@ -133,7 +149,7 @@ class Node(QWidget):
         self.hasAction = (self.spinIntake or self.clampGoal)
         self.turn = 0
         self.setFixedSize(10, 10)
-        self.move(x+5, y+5)
+        self.move(x-5, y-5)
         self.dragging = False
         self.offset = QPoint(0, 0)
 
@@ -151,7 +167,6 @@ class Node(QWidget):
             painter.setBrush(QColor("#1F456E"))
 
 
-        painter.drawEllipse(0,0,100,140)
         painter.drawEllipse(0, 0, self.width(), self.height())
 
     def mousePressEvent(self, event: QMouseEvent):
@@ -168,8 +183,8 @@ class Node(QWidget):
             new_pos = self.mapToParent(event.position().toPoint() - self.offset)
             self.x = new_pos.x()-5
             self.y = new_pos.y()-5
-            self.absX = ((self.x-10)/(self.scale*2000-self.scale*34*2)-0.5) * 12**2
-            self.absY = ((self.y-10)/(self.scale*2000-self.scale*34*2)-0.5) * 12**2
+            self.absX = ((self.x * (self.scale*2000-self.scale*34*2)/(self.scale*2000)) / (self.scale*2000-self.scale*34*2) - 0.5) * 12**2
+            self.absY = ((self.y * (self.scale*2000-self.scale*34*2)/(self.scale*2000)) / (self.scale*2000-self.scale*34*2) - 0.5) * 12**2
             self.move(new_pos)
             self.gui_instance.update_lines()
         super().mouseMoveEvent(event)
@@ -309,10 +324,26 @@ class AutonomousPlannerGUIManager(QMainWindow):
         super().__init__()
 
         self.setWindowTitle('Path Planner') # Totally not inspired by Pronounce that
+        self.layout = QVBoxLayout()
 
+        # Image and path widget
         self.central_widget = DrawingWidget(self)
         self.setCentralWidget(self.central_widget)
         self.central_widget.setFixedSize(700, 700)
+
+        # Settings Dock Widget
+        self.settings_dock_widget = SettingsDockWidget(self)
+
+        # Click listener
+        self.label = ClickableLabel(parent=self.central_widget, gui_instance=self)
+
+        # Add widgets to layout
+        self.central_widget.setLayout(self.layout)
+        self.setCentralWidget(self.central_widget)
+
+        self.layout.addWidget(self.label)
+
+        self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self.settings_dock_widget)
 
         self.nodes = []
         self.start_node = None
@@ -321,6 +352,8 @@ class AutonomousPlannerGUIManager(QMainWindow):
         self.current_working_file = None
         self.routes_header_path = None
         self.routes_folder_path = None
+
+
         with open(resource_path('../config.yaml'), 'r') as file:
             config = yaml.safe_load(file)
         if (config == None):
@@ -345,17 +378,7 @@ class AutonomousPlannerGUIManager(QMainWindow):
         with open(resource_path('../config.yaml'), 'w') as file:
                 yaml.safe_dump(config, file)
 
-        self.layout = QVBoxLayout()
-
-        self.label = ClickableLabel(parent=self.central_widget, gui_instance=self)
-
-        pixmap = QPixmap(resource_path('../assets/V5RC-HighStakes-Match-2000x2000.png'))
-        # self.label.setPixmap(pixmap)
-
         self.update()
-        self.layout.addWidget(self.label)
-        self.central_widget.setLayout(self.layout)
-
         self.create_menu_bar()
 
 
@@ -407,6 +430,9 @@ class AutonomousPlannerGUIManager(QMainWindow):
 
     def index_of(self, node):
         return (self.nodes.index(node))
+    
+    def update_coordinate_display(self, x, y):
+        self.settings_dock_widget.set_current_coordinates(x, y)
 
     def add_node(self, x, y, pos=-1):
         node = Node(x, y, self.central_widget, gui_instance=self)
@@ -700,6 +726,55 @@ class AutonomousPlannerGUIManager(QMainWindow):
 
         plt.tight_layout()
         plt.show()
+
+class SettingsDockWidget(QDockWidget):
+    def __init__(self, parent=None):
+        super().__init__("Settings", parent)
+
+        # Create the settings widget
+        settings_widget = QWidget()
+        settings_layout = QFormLayout()
+
+        # Add Field Type drop-down menu
+        self.field_type_combo = QComboBox()
+        self.field_type_combo.addItems(["High Stakes Match", "High Stakes Skills"])
+        self.field_type_combo.setCurrentIndex(0)
+        settings_layout.addRow("Field Type:", self.field_type_combo)
+
+        # Add max velocity, acceleration, and jerk inputs
+        self.velocity_input = QSpinBox()
+        self.velocity_input.setRange(0, 100)  # Adjust range as needed
+        self.velocity_input.setValue(20)
+        settings_layout.addRow("Max Velocity (ft/s):", self.velocity_input)
+
+        self.acceleration_input = QSpinBox()
+        self.acceleration_input.setRange(0, 100)  # Adjust range as needed
+        self.acceleration_input.setValue(8)
+        settings_layout.addRow("Max Acceleration (ft/s²):", self.acceleration_input)
+
+        self.jerk_input = QSpinBox()
+        self.jerk_input.setRange(0, 100)  # Adjust range as needed
+        self.jerk_input.setValue(45)
+        settings_layout.addRow("Max Jerk (ft/s³):", self.jerk_input)
+
+        
+
+        # Add labels to display current x and y coordinates
+        self.current_x_label = QLabel("0")
+        # self.current_x_label.setStyleSheet("background-color: lightgray;")
+        settings_layout.addRow("Current X:", self.current_x_label)
+
+        self.current_y_label = QLabel("0")
+        # self.current_y_label.setStyleSheet("background-color: lightgray;")
+        settings_layout.addRow("Current Y:", self.current_y_label)
+
+        # Set the layout for the settings widget
+        settings_widget.setLayout(settings_layout)
+        self.setWidget(settings_widget)
+
+    def set_current_coordinates(self, x, y):
+        self.current_x_label.setText(str(x))
+        self.current_y_label.setText(str(y))
 
 class DrawingWidget(QWidget):
     def __init__(self, parent=None, image_path=resource_path('../assets/V5RC-HighStakes-Match-2000x2000.png')):
