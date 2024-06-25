@@ -137,8 +137,8 @@ class ClickableLabel(QLabel):
         x = int(event.position().x()) + 7
         y = int(event.position().y()) + 7
         scale = 700/2000
-        # x = round(((x * (scale*2000-scale*34*2)/(scale*2000)) / (scale*2000-scale*34*2) - 0.5) * 12**2, 2)
-        # y = round(((y * (scale*2000-scale*34*2)/(scale*2000)) / (scale*2000-scale*34*2) - 0.5) * 12**2, 2)
+        x = round(((x * (scale*2000-scale*34*2)/(scale*2000)) / (scale*2000-scale*34*2) - 0.5) * 12**2, 2)
+        y = round(((y * (scale*2000-scale*34*2)/(scale*2000)) / (scale*2000-scale*34*2) - 0.5) * 12**2, 2)
 
         self.gui_instance.update_coordinate_display(x, y)
         super().mouseMoveEvent(event)
