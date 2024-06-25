@@ -182,7 +182,6 @@ class Node(QWidget):
         else:
             painter.setBrush(QColor("#1F456E"))
 
-
         painter.drawEllipse(0, 0, self.width(), self.height())
 
     def mousePressEvent(self, event: QMouseEvent):
