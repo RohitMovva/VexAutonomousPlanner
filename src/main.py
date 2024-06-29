@@ -3,7 +3,7 @@ import os
 import json
 import yaml
 from pathlib import Path
-from PyQt6.QtWidgets import QApplication, QDialog, QLabel, QWidget, QVBoxLayout, QMenu, QInputDialog, QMainWindow, QTextEdit, QPushButton, QFileDialog
+from PyQt6.QtWidgets import QApplication, QDialog, QLabel, QWidget, QVBoxLayout, QMenu, QInputDialog, QMainWindow, QTextEdit, QPushButton, QFileDialog, QDockWidget, QFormLayout, QSlider, QSpinBox, QLineEdit, QComboBox
 from PyQt6.QtGui import QPixmap, QMouseEvent, QPainter, QColor, QAction, QPen, QPainterPath, QFontDatabase
 from PyQt6.QtCore import Qt, QPoint, QLineF, QPointF, Qt
 import numpy as np
@@ -32,17 +32,52 @@ def create_files():
         if not os.path.exists(file):
             os.makedirs(file)
             print(f"Created file: {file}")
+# BEZIER CURVE THINGS
+
+def bezier_curve(t, points):
+    n = len(points) - 1
+    result = np.zeros(2)
+    for i, point in enumerate(points):
+        binomial_coeff = np.math.comb(n, i)
+        result += binomial_coeff * ((1 - t) ** (n - i)) * (t ** i) * np.array([point.x(), point.y()])
+    return result
+
+def bezier_derivative(t, points):
+    n = len(points) - 1
+    result = np.zeros(2)
+    for i in range(n):
+        binomial_coeff = np.math.comb(n - 1, i)
+        result += binomial_coeff * ((1 - t) ** (n - 1 - i)) * (t ** i) * (np.array([points[i + 1].x(), points[i + 1].y()]) - np.array([points[i].x(), points[i].y()])) * n
+    return result
+
+def bezier_second_derivative(t, points):
+    n = len(points) - 1
+    result = np.zeros(2)
+    for i in range(n - 1):
+        binomial_coeff = np.math.comb(n - 2, i)
+        result += binomial_coeff * ((1 - t) ** (n - 2 - i)) * (t ** i) * (np.array([points[i + 2].x(), points[i + 2].y()]) - 2 * np.array([points[i + 1].x(), points[i + 1].y()]) + np.array([points[i].x(), points[i].y()])) * n * (n - 1)
+    return result
+
+def compute_curvature(points, t):
+    B_prime = bezier_derivative(t, points)
+    B_double_prime = bezier_second_derivative(t, points)
+    curvature = np.abs(np.cross(B_prime, B_double_prime)) / (np.dot(B_prime, B_prime)**1.5)
+    return curvature
+
+def max_speed_based_on_curvature(curvature, V_base, K):
+    return V_base / (1 + K * curvature)
+
 
 # QUADRATIC
-def quad_bezier_angle(t, P0, P1, P2):
-    tangentX = (2*(1-t)*(P1.x()-P0.x())) + (2*t*(P2.x()-P1.x()))
-    tangentY = (2*(1-t)*(P1.y()-P0.y())) + (2*t*(P2.y()-P1.y()))
-    return -1*np.arctan2(tangentY, tangentX)*(180/np.pi)
-
 def quadratic_bezier_point(P0, P1, P2, t):
     x = (1 - t)**2 * P0.x() + 2 * (1 - t) * t * P1.x() + t**2 * P2.x()
     y = (1 - t)**2 * P0.y() + 2 * (1 - t) * t * P1.y() + t**2 * P2.y()
     return x, y
+
+def quad_bezier_angle(t, P0, P1, P2):
+    tangentX = (2*(1-t)*(P1.x()-P0.x())) + (2*t*(P2.x()-P1.x()))
+    tangentY = (2*(1-t)*(P1.y()-P0.y())) + (2*t*(P2.y()-P1.y()))
+    return -1*np.arctan2(tangentY, tangentX)*(180/np.pi)
 
 # CUBIC
 def cubic_bezier_point(P0, P1, P2, P3, t):
@@ -75,7 +110,7 @@ def createCurveSegments(start, end, control1, control2=None):
             cx, cy = quadratic_bezier_point(start, control1, end, t)
         dx, dy = ox-cx, oy-cy
         currlen += sqrt(dx**2 + dy**2)
-        segments.append(currlen*(12/699))
+        segments.append(currlen*(12/700))
 
         ox, oy = cx, cy
     return segments
@@ -101,19 +136,47 @@ def getHeading(distance, segments, start, end, cp1, cp2=None):
         return quad_bezier_angle(t, start, cp1, end)
     return cubic_bezier_angle(t, start, cp1, cp2, end)
 
+def getConfigValue(keyname):
+    with open(resource_path('../config.yaml'), 'r') as file:
+        config = yaml.safe_load(file)
+    if (config == None):
+        config = {}
+    return config.get(keyname) # Prevents error if key doesn't exist in dict
+
+def setConfigValue(keyname, value):
+    with open(resource_path('../config.yaml'), 'r') as file:
+        config = yaml.safe_load(file)
+    if (config == None):
+        config = {}
+    config[keyname] = value
+    with open(resource_path('../config.yaml'), 'w') as file:
+                yaml.safe_dump(config, file)
+
 # Click listener object
 class ClickableLabel(QLabel):
     def __init__(self, parent=None, gui_instance=None):
         super().__init__(parent)
         self.gui_instance = gui_instance
 
+        self.setMouseTracking(True)
+
     def mousePressEvent(self, event: QMouseEvent):
         if event.button() == Qt.MouseButton.LeftButton:
-            x = int(event.position().x())
-            y = int(event.position().y())
+            x = int(event.position().x()) + 7 # I have no clue on God's green earth on why this is needed but it is
+            y = int(event.position().y()) + 7
             print(f"Mouse clicked at ({x}, {y})")
             self.gui_instance.add_node(x, y)
         super().mousePressEvent(event)
+    
+    def mouseMoveEvent(self, event: QMouseEvent):
+        x = int(event.position().x()) + 7
+        y = int(event.position().y()) + 7
+        scale = 700/2000
+        x = round(((x * (scale*2000-scale*34*2)/(scale*2000)) / (scale*2000-scale*34*2) - 0.5) * 12**2, 2)
+        y = round(((y * (scale*2000-scale*34*2)/(scale*2000)) / (scale*2000-scale*34*2) - 0.5) * 12**2, 2)
+
+        self.gui_instance.update_coordinate_display(x, y)
+        super().mouseMoveEvent(event)
 
 # Node that stores data for auton route
 class Node(QWidget):
@@ -121,6 +184,12 @@ class Node(QWidget):
         super().__init__(parent)
         self.x = x
         self.y = y
+        print(x, y)
+        # Scale pixel value down to account for the extra padding that isn't part of the field on either side, scale to between 0-1, subtract 0.5 to center and turn into inches
+        self.scale = 700/2000
+        self.absX = ((self.x * (self.scale*2000-self.scale*34*2)/(self.scale*2000)) / (self.scale*2000-self.scale*34*2) - 0.5) * 12**2
+        self.absY = ((self.y * (self.scale*2000-self.scale*34*2)/(self.scale*2000)) / (self.scale*2000-self.scale*34*2) - 0.5) * 12**2
+
         self.gui_instance = gui_instance
         self.isStartNode = False
         self.isEndNode = False
@@ -130,7 +199,7 @@ class Node(QWidget):
         self.wait_time = 0
         self.hasAction = (self.spinIntake or self.clampGoal or self.turn != 0 or self.wait_time != 0)
         self.setFixedSize(10, 10)
-        self.move(x+5, y+5)
+        self.move(x-5, y-5)
         self.dragging = False
         self.offset = QPoint(0, 0)
 
@@ -147,8 +216,6 @@ class Node(QWidget):
         else:
             painter.setBrush(QColor("#1F456E"))
 
-
-        painter.drawEllipse(0,0,100,140)
         painter.drawEllipse(0, 0, self.width(), self.height())
 
     def mousePressEvent(self, event: QMouseEvent):
@@ -163,8 +230,10 @@ class Node(QWidget):
     def mouseMoveEvent(self, event: QMouseEvent):
         if self.dragging:
             new_pos = self.mapToParent(event.position().toPoint() - self.offset)
-            self.x = new_pos.x()-5
-            self.y = new_pos.y()-5
+            self.x = new_pos.x()+5
+            self.y = new_pos.y()+5
+            self.absX = ((self.x * (self.scale*2000-self.scale*34*2)/(self.scale*2000)) / (self.scale*2000-self.scale*34*2) - 0.5) * 12**2
+            self.absY = ((self.y * (self.scale*2000-self.scale*34*2)/(self.scale*2000)) / (self.scale*2000-self.scale*34*2) - 0.5) * 12**2
             self.move(new_pos)
             self.gui_instance.update_lines()
         super().mouseMoveEvent(event)
@@ -316,12 +385,7 @@ class AutonomousPlannerGUIManager(QMainWindow):
         super().__init__()
 
         self.setWindowTitle('Path Planner') # Totally not inspired by Pronounce that
-
-        self.central_widget = DrawingWidget(self)
-        self.setCentralWidget(self.central_widget)
-        self.central_widget.setFixedSize(699, 699)
-
-        self.clearing_nodes = False
+        self.layout = QVBoxLayout()
 
         self.nodes = []
         self.start_node = None
@@ -330,41 +394,52 @@ class AutonomousPlannerGUIManager(QMainWindow):
         self.current_working_file = None
         self.routes_header_path = None
         self.routes_folder_path = None
-        with open(resource_path('../config.yaml'), 'r') as file:
-            config = yaml.safe_load(file)
-        if (config == None):
-            config = {}
-        # Check if the repository_path exists in the config
-        if 'autonomous_repository_path' not in config:
+
+
+        autonomous_path = getConfigValue('autonomous_repository_path')
+        if autonomous_path == None:
             autonomous_path = QFileDialog.getExistingDirectory(self, "Select Autonomous Program Directory", 
                                                       str(Path(os.getcwd()).parent.parent.absolute()))
             
-            config['autonomous_repository_path'] = autonomous_path + "/routes.h"
+            setConfigValue('autonomous_repository_path', autonomous_path + "/routes.h")
             print(f"Added autonomous repository path: {autonomous_path}/routes.h")
 
-        if 'routes_folder_path' not in config:
+
+        routes_path = getConfigValue('routes_folder_path')
+        if autonomous_path == None:
             routes_path = QFileDialog.getExistingDirectory(self, "Select Routes Folder", 
                                                       str(Path(os.getcwd()).parent.parent.absolute()))
             
-            config['routes_folder_path'] = routes_path
+            setConfigValue('routes_folder_path', routes_path)
             print(f"Added routes folder path: {routes_path}")
         
-        self.routes_header_path = config['autonomous_repository_path']
-        self.routes_folder_path = config['routes_folder_path']
-        with open(resource_path('../config.yaml'), 'w') as file:
-                yaml.safe_dump(config, file)
+        self.routes_header_path = autonomous_path
+        self.routes_folder_path = routes_path
 
-        self.layout = QVBoxLayout()
+        self.max_velocity = getConfigValue('max_velocity')
+        self.max_acceleration = getConfigValue('max_acceleration')
+        self.max_jerk = getConfigValue('max_jerk')
 
+        # Image and path widget
+        self.central_widget = DrawingWidget(self)
+        self.setCentralWidget(self.central_widget)
+        self.central_widget.setFixedSize(700, 700)
+
+        # Settings Dock Widget
+        self.settings_dock_widget = SettingsDockWidget(self.max_velocity, self.max_acceleration, self.max_jerk, self)
+
+        # Click listener
         self.label = ClickableLabel(parent=self.central_widget, gui_instance=self)
 
-        pixmap = QPixmap(resource_path('../assets/top_down_cropped_high_stakes_field.png'))
-        # self.label.setPixmap(pixmap)
+        # Add widgets to layout
+        self.central_widget.setLayout(self.layout)
+        self.setCentralWidget(self.central_widget)
+
+        self.layout.addWidget(self.label)
+
+        self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self.settings_dock_widget)
 
         self.update()
-        self.layout.addWidget(self.label)
-        self.central_widget.setLayout(self.layout)
-
         self.create_menu_bar()
 
 
@@ -394,10 +469,6 @@ class AutonomousPlannerGUIManager(QMainWindow):
         set_current_file_action.triggered.connect(self.set_working_file)
         file_menu.addAction(set_current_file_action)
 
-        create_cpp_action = QAction('Create C++ File from Nodes', self)
-        create_cpp_action.triggered.connect(self.create_cpp_file)
-        file_menu.addAction(create_cpp_action)
-
         clear_nodes_action = QAction('Clear All Nodes', self)
         clear_nodes_action.triggered.connect(self.clear_nodes)
         tools_menu.addAction(clear_nodes_action)
@@ -420,6 +491,16 @@ class AutonomousPlannerGUIManager(QMainWindow):
 
     def index_of(self, node):
         return (self.nodes.index(node))
+    
+    def update_coordinate_display(self, x, y):
+        self.settings_dock_widget.set_current_coordinates(x, y)
+    
+    def set_max_velocity(self, new_velocity):
+        self.max_velocity = new_velocity
+    def set_max_acceleration(self, new_acceleration):
+        self.max_acceleration = new_acceleration
+    def set_max_jerk(self, new_jerk):
+        self.max_jerk = new_jerk
 
     def add_node(self, x, y, pos=-1):
         node = Node(x, y, self.central_widget, gui_instance=self)
@@ -431,10 +512,9 @@ class AutonomousPlannerGUIManager(QMainWindow):
         self.update_lines()
         if (self.current_working_file != None):
             self.auto_save()
-        print(f"Node created at ({x}, {y})")
+        print(f"Node created at ({node.absX}, {node.absY})")
 
     def update_lines(self):
-        print("Updating lines...")
         self.central_widget.repaint()
         self.central_widget.update()
         self.central_widget.show()
@@ -560,9 +640,6 @@ class AutonomousPlannerGUIManager(QMainWindow):
                 else:
                     self.load_nodes_from_file(False)
 
-    def create_cpp_file(self):
-        print("Creating C++ file from nodes...") # This is a lie
-
     def clear_nodes(self):
         self.clearing_nodes = True
         while self.nodes:
@@ -673,8 +750,27 @@ class AutonomousPlannerGUIManager(QMainWindow):
         with open(self.routes_header_path, "w") as routes_file:
             routes_file.writelines(content)
 
+    def changeField(self, fieldType):
+        if (fieldType == "High Stakes Match"):
+            self.central_widget.update_image_path(resource_path('../assets/V5RC-HighStakes-Match-2000x2000.png'))
+        else:
+            self.central_widget.update_image_path(resource_path('../assets/V5RC-HighStakes-Skills-2000x2000.png'))
+
+    def setVelocity(self, newVelocity):
+        self.max_velocity = newVelocity
+        setConfigValue("max_velocity", self.max_velocity)
+        
+    def setAcceleration(self, newAcceleration):
+        self.max_acceleration = newAcceleration
+        setConfigValue("max_acceleration", self.max_acceleration)
+
+    def setJerk(self, newJerk):
+        self.max_jerk = newJerk
+        setConfigValue("max_jerk", self.max_jerk)
+
+
     def position_graph(self):
-        self.central_widget.calculateScurveStuff()
+        self.central_widget.calculateScurveStuff(self.max_velocity, self.max_acceleration, self.max_jerk)
         plt.figure(figsize=(12, 8))
 
         # Position profile
@@ -688,7 +784,7 @@ class AutonomousPlannerGUIManager(QMainWindow):
         plt.show()
 
     def velocity_graph(self):
-        self.central_widget.calculateScurveStuff()
+        self.central_widget.calculateScurveStuff(self.max_velocity, self.max_acceleration, self.max_jerk)
         plt.figure(figsize=(12, 8))
 
         # Velocity profile
@@ -703,7 +799,7 @@ class AutonomousPlannerGUIManager(QMainWindow):
         plt.show()
 
     def acceleration_graph(self):
-        self.central_widget.calculateScurveStuff()
+        self.central_widget.calculateScurveStuff(self.max_velocity, self.max_acceleration, self.max_jerk)
         plt.figure(figsize=(12, 8))
 
         # Acceleration profile
@@ -717,7 +813,7 @@ class AutonomousPlannerGUIManager(QMainWindow):
         plt.show()
 
     def heading_graph(self):
-        self.central_widget.calculateScurveStuff()
+        self.central_widget.calculateScurveStuff(self.max_velocity, self.max_acceleration, self.max_jerk)
         plt.figure(figsize=(12, 8))
 
         # Heading profile
@@ -731,15 +827,91 @@ class AutonomousPlannerGUIManager(QMainWindow):
         plt.tight_layout()
         plt.show()
 
+class SettingsDockWidget(QDockWidget):
+    def __init__(self, max_velocity, max_acceleration, max_jerk, parent=None):
+        super().__init__("Settings", parent)
+
+        self.parent = parent
+        # Create the settings widget
+        settings_widget = QWidget()
+        settings_layout = QFormLayout()
+
+        # Add Field Type drop-down menu
+        self.field_type_combo = QComboBox()
+        self.field_type_combo.addItems(["High Stakes Match", "High Stakes Skills"])
+        self.field_type_combo.setCurrentIndex(0)
+        settings_layout.addRow("Field Type:", self.field_type_combo)
+        self.field_type_combo.currentIndexChanged.connect(self.on_field_type_changed)
+
+        # Add max jerk, acceleration, and velocity inputs
+
+        self.velocity_input = QSpinBox()
+        self.velocity_input.setRange(0, 100)  # Adjust range as needed
+        self.velocity_input.setValue(max_velocity)
+        settings_layout.addRow("Max Velocity (ft/s):", self.velocity_input)
+        self.velocity_input.valueChanged.connect(self.on_velocity_changed)
+
+        self.acceleration_input = QSpinBox()
+        self.acceleration_input.setRange(0, 100)  # Adjust range as needed
+        self.acceleration_input.setValue(max_acceleration)
+        settings_layout.addRow("Max Acceleration (ft/s²):", self.acceleration_input)
+        self.acceleration_input.valueChanged.connect(self.on_acceleration_changed)
+
+        self.jerk_input = QSpinBox()
+        self.jerk_input.setRange(0, 100)  # Adjust range as needed
+        self.jerk_input.setValue(max_jerk)
+        settings_layout.addRow("Max Jerk (ft/s³):", self.jerk_input)
+        self.jerk_input.valueChanged.connect(self.on_jerk_changed)
+
+        # Add labels to display current x and y coordinates
+        self.current_x_label = QLabel("0")
+        settings_layout.addRow("Current X:", self.current_x_label)
+
+        self.current_y_label = QLabel("0")
+        settings_layout.addRow("Current Y:", self.current_y_label)
+
+        # Set the layout for the settings widget
+        settings_widget.setLayout(settings_layout)
+        self.setWidget(settings_widget)
+
+    def set_current_coordinates(self, x, y):
+        self.current_x_label.setText(str(x))
+        self.current_y_label.setText(str(y))
+
+    def on_field_type_changed(self):
+        field_type = self.field_type_combo.currentText()
+        print(f"Field Type changed: {field_type}")
+        self.parent.changeField(field_type)
+
+    def on_velocity_changed(self):
+        max_velocity = self.velocity_input.value()
+        print(f"Max Velocity changed: {max_velocity} ft/s")
+        self.parent.setVelocity(max_velocity)
+
+    def on_acceleration_changed(self):
+        max_acceleration = self.acceleration_input.value()
+        print(f"Max Acceleration changed: {max_acceleration} ft/s^2")
+        self.parent.setAcceleration(max_acceleration)
+
+    def on_jerk_changed(self):
+        max_jerk = self.jerk_input.value()
+        print(f"Max Jerk changed: {max_jerk} ft/s^3")
+        self.parent.setJerk(max_jerk)
+
+
 class DrawingWidget(QWidget):
-    def __init__(self, parent=None, image_path=resource_path('../assets/top_down_cropped_high_stakes_field.png')):
+    def __init__(self, parent=None, image_path=resource_path('../assets/V5RC-HighStakes-Match-2000x2000.png')):
         super().__init__(parent)
         self.parent = parent
-        self.setGeometry(0, 0, 699, 699)
+        self.setGeometry(0, 0, 700, 700)
         self.image = QPixmap(image_path) if image_path else None
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
 
-    def calculateScurveStuff(self):
+    def update_image_path(self, new_path):
+        self.image = QPixmap(new_path)
+        self.update()
+
+    def calculateScurveStuff(self, v_max=20, a_max=8, j_max=45):
         self.all_time_intervals = []
         self.all_positions = []
         self.all_velocities = []
@@ -761,9 +933,13 @@ class DrawingWidget(QWidget):
             print(self.parent.nodes[i+1].hasAction, " ", self.parent.nodes[i+1].isEndNode)
             if ((not self.parent.nodes[i+1].isEndNode) and (not self.parent.nodes[i+1].hasAction)):
                 continue
-            print("segmenting")
-            time_intervals, positions, velocities, accelerations, headings, nodes_map = self.generate_scurve_profile(segment_length, segment_data[1], segment_data[0])
-            self.all_time_intervals.extend(time_intervals + (self.all_time_intervals[-1] if self.all_time_intervals else 0))
+            time_intervals, positions, velocities, accelerations, headings, nodes_map = self.generate_scurve_profile(segment_length, segment_data[1], segment_data[0],
+                                                                                                                     v_max, a_max, j_max)
+            # self.all_time_intervals.extend(time_intervals + (self.all_time_intervals[-1] if self.all_time_intervals else 0))
+            if (self.all_time_intervals != []):
+                self.all_time_intervals.extend(time + self.all_time_intervals[-1][-1] for time in time_intervals)
+            else:
+                self.all_time_intervals = time_intervals
             self.all_positions.extend([p + current_position for p in positions])
             self.all_velocities.extend(velocities)
             self.all_accelerations.extend(accelerations)
@@ -783,12 +959,12 @@ class DrawingWidget(QWidget):
         painter.drawPixmap(self.rect(), self.image)
 
         if gui_instance.start_node and gui_instance.end_node and len(gui_instance.nodes) > 1:
-            points = [QPointF(gui_instance.start_node.x+10, gui_instance.start_node.y+10)]
+            points = [QPointF(gui_instance.start_node.x, gui_instance.start_node.y)]
             for node in gui_instance.nodes:
                 if node.isEndNode or node.isStartNode:
                     continue
-                points.append(QPointF(node.x+10, node.y+10))
-            points.append(QPointF(gui_instance.end_node.x+10, gui_instance.end_node.y+10))
+                points.append(QPointF(node.x, node.y))
+            points.append(QPointF(gui_instance.end_node.x, gui_instance.end_node.y))
             self.buildPath(points)
             painter.setRenderHint(QPainter.RenderHint.Antialiasing)
             pen = QPen(QColor("black"), 2)
@@ -881,7 +1057,7 @@ class DrawingWidget(QWidget):
                 break
         return t_jerk
 
-    def generate_scurve_profile(self, distance, segments, line_data, v_max=20, a_max=8, j_max=32, dt=0.0005):
+    def generate_scurve_profile(self, distance, segments, line_data, v_max, a_max, j_max, K=0.5, dt=0.0005):
         t_jerk = a_max / j_max
         t_acc = (v_max - j_max * t_jerk**2) / a_max
 
@@ -928,14 +1104,32 @@ class DrawingWidget(QWidget):
         curr_segment = 0
         nodes_map.append(0)
         prev_dist = 0
-        for i in range(len(time_intervals)):
-            t = time_intervals[i]
+        time_intervals = [0]
+        # Make sure you stay in the stage until the velocity is correctamundo
+        # for i in range(len(time_intervals)): # Switch to a while loop
+            # print(i)
+        while (abs(distance-s) > 0.0001):
+            current_length = s-prev_dist
+            t = time_intervals[-1]
+
+            pts = line_data[curr_segment]
+            if (pts[-1] == None):
+                pts = pts[0:len(pts)-1]
+            t_along_curve = distToTime(current_length, segments[curr_segment])
+            curvature = compute_curvature(pts, t_along_curve)
+            adjusted_vmax = max_speed_based_on_curvature(curvature, v_max, K)
+            adjusted_vmax = 1e9
+            # if (abs(v_max-adjusted_vmax) > 0.5):
+            # print(current_length,  " ", adjusted_vmax, " ", v_max, " ", t_along_curve, " ", curvature)
+
             if t < t_jerk:
                 # First jerk phase (increasing acceleration)
                 if (debug):
                     print("First jerk phase: ", d_jerk1, end=' ')
                 s += (j_max*dt**3)/6 + (a*dt**2)/2 + v*dt
                 v += (j_max*dt**2)/2 + a*dt
+                # if (v > adjusted_vmax):
+                #     v = adjusted_vmax
                 a += j_max * dt
             elif t < t_jerk + t_acc:
                 # First acceleration phase (constant acceleration)
@@ -943,6 +1137,8 @@ class DrawingWidget(QWidget):
                     print("First acceleration phase: ", d_jerk1+d_acc, end=' ')
                 s += (a*dt**2)/2 + v*dt
                 v += a*dt
+                # if (v > adjusted_vmax):
+                #     v = adjusted_vmax
                 a = a_max
             elif t < 2 * t_jerk + t_acc:
                 # Second jerk phase (decreasing acceleration)
@@ -950,6 +1146,8 @@ class DrawingWidget(QWidget):
                     print("Second jerk phase (negative): ", d_jerk1+d_jerk2+d_acc, end=' ')
                 s += ((-j_max)*dt**3)/6 + (a*dt**2)/2 + v*dt
                 v += ((-j_max)*dt**2)/2 + a*dt
+                # if (v > adjusted_vmax):
+                #     v = adjusted_vmax
                 a += -j_max * dt
             elif t < 2 * t_jerk + t_acc + t_flat:
                 # Constant velocity phase
@@ -957,6 +1155,8 @@ class DrawingWidget(QWidget):
                     print("Constant velocity phase: ", d_jerk1+d_jerk2+d_acc+d_flat, end=' ')
                 s += v*dt
                 v = v_max
+                # if (v > adjusted_vmax):
+                #     v = adjusted_vmax
                 a = 0
             elif t < 3 * t_jerk + t_acc + t_flat:
                 # Third jerk phase (decreasing acceleration)
@@ -964,6 +1164,8 @@ class DrawingWidget(QWidget):
                     print("Third jerk phase(negative): ", 2*d_jerk2+d_jerk1+d_acc+d_flat, end=' ')
                 s += ((-j_max)*dt**3)/6 + (a*dt**2)/2 + v*dt
                 v += ((-j_max)*dt**2)/2 + a*dt
+                # if (v > adjusted_vmax):
+                #     v = adjusted_vmax
                 a += -j_max * dt
             elif t < 3 * t_jerk + 2*t_acc + t_flat:
                 # Second acceleration phase (constant negative acceleration)
@@ -971,6 +1173,8 @@ class DrawingWidget(QWidget):
                     print("Second acceleration phase: ", 2*d_jerk2+d_jerk1+2*d_acc+d_flat, end=' ')
                 s += (a*dt**2)/2 + v*dt
                 v += a*dt
+                # if (v > adjusted_vmax):
+                #     v = adjusted_vmax
                 a = -a_max
             elif t < 4 * t_jerk + 2*t_acc + t_flat:
                 # Fourth jerk phase (increasing acceleration)
@@ -978,6 +1182,8 @@ class DrawingWidget(QWidget):
                     print("Fourth jerk phase: ", 2*d_jerk2+2*d_jerk1+2*d_acc+d_flat, end=' ')
                 s += (j_max*dt**3)/6 + (a*dt**2)/2 + v*dt # Derive posiotion based on jerk as well
                 v += (j_max*dt**2)/2 + a*dt # Derive velocity based on jerk
+                # if (v > adjusted_vmax):
+                    # v = adjusted_vmax
                 a += j_max * dt
             if (debug):
                 print(s, " ", v, " ", a, " ", t)
@@ -987,13 +1193,17 @@ class DrawingWidget(QWidget):
 
             # MAKE DEPENDENT ON DISTANCE
             if (s-prev_dist > segments[curr_segment][-1] and curr_segment < len(segments)-1):
-                nodes_map.append(i)
+                nodes_map.append(len(time_intervals))
+                # nodes_map.append(i)
                 curr_segment += 1
                 prev_dist = s
             headings.append(getHeading(s-prev_dist, segments[curr_segment], 
                                        line_data[curr_segment][0], line_data[curr_segment][1], line_data[curr_segment][2], line_data[curr_segment][3]))
+            
+            time_intervals.append(time_intervals[-1]+dt)
 
         # nodes_map.append(len(line_data))
+        time_intervals = time_intervals[1:]
         return time_intervals, positions, velocities, accelerations, headings, nodes_map
 
                 
