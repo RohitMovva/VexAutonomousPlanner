@@ -126,8 +126,9 @@ class Node(QWidget):
         self.isEndNode = False
         self.spinIntake = False
         self.clampGoal = False
-        self.hasAction = (self.spinIntake or self.clampGoal)
         self.turn = 0
+        self.wait_time = 0
+        self.hasAction = (self.spinIntake or self.clampGoal or self.turn != 0 or self.wait_time != 0)
         self.setFixedSize(10, 10)
         self.move(x+5, y+5)
         self.dragging = False
@@ -205,6 +206,10 @@ class Node(QWidget):
         turn_action.triggered.connect(self.set_turn)
         attributes_menu.addAction(turn_action)
 
+        wait_action = QAction('Wait time: ' + str(self.wait_time), self)
+        wait_action.triggered.connect(self.set_wait)
+        attributes_menu.addAction(wait_action)
+
         delete_action = QAction('Delete Node', self)
         delete_action.triggered.connect(self.delete_node)
         node_menu.addAction(delete_action)
@@ -231,7 +236,7 @@ class Node(QWidget):
                 self.isEndNode = False
         else:
             self.gui_instance.clear_start_node()
-        self.update()
+        self.repaint()
         self.gui_instance.update_lines()
         print(f"Start Node: {self.isStartNode}")
 
@@ -250,19 +255,27 @@ class Node(QWidget):
 
     def toggle_spin_intake(self):
         self.spinIntake = not self.spinIntake
-        self.hasAction = (self.spinIntake or self.clampGoal)
+        self.hasAction = (self.spinIntake or self.clampGoal or self.turn != 0 or self.wait_time != 0)
         print(f"Spin Intake: {self.spinIntake}")
 
     def toggle_clamp_goal(self):
         self.clampGoal = not self.clampGoal
-        self.hasAction = (self.spinIntake or self.clampGoal)
+        self.hasAction = (self.spinIntake or self.clampGoal or self.turn != 0 or self.wait_time != 0)
         print(f"Clamp Goal: {self.clampGoal}")
 
     def set_turn(self):
         value, ok = QInputDialog.getInt(self, "Set Turn", "Enter turn (0-360):", self.turn, 0, 360)
         if ok:
             self.turn = value
+            self.hasAction = (self.spinIntake or self.clampGoal or self.turn != 0 or self.wait_time != 0)
             print(f"Turn set to: {self.turn}")
+
+    def set_wait(self):
+        value, ok = QInputDialog.getInt(self, "Set Wait Time", "Enter time (seconds):", self.wait_time, 0)
+        if ok:
+            self.wait_time = value
+            self.hasAction = (self.spinIntake or self.clampGoal or self.turn != 0 or self.wait_time != 0)
+            print(f"Wait time set to: {self.wait_time}")
 
     def delete_node(self):
         self.gui_instance.remove_node(self)
@@ -307,6 +320,8 @@ class AutonomousPlannerGUIManager(QMainWindow):
         self.central_widget = DrawingWidget(self)
         self.setCentralWidget(self.central_widget)
         self.central_widget.setFixedSize(699, 699)
+
+        self.clearing_nodes = False
 
         self.nodes = []
         self.start_node = None
@@ -421,6 +436,7 @@ class AutonomousPlannerGUIManager(QMainWindow):
     def update_lines(self):
         print("Updating lines...")
         self.central_widget.repaint()
+        self.central_widget.update()
         self.central_widget.show()
 
     def remove_node(self, node):
@@ -466,7 +482,9 @@ class AutonomousPlannerGUIManager(QMainWindow):
             self.load_nodes(nodes_string)
 
     def save_nodes_to_file(self):
-        nodes_string = self.convert_nodes()
+        nodes_string = ""
+        if (len(self.nodes) > 0):
+            nodes_string = self.convert_nodes()
         full_path = None
 
         if (self.current_working_file == None):
@@ -484,18 +502,23 @@ class AutonomousPlannerGUIManager(QMainWindow):
         else:
             full_path = self.routes_folder_path + "/" + self.current_working_file + ".txt"
         nodes_data = []
-        time_intervals, positions, velocities, accelerations, headings, nodes_map = self.central_widget.calculateScurveStuff()
-        for i in range(0, len(time_intervals), 50): # Every 25ms save data
-            nodes_data.append([velocities[i], headings[i]])
+        nodes_map = []
+        if (len(self.nodes) > 2 and self.start_node and self.end_node):
+            time_intervals, positions, velocities, accelerations, headings, nodes_map = self.central_widget.calculateScurveStuff()
+            for i in range(0, len(time_intervals), 50): # Every 25ms save data
+                nodes_data.append([velocities[i], headings[i]])
 
         nodes_actions = [
                 [
                     int(node.spinIntake),
                     int(node.clampGoal),
-                    node.turn
+                    node.turn,
+                    node.wait_time
                 ]
                 for node in self.nodes
             ]
+        print(nodes_map)
+        print(len(nodes_map), len(nodes_actions))
         for i in range(0, len(nodes_map)):
             nodes_data.insert(int(nodes_map[i]/50), nodes_actions[i])
 
@@ -541,11 +564,13 @@ class AutonomousPlannerGUIManager(QMainWindow):
         print("Creating C++ file from nodes...") # This is a lie
 
     def clear_nodes(self):
+        self.clearing_nodes = True
         while self.nodes:
             node = self.nodes.pop()
             node.delete_node()
         self.start_node = None
         self.end_node = None
+        self.clearing_nodes = False
         self.update_lines()
         print("Clearing all nodes...")
 
@@ -562,6 +587,9 @@ class AutonomousPlannerGUIManager(QMainWindow):
                 node.spinIntake = bool(node_data[4])
                 node.clampGoal = bool(node_data[5])
                 node.turn = node_data[6]
+                node.wait_time = node_data[7]
+                node.hasAction = (node.spinIntake or node.clampGoal or node.turn != 0 or node.wait_time != 0)
+                print(node.hasAction)
                 self.nodes.append(node)
                 node.show()
 
@@ -576,7 +604,8 @@ class AutonomousPlannerGUIManager(QMainWindow):
                 int(node.isEndNode),
                 int(node.spinIntake),
                 int(node.clampGoal),
-                node.turn
+                node.turn,
+                node.wait_time
             ]
             for node in self.nodes
         ]
@@ -586,7 +615,7 @@ class AutonomousPlannerGUIManager(QMainWindow):
         return nodes_string
     
     def auto_save(self):
-        if (self.current_working_file != None and self.start_node and self.end_node):
+        if (self.current_working_file != None and self.start_node and self.end_node and not self.clearing_nodes):
             if (len(self.nodes) > 0):
                 self.save_nodes_to_file()
             else:
@@ -729,8 +758,10 @@ class DrawingWidget(QWidget):
             segment_data[0].append(line)
             segment_data[1].append(segments)
             segment_length += segments[-1]
-            if (i < len(self.line_data)-1 and (not self.parent.nodes[i+1].hasAction)):
+            print(self.parent.nodes[i+1].hasAction, " ", self.parent.nodes[i+1].isEndNode)
+            if ((not self.parent.nodes[i+1].isEndNode) and (not self.parent.nodes[i+1].hasAction)):
                 continue
+            print("segmenting")
             time_intervals, positions, velocities, accelerations, headings, nodes_map = self.generate_scurve_profile(segment_length, segment_data[1], segment_data[0])
             self.all_time_intervals.extend(time_intervals + (self.all_time_intervals[-1] if self.all_time_intervals else 0))
             self.all_positions.extend([p + current_position for p in positions])
@@ -770,6 +801,7 @@ class DrawingWidget(QWidget):
         factor = 0.25
         self.path = QPainterPath(points[0])
         self.line_data = []
+        cp1 = None
         for p, current in enumerate(points[1:-1], 1):
             # previous segment
             source = QLineF(points[p - 1], current)
@@ -794,6 +826,8 @@ class DrawingWidget(QWidget):
             cp1 = revSource.p2()
 
         # The final curve, that joins to the last point
+        if (cp1 == None):
+            return
         self.line_data.append([self.path.currentPosition(), points[-1], cp1])
         self.path.quadTo(cp1, points[-1])
 
@@ -847,7 +881,7 @@ class DrawingWidget(QWidget):
                 break
         return t_jerk
 
-    def generate_scurve_profile(self, distance, segments, line_data, v_max=20, a_max=8, j_max=45, dt=0.0005):
+    def generate_scurve_profile(self, distance, segments, line_data, v_max=20, a_max=8, j_max=32, dt=0.0005):
         t_jerk = a_max / j_max
         t_acc = (v_max - j_max * t_jerk**2) / a_max
 
