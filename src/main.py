@@ -1077,6 +1077,7 @@ class DrawingWidget(QWidget):
         time_intervals = [0]
         # Make sure you stay in the stage until the velocity is correctamundo
         # for i in range(len(time_intervals)): # Switch to a while loop
+            # print(i)
         while (abs(distance-s) > 0.0001):
             current_length = s-prev_dist
             t = time_intervals[-1]
@@ -1089,9 +1090,9 @@ class DrawingWidget(QWidget):
             adjusted_vmax = max_speed_based_on_curvature(curvature, v_max, K)
             adjusted_vmax = 1e9
             # if (abs(v_max-adjusted_vmax) > 0.5):
-            print(current_length,  " ", adjusted_vmax, " ", v_max, " ", t_along_curve, " ", curvature)
+            # print(current_length,  " ", adjusted_vmax, " ", v_max, " ", t_along_curve, " ", curvature)
 
-            if current_length < d_jerk1:
+            if t < t_jerk:
                 # First jerk phase (increasing acceleration)
                 if (debug):
                     print("First jerk phase: ", d_jerk1, end=' ')
@@ -1163,6 +1164,7 @@ class DrawingWidget(QWidget):
             # MAKE DEPENDENT ON DISTANCE
             if (s-prev_dist > segments[curr_segment][-1] and curr_segment < len(segments)-1):
                 nodes_map.append(len(time_intervals))
+                # nodes_map.append(i)
                 curr_segment += 1
                 prev_dist = s
             headings.append(getHeading(s-prev_dist, segments[curr_segment], 
