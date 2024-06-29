@@ -32,17 +32,52 @@ def create_files():
         if not os.path.exists(file):
             os.makedirs(file)
             print(f"Created file: {file}")
+# BEZIER CURVE THINGS
+
+def bezier_curve(t, points):
+    n = len(points) - 1
+    result = np.zeros(2)
+    for i, point in enumerate(points):
+        binomial_coeff = np.math.comb(n, i)
+        result += binomial_coeff * ((1 - t) ** (n - i)) * (t ** i) * np.array([point.x(), point.y()])
+    return result
+
+def bezier_derivative(t, points):
+    n = len(points) - 1
+    result = np.zeros(2)
+    for i in range(n):
+        binomial_coeff = np.math.comb(n - 1, i)
+        result += binomial_coeff * ((1 - t) ** (n - 1 - i)) * (t ** i) * (np.array([points[i + 1].x(), points[i + 1].y()]) - np.array([points[i].x(), points[i].y()])) * n
+    return result
+
+def bezier_second_derivative(t, points):
+    n = len(points) - 1
+    result = np.zeros(2)
+    for i in range(n - 1):
+        binomial_coeff = np.math.comb(n - 2, i)
+        result += binomial_coeff * ((1 - t) ** (n - 2 - i)) * (t ** i) * (np.array([points[i + 2].x(), points[i + 2].y()]) - 2 * np.array([points[i + 1].x(), points[i + 1].y()]) + np.array([points[i].x(), points[i].y()])) * n * (n - 1)
+    return result
+
+def compute_curvature(points, t):
+    B_prime = bezier_derivative(t, points)
+    B_double_prime = bezier_second_derivative(t, points)
+    curvature = np.abs(np.cross(B_prime, B_double_prime)) / (np.dot(B_prime, B_prime)**1.5)
+    return curvature
+
+def max_speed_based_on_curvature(curvature, V_base, K):
+    return V_base / (1 + K * curvature)
+
 
 # QUADRATIC
-def quad_bezier_angle(t, P0, P1, P2):
-    tangentX = (2*(1-t)*(P1.x()-P0.x())) + (2*t*(P2.x()-P1.x()))
-    tangentY = (2*(1-t)*(P1.y()-P0.y())) + (2*t*(P2.y()-P1.y()))
-    return -1*np.arctan2(tangentY, tangentX)*(180/np.pi)
-
 def quadratic_bezier_point(P0, P1, P2, t):
     x = (1 - t)**2 * P0.x() + 2 * (1 - t) * t * P1.x() + t**2 * P2.x()
     y = (1 - t)**2 * P0.y() + 2 * (1 - t) * t * P1.y() + t**2 * P2.y()
     return x, y
+
+def quad_bezier_angle(t, P0, P1, P2):
+    tangentX = (2*(1-t)*(P1.x()-P0.x())) + (2*t*(P2.x()-P1.x()))
+    tangentY = (2*(1-t)*(P1.y()-P0.y())) + (2*t*(P2.y()-P1.y()))
+    return -1*np.arctan2(tangentY, tangentX)*(180/np.pi)
 
 # CUBIC
 def cubic_bezier_point(P0, P1, P2, P3, t):
@@ -154,8 +189,6 @@ class Node(QWidget):
         self.scale = 700/2000
         self.absX = ((self.x * (self.scale*2000-self.scale*34*2)/(self.scale*2000)) / (self.scale*2000-self.scale*34*2) - 0.5) * 12**2
         self.absY = ((self.y * (self.scale*2000-self.scale*34*2)/(self.scale*2000)) / (self.scale*2000-self.scale*34*2) - 0.5) * 12**2
-        print("INFO: ", self.x, " ", (self.x * (self.scale*2000-self.scale*34*2)/(self.scale*2000)), 
-            (self.x * (self.scale*2000-self.scale*34*2)/(self.scale*2000)) / (self.scale*2000-self.scale*34*2), self.absX)
 
         self.gui_instance = gui_instance
         self.isStartNode = False
@@ -875,7 +908,11 @@ class DrawingWidget(QWidget):
                 continue
             time_intervals, positions, velocities, accelerations, headings, nodes_map = self.generate_scurve_profile(segment_length, segment_data[1], segment_data[0],
                                                                                                                      v_max, a_max, j_max)
-            self.all_time_intervals.extend(time_intervals + (self.all_time_intervals[-1] if self.all_time_intervals else 0))
+            # self.all_time_intervals.extend(time_intervals + (self.all_time_intervals[-1] if self.all_time_intervals else 0))
+            if (self.all_time_intervals != []):
+                self.all_time_intervals.extend(time + self.all_time_intervals[-1][-1] for time in time_intervals)
+            else:
+                self.all_time_intervals = time_intervals
             self.all_positions.extend([p + current_position for p in positions])
             self.all_velocities.extend(velocities)
             self.all_accelerations.extend(accelerations)
@@ -990,7 +1027,7 @@ class DrawingWidget(QWidget):
                 break
         return t_jerk
 
-    def generate_scurve_profile(self, distance, segments, line_data, v_max, a_max, j_max, dt=0.0005):
+    def generate_scurve_profile(self, distance, segments, line_data, v_max, a_max, j_max, K=0.5, dt=0.0005):
         t_jerk = a_max / j_max
         t_acc = (v_max - j_max * t_jerk**2) / a_max
 
@@ -1037,14 +1074,31 @@ class DrawingWidget(QWidget):
         curr_segment = 0
         nodes_map.append(0)
         prev_dist = 0
-        for i in range(len(time_intervals)):
-            t = time_intervals[i]
-            if t < t_jerk:
+        time_intervals = [0]
+        # Make sure you stay in the stage until the velocity is correctamundo
+        # for i in range(len(time_intervals)): # Switch to a while loop
+        while (abs(distance-s) > 0.0001):
+            current_length = s-prev_dist
+            t = time_intervals[-1]
+
+            pts = line_data[curr_segment]
+            if (pts[-1] == None):
+                pts = pts[0:len(pts)-1]
+            t_along_curve = distToTime(current_length, segments[curr_segment])
+            curvature = compute_curvature(pts, t_along_curve)
+            adjusted_vmax = max_speed_based_on_curvature(curvature, v_max, K)
+            adjusted_vmax = 1e9
+            # if (abs(v_max-adjusted_vmax) > 0.5):
+            print(current_length,  " ", adjusted_vmax, " ", v_max, " ", t_along_curve, " ", curvature)
+
+            if current_length < d_jerk1:
                 # First jerk phase (increasing acceleration)
                 if (debug):
                     print("First jerk phase: ", d_jerk1, end=' ')
                 s += (j_max*dt**3)/6 + (a*dt**2)/2 + v*dt
                 v += (j_max*dt**2)/2 + a*dt
+                # if (v > adjusted_vmax):
+                #     v = adjusted_vmax
                 a += j_max * dt
             elif t < t_jerk + t_acc:
                 # First acceleration phase (constant acceleration)
@@ -1052,6 +1106,8 @@ class DrawingWidget(QWidget):
                     print("First acceleration phase: ", d_jerk1+d_acc, end=' ')
                 s += (a*dt**2)/2 + v*dt
                 v += a*dt
+                # if (v > adjusted_vmax):
+                #     v = adjusted_vmax
                 a = a_max
             elif t < 2 * t_jerk + t_acc:
                 # Second jerk phase (decreasing acceleration)
@@ -1059,6 +1115,8 @@ class DrawingWidget(QWidget):
                     print("Second jerk phase (negative): ", d_jerk1+d_jerk2+d_acc, end=' ')
                 s += ((-j_max)*dt**3)/6 + (a*dt**2)/2 + v*dt
                 v += ((-j_max)*dt**2)/2 + a*dt
+                # if (v > adjusted_vmax):
+                #     v = adjusted_vmax
                 a += -j_max * dt
             elif t < 2 * t_jerk + t_acc + t_flat:
                 # Constant velocity phase
@@ -1066,6 +1124,8 @@ class DrawingWidget(QWidget):
                     print("Constant velocity phase: ", d_jerk1+d_jerk2+d_acc+d_flat, end=' ')
                 s += v*dt
                 v = v_max
+                # if (v > adjusted_vmax):
+                #     v = adjusted_vmax
                 a = 0
             elif t < 3 * t_jerk + t_acc + t_flat:
                 # Third jerk phase (decreasing acceleration)
@@ -1073,6 +1133,8 @@ class DrawingWidget(QWidget):
                     print("Third jerk phase(negative): ", 2*d_jerk2+d_jerk1+d_acc+d_flat, end=' ')
                 s += ((-j_max)*dt**3)/6 + (a*dt**2)/2 + v*dt
                 v += ((-j_max)*dt**2)/2 + a*dt
+                # if (v > adjusted_vmax):
+                #     v = adjusted_vmax
                 a += -j_max * dt
             elif t < 3 * t_jerk + 2*t_acc + t_flat:
                 # Second acceleration phase (constant negative acceleration)
@@ -1080,6 +1142,8 @@ class DrawingWidget(QWidget):
                     print("Second acceleration phase: ", 2*d_jerk2+d_jerk1+2*d_acc+d_flat, end=' ')
                 s += (a*dt**2)/2 + v*dt
                 v += a*dt
+                # if (v > adjusted_vmax):
+                #     v = adjusted_vmax
                 a = -a_max
             elif t < 4 * t_jerk + 2*t_acc + t_flat:
                 # Fourth jerk phase (increasing acceleration)
@@ -1087,6 +1151,8 @@ class DrawingWidget(QWidget):
                     print("Fourth jerk phase: ", 2*d_jerk2+2*d_jerk1+2*d_acc+d_flat, end=' ')
                 s += (j_max*dt**3)/6 + (a*dt**2)/2 + v*dt # Derive posiotion based on jerk as well
                 v += (j_max*dt**2)/2 + a*dt # Derive velocity based on jerk
+                # if (v > adjusted_vmax):
+                    # v = adjusted_vmax
                 a += j_max * dt
             if (debug):
                 print(s, " ", v, " ", a, " ", t)
@@ -1096,13 +1162,16 @@ class DrawingWidget(QWidget):
 
             # MAKE DEPENDENT ON DISTANCE
             if (s-prev_dist > segments[curr_segment][-1] and curr_segment < len(segments)-1):
-                nodes_map.append(i)
+                nodes_map.append(len(time_intervals))
                 curr_segment += 1
                 prev_dist = s
             headings.append(getHeading(s-prev_dist, segments[curr_segment], 
                                        line_data[curr_segment][0], line_data[curr_segment][1], line_data[curr_segment][2], line_data[curr_segment][3]))
+            
+            time_intervals.append(time_intervals[-1]+dt)
 
         # nodes_map.append(len(line_data))
+        time_intervals = time_intervals[1:]
         return time_intervals, positions, velocities, accelerations, headings, nodes_map
 
                 
