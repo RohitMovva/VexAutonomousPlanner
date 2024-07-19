@@ -1,1 +1,5 @@
-# config.yaml (Things are added after first launch)
+autonomous_repository_path: C:/Users/tihor/Projects/HighStakesAutonomous/src/routes.h
+routes_folder_path: C:/Users/tihor/Projects/VexAutonomousPlanner/routes
+max_velocity: 20
+max_acceleration: 8
+max_jerk: 45
