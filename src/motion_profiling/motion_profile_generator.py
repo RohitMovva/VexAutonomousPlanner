@@ -45,71 +45,130 @@ def distance_to_max_velocity(v_max, distance, segments, p0, p1, p2, p3=None, K=1
     
     return min(v_max, v_curve)
 
-def generate_motion_profile(control_points, target_velocities, max_velocity, max_acceleration, max_jerk, time_step=0.02):
-    def limit_acceleration(velocity, prev_velocity, dt):
-        acceleration = (velocity - prev_velocity) / dt
-        if abs(acceleration) > max_acceleration:
-            acceleration = np.sign(acceleration) * max_acceleration
-        return prev_velocity + acceleration * dt
+def generate_motion_profile(control_points, target_velocities, max_velocity, max_acceleration, max_jerk, max_points=100000):
+    def generate_trapezoid_profile(start_v, end_v, distance):
+        # Calculate time to reach max velocity
+        t_acc = (max_velocity - start_v) / max_acceleration
+        d_acc = start_v * t_acc + 0.5 * max_acceleration * t_acc**2
 
-    def limit_jerk(velocity, prev_velocity, prev_acceleration, dt):
-        acceleration = (velocity - prev_velocity) / dt
-        jerk = (acceleration - prev_acceleration) / dt
-        if abs(jerk) > max_jerk:
-            jerk = np.sign(jerk) * max_jerk
-        acceleration = prev_acceleration + jerk * dt
-        return prev_velocity + acceleration * dt, acceleration
+        # Calculate time to decelerate from max velocity
+        t_dec = (max_velocity - end_v) / max_acceleration
+        d_dec = end_v * t_dec + 0.5 * max_acceleration * t_dec**2
 
+        if d_acc + d_dec > distance:
+            # We can't reach max velocity, so let's find the peak velocity
+            # Solve quadratic equation: d = v_peak^2 / a
+            v_peak = np.sqrt(max_acceleration * distance)
+            t_acc = (v_peak - start_v) / max_acceleration
+            t_dec = (v_peak - end_v) / max_acceleration
+            d_acc = start_v * t_acc + 0.5 * max_acceleration * t_acc**2
+            d_const = 0
+        else:
+            d_const = distance - d_acc - d_dec
+
+        return d_acc, d_const, d_dec
+
+    def limit_acceleration(velocities, times):
+        accelerations = np.gradient(velocities, times)
+        for i in range(1, len(velocities)):
+            if abs(accelerations[i]) > max_acceleration:
+                sign = np.sign(accelerations[i])
+                velocities[i] = velocities[i-1] + sign * max_acceleration * (times[i] - times[i-1])
+        return velocities
+
+    def limit_jerk(velocities, times):
+        accelerations = np.gradient(velocities, times)
+        jerks = np.gradient(accelerations, times)
+        for i in range(1, len(accelerations) - 1):
+            if abs(jerks[i]) > max_jerk:
+                sign = np.sign(jerks[i])
+                accelerations[i] = accelerations[i-1] + sign * max_jerk * (times[i] - times[i-1])
+                velocities[i+1] = velocities[i] + accelerations[i] * (times[i+1] - times[i])
+        return velocities
+
+
+    # Calculate total path length
     total_distance = sum(get_bezier_length(*cp) for cp in control_points)
-    
-    # Initialize arrays
-    times = [0]
-    positions = [0]
-    velocities = [0]
-    accelerations = [0]
 
+    # Initialize path
+    num_samples = min(max_points, int(total_distance / 0.01))  # Sample every 1cm or use max_points
+    distances = np.linspace(0, total_distance, num_samples)
+    velocities = np.zeros_like(distances)
+
+    # Generate velocity profile
     current_distance = 0
-    current_velocity = 0
-    current_acceleration = 0
-
     for i, (cp, target_v) in enumerate(zip(control_points, target_velocities)):
         segment_length = get_bezier_length(*cp)
-        segment_max_v = min(distance_to_max_velocity(max_velocity, current_distance, len(control_points), *cp), target_v)
+        max_v = min(distance_to_max_velocity(max_velocity, current_distance, len(control_points), *cp), target_v)
+        
+        start_v = velocities[np.searchsorted(distances, current_distance) - 1]
+        end_v = target_v if i < len(control_points) - 1 else 0
+        
+        accel_d, const_d, decel_d = generate_trapezoid_profile(start_v, end_v, segment_length)
+        
+        segment_distances = distances[(distances >= current_distance) & (distances < current_distance + segment_length)] - current_distance
+        segment_velocities = np.piecewise(segment_distances,
+                                          [segment_distances < accel_d,
+                                           (segment_distances >= accel_d) & (segment_distances < accel_d + const_d),
+                                           segment_distances >= accel_d + const_d],
+                                          [lambda x: np.sqrt(start_v**2 + 2*max_acceleration*x),
+                                           lambda x: max_v,
+                                           lambda x: np.sqrt(end_v**2 + 2*max_acceleration*(segment_length - x))])
+        
+        velocities[(distances >= current_distance) & (distances < current_distance + segment_length)] = segment_velocities
+        current_distance += segment_length
 
-        while current_distance < sum(get_bezier_length(*control_points[:i+1])):
-            # Calculate desired velocity
-            remaining_distance = sum(get_bezier_length(*control_points[:i+1])) - current_distance
-            desired_v = min(segment_max_v, np.sqrt(2 * max_acceleration * remaining_distance))
+    # Ensure final velocity is 0
+    velocities[-1] = 0
 
-            # Apply acceleration and jerk limits
-            limited_v = limit_acceleration(desired_v, current_velocity, time_step)
-            limited_v, new_acceleration = limit_jerk(limited_v, current_velocity, current_acceleration, time_step)
+    # Calculate times
+    with np.errstate(divide='ignore', invalid='ignore'):
+        time_diffs = 2 * np.diff(distances) / (velocities[1:] + velocities[:-1])  # Use average velocity
+    time_diffs[~np.isfinite(time_diffs)] = 0  # Replace inf and NaN with 0
+    times = np.cumsum(time_diffs)
+    times = np.insert(times, 0, 0)
 
-            # Update current state
-            current_distance += (current_velocity + limited_v) / 2 * time_step
-            current_velocity = limited_v
-            current_acceleration = new_acceleration
+    # Apply acceleration limiting
+    velocities = limit_acceleration(velocities, times)
 
-            # Append to arrays
-            times.append(times[-1] + time_step)
-            positions.append(current_distance)
-            velocities.append(current_velocity)
-            accelerations.append(current_acceleration)
+    # Recalculate times after acceleration limiting
+    with np.errstate(divide='ignore', invalid='ignore'):
+        time_diffs = 2 * np.diff(distances) / (velocities[1:] + velocities[:-1])  # Use average velocity
+    time_diffs[~np.isfinite(time_diffs)] = 0  # Replace inf and NaN with 0
+    times = np.cumsum(time_diffs)
+    times = np.insert(times, 0, 0)
 
-    # Ensure we reach the exact total distance
-    if positions[-1] < total_distance:
-        times.append(times[-1] + time_step)
-        positions.append(total_distance)
-        velocities.append(0)
-        accelerations.append(0)
+    # Apply jerk limiting
+    velocities = limit_jerk(velocities, times)
 
-    # Convert lists to numpy arrays
-    times = np.array(times)
-    positions = np.array(positions)
-    velocities = np.array(velocities)
-    accelerations = np.array(accelerations)
+    # Final acceleration limiting pass
+    velocities = limit_acceleration(velocities, times)
 
-    return positions, velocities, accelerations, times
+    # Resample to 20ms intervals
+    target_times = np.arange(0, times[-1], 0.02)
+    position_interpolator = interp1d(times, distances, bounds_error=False, fill_value="extrapolate")
+    velocity_interpolator = interp1d(times, velocities, bounds_error=False, fill_value="extrapolate")
+    
+    resampled_positions = position_interpolator(target_times)
+    resampled_velocities = velocity_interpolator(target_times)
+    resampled_accelerations = np.gradient(resampled_velocities, target_times)
+
+    # Trim any points that exceed the total distance
+    valid_indices = resampled_positions <= total_distance
+    resampled_positions = resampled_positions[valid_indices]
+    resampled_velocities = resampled_velocities[valid_indices]
+    resampled_accelerations = resampled_accelerations[valid_indices]
+    target_times = target_times[valid_indices]
+
+    # Ensure the last point exactly matches the total distance
+    if resampled_positions[-1] < total_distance:
+        resampled_positions = np.append(resampled_positions, total_distance)
+        resampled_velocities = np.append(resampled_velocities, 0)
+        resampled_accelerations = np.append(resampled_accelerations, 0)
+        target_times = np.append(target_times, target_times[-1] + 0.02)
+
+    return resampled_positions, resampled_velocities, resampled_accelerations, target_times
+
 # Example usage
 control_points = [
     [[0, 0], [1, 1], [2, 0]],
