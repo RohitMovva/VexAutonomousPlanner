@@ -8,7 +8,8 @@ from PyQt6.QtGui import QPixmap, QMouseEvent, QPainter, QColor, QAction, QPen, Q
 from PyQt6.QtCore import Qt, QPoint, QLineF, QPointF, Qt
 import numpy as np
 import matplotlib.pyplot as plt
-from math import sqrt
+from math import sqrt, ceil
+from distance_time_calculator import calculate_time_small_increment
 
 def load_fonts():
     font_dir = os.path.join(os.path.dirname(__file__), 'fonts')
@@ -36,6 +37,30 @@ def create_files():
 # Random math function
 def cross_product_2d(v1, v2):
     return v1[0] * v2[1] - v1[1] * v2[0]
+
+def solve_quartic(a, b, c, d):
+    """
+    Solve a quartic equation of the form ax^4 + bx^3 + cx^2 + dx + e = 0.
+    This is a simplified version and may not work for all cases.
+    """
+    # Convert to a depressed quartic
+    p = (8*a*c - 3*b**2) / (8*a**2)
+    q = (b**3 - 4*a*b*c + 8*a**2*d) / (8*a**3)
+
+    # Solve the resolvent cubic
+    D0 = c**2 - 3*b*d + 12*a*e
+    D1 = 2*c**3 - 9*b*c*d + 27*b**2*e + 27*a*d**2 - 72*a*c*e
+    Q = ((D1 + math.sqrt(D1**2 - 4*D0**3)) / 2) ** (1/3)
+    S = 0.5 * math.sqrt(-2*p/3 + (Q + D0/Q)/(3*a))
+
+    # Calculate the roots
+    root1 = -b/(4*a) + S + 0.5 * math.sqrt(-4*S**2 - 2*p + q/S)
+    root2 = -b/(4*a) + S - 0.5 * math.sqrt(-4*S**2 - 2*p + q/S)
+    root3 = -b/(4*a) - S + 0.5 * math.sqrt(-4*S**2 - 2*p - q/S)
+    root4 = -b/(4*a) - S - 0.5 * math.sqrt(-4*S**2 - 2*p - q/S)
+
+    return [root1, root2, root3, root4]
+
 # BEZIER CURVE THINGS
 
 def point_to_array(p):
@@ -936,6 +961,216 @@ class DrawingWidget(QWidget):
             
         adjusted_vmax = max_speed_based_on_curvature(curvature, v_max, K)
         return adjusted_vmax
+    
+    def convert_velocity_parameterization(self, velocities, distance_interval, time_interval):
+        """
+        Convert a list of velocities from constant distance parameterization to constant time parameterization.
+        
+        Args:
+        velocities (list): List of velocities, each measured after a constant distance interval.
+        distance_interval (float): The constant distance interval between velocity measurements.
+        time_interval (float): The desired constant time interval for the new parameterization.
+        
+        Returns:
+        list: A new list of velocities parameterized by the constant time interval.
+        """
+        # Convert input to numpy array for vectorized operations
+        v = np.array(velocities)
+        
+        # Handle zero velocities to avoid division by zero
+        v = np.maximum(v, 1e-2)  # Replace zeros with a small positive number
+        
+        # Calculate the times at which the original velocities were measured
+        times = np.cumsum(distance_interval / v)
+        
+        # Remove any potential inf or nan values
+        valid_indices = np.isfinite(times)
+        times = times[valid_indices]
+        v = v[valid_indices]
+        
+        if len(times) == 0:
+            return []  # Return empty list if all times were invalid
+        
+        # Create a new time array with constant time intervals
+        new_times = np.arange(0, times[-1], time_interval)
+        # Interpolate velocities at the new time points
+        new_velocities = np.interp(new_times, times, v)
+        
+        return new_velocities.tolist()
+    def mushingprufil(self, v_max, a_max, j_max, bezier_info, dd=0.0025):
+        # Calculate path length
+        curve_segments = []
+        total_path_length = 0
+        for curve in bezier_info:
+            if (len(curve) == 3):
+                curve_segments.append(createCurveSegments(curve[0], curve[2], curve[1]))
+            else:
+                curve_segments.append(createCurveSegments(curve[0], curve[3], curve[1], curve[2]))
+            total_path_length += curve_segments[-1][-1]
+        # Generate list of everything based on the path length
+        print("Path length: ", np.ceil(total_path_length/dd))
+        positions = []
+        velocities = [0] * ceil(total_path_length/dd)
+        accelerations = [0] * ceil(total_path_length/dd)
+        headings = []
+        times = []
+        nodes_map = [0] # Calculate nodes map (after start node) after we finish reparametizing the list to time
+        # Triple pass curve shi
+        current_curve = 0
+        current_points = bezier_info[current_curve]
+        current_segments = curve_segments[current_curve]
+
+        current_dist = 0
+        past_curve_distance_sum = 0
+
+        past_acceleration = 0
+
+        # TODO remove redundant current distance variable
+
+        # First smoothing pass, makes velocities continous when increasing.
+        timesum = 0
+        for i in range(0, ceil(total_path_length/dd)):
+            maximum_velocity = v_max
+            if (len(current_points) == 3): # Quadratic
+                maximum_velocity = self.distance_to_max_velocity(v_max, current_dist-past_curve_distance_sum, current_segments,
+                                                             current_points[0], current_points[1], current_points[2])
+            else: # Cubic
+                maximum_velocity = self.distance_to_max_velocity(v_max, current_dist-past_curve_distance_sum, current_segments,
+                                                current_points[0], current_points[1], current_points[2], current_points[3])
+            # print(maximum_velocity)
+            direction = np.sign(maximum_velocity - velocities[i-1])
+            dt = calculate_time_small_increment(dd, velocities[i-1], accelerations[i-1], direction*j_max,
+                                                maximum_velocity, a_max)
+            timesum += dt
+            desired_acceleration = (maximum_velocity - velocities[i-1]) / dt
+            max_accel_change = j_max * dt
+            if (desired_acceleration < 0):
+                accelerations[i] = max(max(desired_acceleration, past_acceleration - max_accel_change), -1*a_max)
+            else:
+                accelerations[i] = min(min(desired_acceleration, past_acceleration + max_accel_change), a_max)
+
+            past_acceleration = accelerations[i-1]
+            velocities[i] = (velocities[i-1] + accelerations[i-1] * dt)
+            current_dist += velocities[i]*dt
+            # if (i < 500):
+                # print(velocities[i], " ", accelerations[i], " ", max_accel_change, " ", j_max, " ", dt)
+            # print(velocities[i]*dt, " ", dd)
+            # print("INFO: ", current_dist, " ", velocities[i], " ", accelerations[i])
+            # print("Acceleration info: ", desired_acceleration, " ", accelerations[i])
+            # print("Time: ", timesum, " ", "Velocity: ", velocities[i])
+            
+            # Reset variables for new bezier curve
+            if (current_dist > current_segments[-1] + past_curve_distance_sum and
+                current_curve < len(bezier_info)-1): # 
+                current_curve += 1
+                current_points = bezier_info[current_curve]
+                current_segments = curve_segments[current_curve]
+
+                past_curve_distance_sum = current_dist
+
+        print("Velocity lengths: ", len(velocities))
+        # Reset variables for second smoothing pass
+        current_dist = past_curve_distance_sum + current_segments[-1]
+        current_curve = len(bezier_info)-1
+        past_curve_distance_sum = past_curve_distance_sum
+
+        current_segments = createCurveSegments(bezier_info[current_curve][0], bezier_info[current_curve][2], bezier_info[current_curve][1])
+        # IMPORTANT Velocity MUST end at 0 
+        velocities[-1] = 0
+        accelerations[-1] = 0
+
+
+        # Second smoothing path to make velocities continous going downwards
+        for i in range(len(velocities) - 2, -1, -1): # TODO This causes times to be off, fix that
+            # Set dt to a value based on how long it will take to cover x distance
+            maximum_velocity = v_max
+            if (len(bezier_info[current_curve]) == 3):
+                maximum_velocity = self.distance_to_max_velocity(v_max, current_dist-past_curve_distance_sum, current_segments,
+                                                             current_points[0], current_points[1], current_points[2])
+            else:
+                maximum_velocity = self.distance_to_max_velocity(v_max, current_dist-past_curve_distance_sum, current_segments,
+                                                current_points[0], current_points[1], current_points[2], current_points[3])
+            direction = np.sign(maximum_velocity - velocities[i-1])
+            dt = calculate_time_small_increment(dd, velocities[i+1], accelerations[i+1], direction*j_max,
+                                                maximum_velocity, a_max)
+            
+            desired_accel = (velocities[i]-velocities[i+1]) / dt
+            if (1750 < i < 3000):
+                print(desired_accel, " ", velocities[i], " ", velocities[i+1])
+            max_accel_change = j_max * dt
+            if (desired_accel < 0):
+                accelerations[i] = max(max(desired_accel, accelerations[i+1] - max_accel_change), -1*a_max)
+            else:
+                accelerations[i] = min(min(desired_accel, accelerations[i+1] + max_accel_change), a_max)
+
+            velocities[i] = velocities[i+1] + accelerations[i] * dt
+            current_dist -= velocities[i+1]*dt
+            # print(velocities[i+1]*dt, " ", dd)
+            # if (abs(i-len(velocities)) < 500):
+            #     print("INFO: ", current_dist, " ", past_curve_distance_sum, " ", accelerations[i], " ", velocities[i]-velocities[i+1])
+            # print("INFO: ", current_dist, " ", velocities[i], " ", accelerations[i])
+
+            # Reset variables
+            if (current_dist < past_curve_distance_sum
+                and current_curve > 0):
+                # print("Recomputing vars: ", past_curve_distance_sum, " ", current_dist, " ", current_curve)
+                current_curve -= 1
+                current_points = bezier_info[current_curve]
+                current_segments = curve_segments[current_curve]
+                past_curve_distance_sum -= current_segments[-1]
+                # print("Res: ", past_curve_distance_sum, " ", current_dist, " ", current_curve)
+                # current_dist = 0
+
+        # TODO Add loops here to smooth out acceleration list
+
+        # TODO Reparametize velocities and accelerations array based on time rather than distance
+        # Included, resize all lists
+        # velocities = self.convert_velocity_parameterization(velocities, dd, 0.0005)
+        print("Reparametized: ", len(velocities))
+        num_setpoints = len(velocities)
+        positions = [0]*num_setpoints
+        accelerations = [0]*num_setpoints
+        headings = [0]*num_setpoints
+        times = [0]*num_setpoints
+
+        # Reset variables for final loop
+        current_curve = 0
+        past_curve_distance_sum = 0
+
+        current_segments = createCurveSegments(bezier_info[current_curve][0], bezier_info[current_curve][2], bezier_info[current_curve][1])
+
+        # Final loops for calculating the following lists: positions, headings, and time_intervals
+        dt = 0.0005 # Standardize dt
+        for i in range(0, num_setpoints):
+            # TODO Replace these with the proper velocity and acceleration formulas based on jerk
+            positions[i] = (positions[i-1] + velocities[i-1]*dt)
+            accelerations[i] = ((velocities[i]-velocities[i-1])/dt)
+            times[i] = (times[i-1] + dt)
+            # print("Time: ", times[i])
+
+
+            if (len(bezier_info[current_curve]) == 3):
+                headings[i] = (getHeading(positions[i], current_segments, \
+                current_points[0], current_points[2], current_points[1]))
+            else:
+                headings[i] = (getHeading(positions[i], current_segments, \
+                current_points[0], current_points[2], current_points[3], current_points[1]))
+
+            current_dist = positions[i]
+
+            if (current_dist > current_segments[-1] + past_curve_distance_sum
+                and current_curve < len(bezier_info) - 1):
+                current_curve += 1
+                nodes_map.append(i)
+                past_curve_distance_sum = current_dist
+
+                current_points = bezier_info[current_curve]
+                current_segments = curve_segments[current_curve]
+
+        nodes_map.append(len(velocities))
+
+        return positions, velocities, accelerations, headings, times, nodes_map
+        
 
     def triple_pass_curve(self, v_max, a_max, j_max, dt, bezier_info):
         # Bezier info represents a list of bezier curve points with their length prolly
@@ -971,19 +1206,11 @@ class DrawingWidget(QWidget):
                 accelerations.append(max(desired_accel, past_acceleration - max_accel_change))
             else:
                 accelerations.append(min(desired_accel, past_acceleration + max_accel_change))
-            # accelerations.append(min(max(desired_accel, 
-            #                             past_acceleration - max_accel_change if i > 1 else -a_max, 
-            #                             -a_max), 
-            #                         past_acceleration + max_accel_change if i > 1 else a_max, 
-            #                         a_max))
+
             print(current_dist, " ", past_acceleration, " ", accelerations[i-1])
             past_acceleration = accelerations[i-1]
             velocities.append(velocities[i-1] + accelerations[i-1] * dt)
-            # velocities.append(maximum_velocity)
             current_dist += velocities[i]*dt
-
-            # positions.append(0)
-            # headings.append(0)
 
             if (current_dist > current_segments[-1] + past_curve_distance_sum):
                 current_curve += 1
@@ -1011,6 +1238,7 @@ class DrawingWidget(QWidget):
 
         # Backward pass for acceleration
         for i in range(len(velocities) - 2, -1, -1):
+            # Set dt to a value based on how long it will take to cover x distance
             maximum_velocity = v_max
             if (len(bezier_info[current_curve]) == 3):
                 maximum_velocity = self.distance_to_max_velocity(v_max, current_dist-past_curve_distance_sum, current_segments,
@@ -1020,7 +1248,6 @@ class DrawingWidget(QWidget):
                 maximum_velocity = self.distance_to_max_velocity(v_max, current_dist-past_curve_distance_sum, current_segments,
                                                              bezier_info[current_curve][0], bezier_info[current_curve][1], 
                                                              bezier_info[current_curve][2], bezier_info[current_curve][3])
-            # desired_accel = (velocities[i+1] - maximum_velocity) / dt
             desired_accel = (velocities[i]-velocities[i+1]) / dt
             max_accel_change = j_max * dt
             if (desired_accel < 0):
@@ -1061,7 +1288,7 @@ class DrawingWidget(QWidget):
 
         for i in range(1, len(velocities)):
             # TODO Replace these with the proper velocity and acceleration formulas based on jerk
-            velocities[i] = velocities[i-1] - accelerations[i-1] * dt
+            # velocities[i] = velocities[i-1] - accelerations[i-1] * dt
             positions.append(positions[i-1] + velocities[i-1]*dt)
             # print(positions[-1], " ", velocities[i-1]*dt)
             times.append(times[-1] + dt)
@@ -1113,7 +1340,7 @@ class DrawingWidget(QWidget):
                 bezier_info.append([data[0], data[2], data[3], data[1]])
 
         positions, velocities, accelerations, headings, times, nodes_map\
-        = self.triple_pass_curve(v_max, a_max, j_max, 0.0005, bezier_info)
+        = self.mushingprufil(v_max, a_max, j_max, bezier_info)
 
         self.all_positions = positions
         self.all_velocities = velocities
