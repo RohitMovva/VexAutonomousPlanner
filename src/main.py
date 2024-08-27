@@ -6,6 +6,7 @@ from pathlib import Path
 from PyQt6.QtWidgets import QApplication, QDialog, QLabel, QWidget, QVBoxLayout, QMenu, QInputDialog, QMainWindow, QTextEdit, QPushButton, QFileDialog, QDockWidget, QFormLayout, QSlider, QSpinBox, QLineEdit, QComboBox
 from PyQt6.QtGui import QPixmap, QMouseEvent, QPainter, QColor, QAction, QPen, QPainterPath, QFontDatabase
 from PyQt6.QtCore import Qt, QPoint, QLineF, QPointF, Qt
+import qdarktheme
 import numpy as np
 import matplotlib.pyplot as plt
 from math import sqrt, ceil
@@ -1817,6 +1818,7 @@ class DrawingWidget(QWidget):
                 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
+    qdarktheme.setup_theme()
     if getattr(sys, 'frozen', False):
         create_files()
         load_fonts()
