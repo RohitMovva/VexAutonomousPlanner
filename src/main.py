@@ -10,6 +10,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 from math import sqrt, ceil
 from distance_time_calculator import calculate_time_small_increment
+from bezier.quadratic_bezier import *
+from bezier.cubic_bezier import *
 
 def load_fonts():
     font_dir = os.path.join(os.path.dirname(__file__), 'fonts')
@@ -66,64 +68,8 @@ def solve_quartic(a, b, c, d):
 def point_to_array(p):
     return np.array([p.x(), p.y()])
 
-def quadratic_bezier_point(p0, p1, p2, t):
-    return (1-t)**2 * point_to_array(p0) + 2*(1-t)*t * point_to_array(p1) + t**2 * point_to_array(p2)
-
-def cubic_bezier_point(p0, p1, p2, p3, t):
-    return (1-t)**3 * point_to_array(p0) + 3*(1-t)**2*t * point_to_array(p1) + 3*(1-t)*t**2 * point_to_array(p2) + t**3 * point_to_array(p3)
-
-def quadratic_bezier_derivative(p0, p1, p2, t):
-    return 2 * ((1-t)*(point_to_array(p1)-point_to_array(p0)) + t*(point_to_array(p2)-point_to_array(p1)))
-
-def cubic_bezier_derivative(p0, p1, p2, p3, t):
-    return 3 * ((1-t)**2*(point_to_array(p1)-point_to_array(p0)) + 2*(1-t)*t*(point_to_array(p2)-point_to_array(p1)) + t**2*(point_to_array(p3)-point_to_array(p2)))
-
-def quadratic_bezier_second_derivative(p0, p1, p2):
-    return 2 * (point_to_array(p2) - 2*point_to_array(p1) + point_to_array(p0))
-
-def cubic_bezier_second_derivative(p0, p1, p2, p3, t):
-    return 6 * ((1-t)*(point_to_array(p2)-2*point_to_array(p1)+point_to_array(p0)) + t*(point_to_array(p3)-2*point_to_array(p2)+point_to_array(p1)))
-
-def calculate_curvature(first_derivative, second_derivative):
-    cross_product = np.cross(first_derivative, second_derivative)
-    return np.linalg.norm(cross_product) / (np.linalg.norm(first_derivative) ** 3)
-
-def quadratic_bezier_curvature(p0, p1, p2, t):
-    first_derivative = quadratic_bezier_derivative(p0, p1, p2, t)
-    second_derivative = quadratic_bezier_second_derivative(p0, p1, p2)
-    return calculate_curvature(first_derivative, second_derivative)
-
-def cubic_bezier_curvature(p0, p1, p2, p3, t):
-    first_derivative = cubic_bezier_derivative(p0, p1, p2, p3, t)
-    second_derivative = cubic_bezier_second_derivative(p0, p1, p2, p3, t)
-    return calculate_curvature(first_derivative, second_derivative)
-
 def max_speed_based_on_curvature(curvature, V_base, K):
     return V_base / (1 + K * curvature)
-
-
-# QUADRATIC
-def quadratic_bezier_point(P0, P1, P2, t):
-    x = (1 - t)**2 * P0.x() + 2 * (1 - t) * t * P1.x() + t**2 * P2.x()
-    y = (1 - t)**2 * P0.y() + 2 * (1 - t) * t * P1.y() + t**2 * P2.y()
-    return x, y
-
-def quad_bezier_angle(t, P0, P1, P2):
-    tangentX = (2*(1-t)*(P1.x()-P0.x())) + (2*t*(P2.x()-P1.x()))
-    tangentY = (2*(1-t)*(P1.y()-P0.y())) + (2*t*(P2.y()-P1.y()))
-    return -1*np.arctan2(tangentY, tangentX)*(180/np.pi)
-
-# CUBIC
-def cubic_bezier_point(P0, P1, P2, P3, t):
-    x = (1 - t)**3 * P0.x() + 3 * (1 - t)**2 * t * P1.x() + 3 * (1 - t) * t**2 * P2.x() + t**3 * P3.x()
-    y = (1 - t)**3 * P0.y() + 3 * (1 - t)**2 * t * P1.y() + 3 * (1 - t) * t**2 * P2.y() + t**3 * P3.y()
-    return x, y
-
-# 3(1- t)^2(P1 - P0) + 6(1 - t)t(P2 - P1) + 3t^2(P3 - P2)
-def cubic_bezier_angle(t, P0, P1, P2, P3):
-    tangentX = 3*(1-t)**2*(P1.x()-P0.x()) + 6*(1-t)*t*(P2.x()-P1.x()) + 3*t**2*(P3.x()-P2.x())
-    tangentY = 3*(1-t)**2*(P1.y()-P0.y()) + 6*(1-t)*t*(P2.y()-P1.y()) + 3*t**2*(P3.y()-P2.y())
-    return -1*np.arctan2(tangentY, tangentX)*(180/np.pi)
 
 def createCurveSegments(start, end, control1, control2=None):
     numsegments = 1001
@@ -997,6 +943,7 @@ class DrawingWidget(QWidget):
         new_velocities = np.interp(new_times, times, v)
         
         return new_velocities.tolist()
+    
     def mushingprufil(self, v_max, a_max, j_max, bezier_info, dd=0.0025):
         # Calculate path length
         curve_segments = []
@@ -1353,7 +1300,7 @@ class DrawingWidget(QWidget):
         # positions, headings, times = self.generate_all(velocities, 0.0005)
 
     def calculateScurveStuff(self, v_max=20, a_max=8, j_max=45):
-        return self.calculateMotionProfile()
+        # return self.calculateMotionProfile()
         self.all_time_intervals = []
         self.all_positions = []
         self.all_velocities = []
@@ -1376,10 +1323,11 @@ class DrawingWidget(QWidget):
             segment_data[1].append(segments)
             segment_length += segments[-1]
             print("SEGMENT LENGTH: ", len(segment_data[0]))
+            print(segment_data[1])
+            print(segment_data[0])
             print(self.parent.nodes[i+1].hasAction, " ", self.parent.nodes[i+1].isEndNode)
             if ((not self.parent.nodes[i+1].isEndNode) and (not self.parent.nodes[i+1].hasAction)):
                 continue
-            print(len(segment_data))
             time_intervals, positions, velocities, velocity_limits, accelerations, headings, nodes_map = self.generate_scurve_profile(segment_length, segment_data[1], segment_data[0],
                                                                                                                      v_max, a_max, j_max)
             # self.all_time_intervals.extend(time_intervals + (self.all_time_intervals[-1] if self.all_time_intervals else 0))
@@ -1621,6 +1569,7 @@ class DrawingWidget(QWidget):
         factor = 0.25
         self.path = QPainterPath(points[0])
         self.line_data = []
+        # self.control_points = []
         cp1 = None
         for p, current in enumerate(points[1:-1], 1):
             # previous segment
@@ -1638,6 +1587,7 @@ class DrawingWidget(QWidget):
 
             if p == 1:
                 self.line_data.append([self.path.currentPosition(), current, cp2])
+                
                 self.path.quadTo(cp2, current)
             else:
                 self.line_data.append([self.path.currentPosition(), current, cp1, cp2])
