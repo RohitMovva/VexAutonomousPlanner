@@ -13,6 +13,8 @@ from math import sqrt, ceil
 from distance_time_calculator import calculate_time_small_increment
 from bezier.quadratic_bezier import *
 from bezier.cubic_bezier import *
+from motion_profiling_v2 import motion_profile_generator
+
 
 def load_fonts():
     font_dir = os.path.join(os.path.dirname(__file__), 'fonts')
@@ -1305,7 +1307,7 @@ class DrawingWidget(QWidget):
         self.all_time_intervals = []
         self.all_positions = []
         self.all_velocities = []
-        self.all_velocity_limits = [] # Max velocity based on curvature at that point
+        # self.all_velocity_limits = [] # Max velocity based on curvature at that point
         self.all_accelerations = []
         self.all_headings = []
         self.all_nodes_map = [] # Represents index of node n in any of the above lists
@@ -1316,9 +1318,13 @@ class DrawingWidget(QWidget):
         print("POINT LEN: ", len(self.line_data))
         for i in range (0, len(self.line_data)):
             print(i)
-            line = self.line_data[i]
-            line.append(None) # Prevents out of range error
-            segments = createCurveSegments(line[0], line[1], line[2], line[3])
+            line = self.line_data[i][:]
+            # line.append(None) # Prevents out of range error
+            if (len(line) == 3):
+                segments = createCurveSegments(line[0], line[1], line[2])
+
+            else:
+                segments = createCurveSegments(line[0], line[1], line[2], line[3])
 
             segment_data[0].append(line)
             segment_data[1].append(segments)
@@ -1329,8 +1335,9 @@ class DrawingWidget(QWidget):
             print(self.parent.nodes[i+1].hasAction, " ", self.parent.nodes[i+1].isEndNode)
             if ((not self.parent.nodes[i+1].isEndNode) and (not self.parent.nodes[i+1].hasAction)):
                 continue
-            time_intervals, positions, velocities, velocity_limits, accelerations, headings, nodes_map = self.generate_scurve_profile(segment_length, segment_data[1], segment_data[0],
-                                                                                                                     v_max, a_max, j_max)
+            # time_intervals, positions, velocities, velocity_limits, accelerations, headings, nodes_map = self.generate_scurve_profile(segment_length, segment_data[1], segment_data[0],
+            #                                                                                                          v_max, a_max, j_max)
+            time_intervals, positions, velocities, accelerations, headings, nodes_map = motion_profile_generator.generate_motion_profile([], segment_data[0], segment_data[1], v_max, a_max, j_max)
             # self.all_time_intervals.extend(time_intervals + (self.all_time_intervals[-1] if self.all_time_intervals else 0))
             # print(time_intervals)
             if (self.all_time_intervals != []):
@@ -1339,7 +1346,7 @@ class DrawingWidget(QWidget):
                 self.all_time_intervals = time_intervals
             self.all_positions.extend([p + current_position for p in positions])
             self.all_velocities.extend(velocities)
-            self.all_velocity_limits.extend(velocity_limits)
+            # self.all_velocity_limits.extend(velocity_limits)
             self.all_accelerations.extend(accelerations)
             self.all_headings.extend(headings)
             self.all_nodes_map.extend((mapping+len(self.all_time_intervals)-len(time_intervals)) for mapping in nodes_map)
@@ -1719,7 +1726,7 @@ class DrawingWidget(QWidget):
             if (len(pts) < 4): # Quadratic
                 curvature = quadratic_bezier_curvature(pts[0], pts[2], pts[1], t_along_curve)
             else:
-                curvature = cubic_bezier_curvature(pts[0], pts[2], pts[3], pts[1], t_along_curve)
+                curvature = cubic_bezier_curvature(pts[0], pts[3], pts[1], pts[2], t_along_curve)
 
             adjusted_vmax = max_speed_based_on_curvature(curvature, original_vmax, K)
             # print(curvature, " " , adjusted_vmax)

@@ -1,42 +1,42 @@
 import numpy as np
 from bezier.quadratic_bezier import *
 from bezier.cubic_bezier import *
+from scipy.interpolate import interp1d
 
-def convert_velocity_parameterization(velocities, distance_interval, time_interval):
+
+def reparametrize_velocity(velocities, distance_interval, time_interval):
     """
-    Convert a list of velocities from constant distance parameterization to constant time parameterization.
+    Reparametrize a list of velocities from distance to time.
     
-    Args:
-    velocities (list): List of velocities, each measured after a constant distance interval.
-    distance_interval (float): The constant distance interval between velocity measurements.
-    time_interval (float): The desired constant time interval for the new parameterization.
-    
-    Returns:
-    list: A new list of velocities parameterized by the constant time interval.
+    :param velocities: List of velocities parametrized by distance
+    :param distance_interval: Distance between each velocity measurement
+    :param time_interval: Desired time interval for the output
+    :return: Tuple of (times, reparametrized_velocities)
     """
-    # Convert input to numpy array for vectorized operations
-    v = np.array(velocities)
+    # Calculate the distances at which velocities are given
+    distances = np.arange(len(velocities)) * distance_interval
+
+    # Calculate the cumulative time at each distance point
+    times = np.cumsum(distance_interval / np.array(velocities))
+
+    # Create an interpolation function for velocity vs. distance
+    velocity_interp = interp1d(distances, velocities, kind='linear', fill_value='extrapolate')
+
+    # Create a new distance array based on the desired time interval
+    total_time = times[-1]
+    new_times = np.arange(0, total_time, time_interval)
     
-    # Handle zero velocities to avoid division by zero
-    v = np.maximum(v, 1e-2)  # Replace zeros with a small positive number
-    
-    # Calculate the times at which the original velocities were measured
-    times = np.cumsum(distance_interval / v)
-    
-    # Remove any potential inf or nan values
-    valid_indices = np.isfinite(times)
-    times = times[valid_indices]
-    v = v[valid_indices]
-    
-    if len(times) == 0:
-        return []  # Return empty list if all times were invalid
-    
-    # Create a new time array with constant time intervals
-    new_times = np.arange(0, times[-1], time_interval)
-    # Interpolate velocities at the new time points
-    new_velocities = np.interp(new_times, times, v)
-    
-    return new_velocities.tolist()
+    # Calculate new distances for each time point
+    new_distances = np.zeros_like(new_times)
+    for i in range(1, len(new_times)):
+        # Use average velocity over the interval to estimate distance
+        avg_velocity = velocity_interp((new_distances[i-1] + new_distances[i-1] + distance_interval) / 2)
+        new_distances[i] = new_distances[i-1] + avg_velocity * time_interval
+
+    # Interpolate velocities at the new distance points
+    new_velocities = velocity_interp(new_distances)
+
+    return new_times, new_velocities
 
 def max_speed_based_on_curvature(curvature, V_base, K):
     return V_base / (1 + K * curvature)
