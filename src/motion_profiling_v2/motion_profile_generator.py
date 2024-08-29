@@ -1,24 +1,34 @@
-from math_utilities.newton_raphson_method import *
-from math_utilities.time_constant_acceleration import *
-from math_utilities.miscmethods import *
+from motion_profiling_v2.math_utilities.newton_raphson_method import *
+from motion_profiling_v2.math_utilities.time_constant_acceleration import *
+from motion_profiling_v2.math_utilities.miscmethods import *
 from bezier.quadratic_bezier import *
 from bezier.cubic_bezier import *
 
 def forward_backwards_smoothing(arr, max_step, depth, delta_dist):
     lower_order_mvs = [] # lower order motion variables (e.g. velocity and in some cases acceleration)
-    for i in range(depth):
+    for i in range(depth+1):
         lower_order_mvs.append(0)
 
     for i in range(0, len(arr)-1): # forward pass
         dt = 0
-        if (depth == 1):
+        if (depth == 0):
             dt = calculate_travel_time_constant_acceleration(delta_dist, 0, lower_order_mvs[0], max_step)
         else:
             dt = calculate_travel_time(delta_dist, 0, lower_order_mvs[0], lower_order_mvs[1], max_step)
+        # print(lower_order_mvs[0], " ", dt, end=" ")
+        if (i == 0):
+            print("FIRST EL INFO:")
+            print(dt)
+            print(max_step*dt)
+            
         adjusted_max_step = max_step * dt
         
         dif = arr[i+1]-arr[i]
         
+        if (i < 100):
+
+            print(dif, " ", adjusted_max_step)
+
         if (dif > adjusted_max_step): # If negative then we gotta go down anyways
             dif = adjusted_max_step
 
@@ -31,7 +41,7 @@ def forward_backwards_smoothing(arr, max_step, depth, delta_dist):
 
     for i in range(len(arr)-1, 0, -1): # backward pass nyoom
         dt = 0
-        if (depth == 1):
+        if (depth == 0):
             dt = calculate_travel_time_constant_acceleration(delta_dist, 0, lower_order_mvs[0], max_step)
         else:
             dt = calculate_travel_time(delta_dist, 0, lower_order_mvs[0], lower_order_mvs[1], max_step)
@@ -50,7 +60,7 @@ def forward_backwards_smoothing(arr, max_step, depth, delta_dist):
     
     return arr
 
-def generate_other_lists(velocities, control_points, segments, v_max, a_max, j_max, dt, K):
+def generate_other_lists(velocities, control_points, segments, dt):
     # Initialize lists to store positions and accelerations
     positions = [0]  # Assuming initial position is 0
     accelerations = []
@@ -77,43 +87,58 @@ def generate_other_lists(velocities, control_points, segments, v_max, a_max, j_m
     current_dist = 0
     current_segment = 0
     for i in range(len(velocities)):
-        if (current_dist > segments[current_segment]):
+        if (current_dist > segments[current_segment][-1] and current_dist < len(segments)-1):
             current_dist = 0
             current_segment += 1
+            nodes_map.append(i)
 
         t_along_curve = distToTime(current_dist, segments[current_segment])
-        headings.append(getHeading(t_along_curve, 
-            control_points[current_segment][0], control_points[current_segment][2], control_points[current_segment][3], control_points[current_segment][1]))
+        if (len(control_points[current_segment]) == 3):
+            headings.append(getHeading(t_along_curve, 
+                control_points[current_segment][0], control_points[current_segment][2], control_points[current_segment][1]))
+        else:
+            headings.append(getHeading(t_along_curve, 
+                control_points[current_segment][0], control_points[current_segment][3], control_points[current_segment][1], control_points[current_segment][2]))
         
         if (i > 0):
             current_dist += positions[i]-positions[i-1]
         else:
             current_dist = positions[i]
 
-    return time_intervals, positions, velocities, accelerations, headings
+    return time_intervals, positions, velocities, accelerations, headings, nodes_map
     
 
-def generate_motion_profile(setpoint_velocities, control_points, segments, v_max, a_max, j_max, dd=0.0025, K=10.0):
+def generate_motion_profile(setpoint_velocities, control_points, segments, v_max, a_max, j_max, dd=0.0025, dt=0.0005, K=10.0):
     curvelo = 0
     velocities = []
     accelerations = []
-    disttraveled = 0
 
-    while (curvelo < len(setpoint_velocities)):
-        velocities.append(-1)
-        accelerations.append(0)
+    # disttraveled = 0
+    # while (curvelo < len(setpoint_velocities)):
+    #     velocities.append(-1)
+    #     accelerations.append(0)
 
-        if (disttraveled >= setpoint_velocities[curvelo]):
-            velocities[-1] = setpoint_velocities[curvelo]
-            curvelo += 1
+    #     if (disttraveled >= setpoint_velocities[curvelo]):
+    #         velocities[-1] = setpoint_velocities[curvelo]
+    #         curvelo += 1
 
-        disttraveled += dd
-    
+    #     disttraveled += dd
+
+    totalDist = 0
+    for segmentList in segments:
+        totalDist += segmentList[-1]
+
+    curpos = 0
+    while (curpos <= totalDist):
+        velocities.append(0)
+
+        curpos += dd
+    # print(velocities)
 
     current_dist = 0
     current_segment = 0
     for i in range(0, len(velocities)):
-        if (current_dist > segments[current_segment]):
+        if (current_dist > segments[current_segment][-1]):
             current_dist = 0
             current_segment += 1
 
@@ -125,17 +150,24 @@ def generate_motion_profile(setpoint_velocities, control_points, segments, v_max
             curvature = cubic_bezier_curvature(control_points[current_segment][0], control_points[current_segment][2], control_points[current_segment][3], control_points[current_segment][1], t_along_curve)
 
         adjusted_vmax = max_speed_based_on_curvature(curvature, v_max, K)
+        # print(adjusted_vmax, end=" ")
 
         velocities[i] = adjusted_vmax
         current_dist += dd
 
+    # print(velocities)
     velocities[0] = 0
     velocities[-1] = 0
 
-    forward_backwards_smoothing(velocities, a_max, 1, dd)
+    forward_backwards_smoothing(velocities, a_max, 0, dd)
 
-    velocities = convert_velocity_parameterization(velocities, dd, dt=0.0005)
-
+    velocities[0] = velocities[1]
+    velocities[-1] = velocities[-2]
+    # velocities = velocities[1:]
+    velocities = reparametrize_velocity(velocities, dd, dt)
+    # print("VEWO: ", velocities[1], " ", v_max)
+    # print(0.025*v_max)
+    return generate_other_lists(velocities, control_points, segments, dt)
 
 
 
