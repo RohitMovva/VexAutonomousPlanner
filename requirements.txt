@@ -3,3 +3,5 @@ scipy
 numpy
 matplotlib
 pyyaml
+pyqtdarktheme
+darkdetect
