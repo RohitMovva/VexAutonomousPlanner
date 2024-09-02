@@ -1,3 +1,6 @@
+import math
+import numpy as np
+from bisect import bisect_left
 from motion_profiling_v2.math_utilities.newton_raphson_method import *
 from motion_profiling_v2.math_utilities.time_constant_acceleration import *
 from motion_profiling_v2.math_utilities.miscmethods import *
@@ -5,56 +8,21 @@ from bezier.quadratic_bezier import *
 from bezier.cubic_bezier import *
 
 def forward_backwards_smoothing(arr, max_step, depth, delta_dist):
-    lower_order_mvs = [] # lower order motion variables (e.g. velocity and in some cases acceleration)
-    for i in range(depth+1):
-        lower_order_mvs.append(0)
-
     for i in range(0, len(arr)-1): # forward pass
-        dt = 0
-        if (depth == 0):
-            dt = calculate_travel_time_constant_acceleration(delta_dist, 0, lower_order_mvs[0], max_step)
-        else:
-            dt = calculate_travel_time(delta_dist, 0, lower_order_mvs[0], lower_order_mvs[1], max_step)
-        # print(lower_order_mvs[0], " ", dt, end=" ")
-        if (i == 0):
-            print("FIRST EL INFO:")
-            print(dt)
-            print(max_step*dt)
-            
-        adjusted_max_step = max_step * dt
-        
+        adjusted_max_step = math.sqrt(arr[i]**2 + 2*max_step*delta_dist) - arr[i] # only works for trap
         dif = arr[i+1]-arr[i]
         
-        if (i < 100):
-
-            print(dif, " ", adjusted_max_step)
-
         if (dif > adjusted_max_step): # If negative then we gotta go down anyways
             dif = adjusted_max_step
-
-        # update motion variables based on dif
-        lower_order_mvs[0] += dif*dt # Velocity or Acceleration, depending on which one is directly calculated
-        if (depth == 1):
-            lower_order_mvs[1] = ((dif*dt)**2)/2 + lower_order_mvs[0]*dt # Calculate velocity if we have const jerk not accel
 
         arr[i+1] = arr[i] + dif
 
     for i in range(len(arr)-1, 0, -1): # backward pass nyoom
-        dt = 0
-        if (depth == 0):
-            dt = calculate_travel_time_constant_acceleration(delta_dist, 0, lower_order_mvs[0], max_step)
-        else:
-            dt = calculate_travel_time(delta_dist, 0, lower_order_mvs[0], lower_order_mvs[1], max_step)
-        adjusted_max_step = max_step * dt
+        adjusted_max_step = math.sqrt(arr[i]**2 + 2*max_step*delta_dist) - arr[i] # only works for trap
 
-        dif = arr[i] - arr[i-1]
+        dif = -1 * (arr[i-1] - arr[i])
         if (dif < -adjusted_max_step):
             dif = -adjusted_max_step
-
-        # update motion variables based on dif
-        lower_order_mvs[depth] += (-1*dif)*dt # Velocity or Acceleration, depending on which one is directly calculated
-        if (depth == 1):
-            lower_order_mvs[0] = (((-1*dif)*dt)**2)/2 + lower_order_mvs[0]*dt # Calculate velocity if we have const jerk not accel
 
         arr[i-1] = arr[i] - dif
     
@@ -106,23 +74,42 @@ def generate_other_lists(velocities, control_points, segments, dt):
             current_dist = positions[i]
 
     return time_intervals, positions, velocities, accelerations, headings, nodes_map
+
+def get_times(velocities, dd):
+    res = []
+
+    curr_t = 0
+    prev_v = 0
+    for i in range(len(velocities)):
+        
+        current_dt = 0
+        curr_accel = (velocities[i]**2 - prev_v**2)/(dd*2)
+        if (i > 0):
+            if (curr_accel > 1e-5):
+                current_dt = (velocities[i]-prev_v) / curr_accel
+            elif (prev_v > 1e-5):
+                current_dt = dd / velocities[i]
+        
+        curr_t += current_dt
+
+        res.append(curr_t)
+
+    return res
+
+def interpolate_velocity(velocities, times, tt):
+    place = bisect_left(times, tt)
+
+    if (place == 0):
+        return 0
     
+    new_velo = np.interp(tt, [times[place-1], times[place]], [velocities[place-1], velocities[place]])
+
+    return new_velo
 
 def generate_motion_profile(setpoint_velocities, control_points, segments, v_max, a_max, j_max, dd=0.0025, dt=0.0005, K=10.0):
     curvelo = 0
     velocities = []
     accelerations = []
-
-    # disttraveled = 0
-    # while (curvelo < len(setpoint_velocities)):
-    #     velocities.append(-1)
-    #     accelerations.append(0)
-
-    #     if (disttraveled >= setpoint_velocities[curvelo]):
-    #         velocities[-1] = setpoint_velocities[curvelo]
-    #         curvelo += 1
-
-    #     disttraveled += dd
 
     totalDist = 0
     for segmentList in segments:
@@ -161,13 +148,17 @@ def generate_motion_profile(setpoint_velocities, control_points, segments, v_max
 
     forward_backwards_smoothing(velocities, a_max, 0, dd)
 
-    velocities[0] = velocities[1]
-    velocities[-1] = velocities[-2]
-    # velocities = velocities[1:]
-    velocities = reparametrize_velocity(velocities, dd, dt)
-    # print("VEWO: ", velocities[1], " ", v_max)
-    # print(0.025*v_max)
-    return generate_other_lists(velocities, control_points, segments, dt)
+    time_stamps = get_times(velocities, dd)
+    path_time = time_stamps[-1]
+
+    time_steps = int(path_time / dt) + 1
+
+    new_velocities = []
+    for i in range(time_steps):
+        new_velo = interpolate_velocity(velocities, time_stamps, i*dt)
+        new_velocities.append(new_velo)    
+    
+    return generate_other_lists(new_velocities, control_points, segments, dt)
 
 
 

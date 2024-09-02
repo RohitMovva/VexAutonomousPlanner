@@ -1330,8 +1330,8 @@ class DrawingWidget(QWidget):
             segment_data[1].append(segments)
             segment_length += segments[-1]
             print("SEGMENT LENGTH: ", len(segment_data[0]))
-            print(segment_data[1])
-            print(segment_data[0])
+            # print(segment_data[1])
+            # print(segment_data[0])
             print(self.parent.nodes[i+1].hasAction, " ", self.parent.nodes[i+1].isEndNode)
             if ((not self.parent.nodes[i+1].isEndNode) and (not self.parent.nodes[i+1].hasAction)):
                 continue
