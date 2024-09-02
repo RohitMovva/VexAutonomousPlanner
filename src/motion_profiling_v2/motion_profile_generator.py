@@ -1,6 +1,6 @@
 import math
 import numpy as np
-from bisect import bisect_left
+from bisect import bisect_left # Binary Search
 from motion_profiling_v2.math_utilities.newton_raphson_method import *
 from motion_profiling_v2.math_utilities.time_constant_acceleration import *
 from motion_profiling_v2.math_utilities.miscmethods import *
@@ -8,7 +8,8 @@ from bezier.quadratic_bezier import *
 from bezier.cubic_bezier import *
 
 def forward_backwards_smoothing(arr, max_step, depth, delta_dist):
-    for i in range(0, len(arr)-1): # forward pass
+    for i in range(0, len(arr)-2): # forward pass
+        # TODO Figure out what this equation will look like for acceleration with jerk applied (derivative)
         adjusted_max_step = math.sqrt(arr[i]**2 + 2*max_step*delta_dist) - arr[i] # only works for trap
         dif = arr[i+1]-arr[i]
         
@@ -17,7 +18,7 @@ def forward_backwards_smoothing(arr, max_step, depth, delta_dist):
 
         arr[i+1] = arr[i] + dif
 
-    for i in range(len(arr)-1, 0, -1): # backward pass nyoom
+    for i in range(len(arr)-1, 1, -1): # backward pass nyoom
         adjusted_max_step = math.sqrt(arr[i]**2 + 2*max_step*delta_dist) - arr[i] # only works for trap
 
         dif = -1 * (arr[i-1] - arr[i])
@@ -49,8 +50,6 @@ def generate_other_lists(velocities, control_points, segments, dt):
     # Add the last acceleration (assuming constant acceleration for the last interval)
     accelerations.append(accelerations[-1])
 
-
-
     # Calculate headings
     current_dist = 0
     current_segment = 0
@@ -66,7 +65,7 @@ def generate_other_lists(velocities, control_points, segments, dt):
                 control_points[current_segment][0], control_points[current_segment][2], control_points[current_segment][1]))
         else:
             headings.append(getHeading(t_along_curve, 
-                control_points[current_segment][0], control_points[current_segment][3], control_points[current_segment][1], control_points[current_segment][2]))
+                control_points[current_segment][0], control_points[current_segment][2], control_points[current_segment][3], control_points[current_segment][1]))
         
         if (i > 0):
             current_dist += positions[i]-positions[i-1]
@@ -83,14 +82,15 @@ def get_times(velocities, dd):
     for i in range(len(velocities)):
         
         current_dt = 0
-        curr_accel = (velocities[i]**2 - prev_v**2)/(dd*2)
+        curr_accel = (velocities[i]**2 - prev_v**2)/(dd*2) # CORRECT FORMULA 
         if (i > 0):
-            if (curr_accel > 1e-5):
+            if (abs(curr_accel) > 1e-5):
                 current_dt = (velocities[i]-prev_v) / curr_accel
-            elif (prev_v > 1e-5):
+            elif (abs(prev_v) > 1e-5):
                 current_dt = dd / velocities[i]
         
         curr_t += current_dt
+        prev_v = velocities[i]
 
         res.append(curr_t)
 
@@ -101,15 +101,13 @@ def interpolate_velocity(velocities, times, tt):
 
     if (place == 0):
         return 0
-    
+
     new_velo = np.interp(tt, [times[place-1], times[place]], [velocities[place-1], velocities[place]])
 
     return new_velo
 
 def generate_motion_profile(setpoint_velocities, control_points, segments, v_max, a_max, j_max, dd=0.0025, dt=0.0005, K=10.0):
-    curvelo = 0
     velocities = []
-    accelerations = []
 
     totalDist = 0
     for segmentList in segments:
@@ -120,7 +118,6 @@ def generate_motion_profile(setpoint_velocities, control_points, segments, v_max
         velocities.append(0)
 
         curpos += dd
-    # print(velocities)
 
     current_dist = 0
     current_segment = 0
@@ -137,18 +134,17 @@ def generate_motion_profile(setpoint_velocities, control_points, segments, v_max
             curvature = cubic_bezier_curvature(control_points[current_segment][0], control_points[current_segment][2], control_points[current_segment][3], control_points[current_segment][1], t_along_curve)
 
         adjusted_vmax = max_speed_based_on_curvature(curvature, v_max, K)
-        # print(adjusted_vmax, end=" ")
 
         velocities[i] = adjusted_vmax
         current_dist += dd
 
-    # print(velocities)
     velocities[0] = 0
     velocities[-1] = 0
 
     forward_backwards_smoothing(velocities, a_max, 0, dd)
 
     time_stamps = get_times(velocities, dd)
+
     path_time = time_stamps[-1]
 
     time_steps = int(path_time / dt) + 1
@@ -156,7 +152,7 @@ def generate_motion_profile(setpoint_velocities, control_points, segments, v_max
     new_velocities = []
     for i in range(time_steps):
         new_velo = interpolate_velocity(velocities, time_stamps, i*dt)
-        new_velocities.append(new_velo)    
+        new_velocities.append(new_velo)
     
     return generate_other_lists(new_velocities, control_points, segments, dt)
 
