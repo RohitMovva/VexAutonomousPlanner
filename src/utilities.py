@@ -46,7 +46,7 @@ def setConfigValue(keyname, value):
                 yaml.safe_dump(config, file)
 
 def create_mpl_plot(xlist, ylist, width, height, title, xlabel, ylabel):
-    plt.figure(figsize=(12, 8))
+    plt.figure(figsize=(width, height))
 
     plt.subplot(3, 1, 1)
     plt.plot(xlist, ylist)
