@@ -134,6 +134,7 @@ def generate_motion_profile(setpoint_velocities, control_points, segments, v_max
         velocities.append(0)
 
         curpos += dd
+
     print("INFO: ", totalDist, " ", len(segments))
     current_dist = 0
     current_segment = 0
