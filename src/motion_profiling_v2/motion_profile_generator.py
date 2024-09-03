@@ -7,6 +7,7 @@ from bezier.cubic_bezier import *
 def max_speed_based_on_curvature(curvature, V_base, K):
     return V_base / (1 + K * curvature)
 
+
 def distToTime(distance, segments):
     l = 0
     r = len(segments)-1
