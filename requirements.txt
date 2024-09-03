@@ -15,3 +15,4 @@ pyqtdarktheme==2.1.0
 python-dateutil==2.9.0.post0
 PyYAML==6.0.2
 six==1.16.0
+PySide6
