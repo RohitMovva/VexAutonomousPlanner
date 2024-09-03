@@ -182,3 +182,6 @@ class Node(QWidget):
     
     def insert_node_after(self):
         self.gui_instance.add_node(self.x+5, self.y+5, self.gui_instance.index_of(self)+1)
+
+    def __str__(self):
+        return "[" + str(self.isStartNode) + " " + str(self.isEndNode) + " " + str(self.hasAction) + "]"

@@ -80,6 +80,7 @@ class DrawingWidget(QWidget):
 
             if ((not self.parent.nodes[i+1].isEndNode) and (not self.parent.nodes[i+1].hasAction)):
                 continue
+
             time_intervals, positions, velocities, accelerations, headings, nodes_map = motion_profile_generator.generate_motion_profile([], segment_data[0], segment_data[1], v_max, a_max, j_max)
 
             if (self.all_time_intervals != []):

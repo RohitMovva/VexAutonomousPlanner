@@ -163,8 +163,10 @@ class AutonomousPlannerGUIManager(QMainWindow):
 
     def add_node(self, x, y, pos=-1):
         node = Node(x, y, self.central_widget, gui_instance=self)
+        if (pos == -1 and self.end_node != None):
+            pos = len(self.nodes)-1
         if (pos == -1):
-            self.nodes.append(node)
+                self.nodes.append(node)
         else:
             self.nodes.insert(pos, node)
         node.show()
@@ -196,6 +198,16 @@ class AutonomousPlannerGUIManager(QMainWindow):
             self.central_widget.update()
         self.start_node = node
 
+        # Move start node to start of nodes list
+        nodeindex = 0
+        for i in range(len(self.nodes)):
+            if self.nodes[i] == self.start_node:
+                nodeindex = i
+
+        temp = self.nodes[0]
+        self.nodes[0] = self.start_node
+        self.nodes[nodeindex] = temp
+
     def clear_start_node(self):
         self.start_node = None
 
@@ -205,6 +217,16 @@ class AutonomousPlannerGUIManager(QMainWindow):
             self.end_node.update()
             self.central_widget.update()
         self.end_node = node
+
+        # Move end node to end of nodes list
+        nodeindex = 0
+        for i in range(len(self.nodes)):
+            if self.nodes[i] == self.end_node:
+                nodeindex = i
+
+        temp = self.nodes[-1]
+        self.nodes[-1] = self.end_node
+        self.nodes[nodeindex] = temp
 
     def clear_end_node(self):
         self.end_node = None
