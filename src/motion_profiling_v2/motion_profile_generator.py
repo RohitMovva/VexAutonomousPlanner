@@ -1,11 +1,26 @@
 import math
 import numpy as np
 from bisect import bisect_left # Binary Search
-from motion_profiling_v2.math_utilities.newton_raphson_method import *
-from motion_profiling_v2.math_utilities.time_constant_acceleration import *
-from motion_profiling_v2.math_utilities.miscmethods import *
 from bezier.quadratic_bezier import *
 from bezier.cubic_bezier import *
+
+def max_speed_based_on_curvature(curvature, V_base, K):
+    return V_base / (1 + K * curvature)
+
+def distToTime(distance, segments):
+    l = 0
+    r = len(segments)-1
+    mid = None
+    while (l <= r):
+        mid = int(l + (r-l)/2)
+        if (segments[mid] < distance):
+            l = mid+1
+        elif (segments[mid] > distance):
+            r = mid-1
+        else:
+            break
+        
+    return mid/1000.0
 
 def forward_backwards_smoothing(arr, max_step, depth, delta_dist):
     for i in range(0, len(arr)-2): # forward pass
@@ -54,19 +69,20 @@ def generate_other_lists(velocities, control_points, segments, dt):
     current_dist = 0
     current_segment = 0
     for i in range(len(velocities)):
-        if (current_dist > segments[current_segment][-1] and current_dist < len(segments)-1):
+        if (current_dist > segments[current_segment][-1] and current_segment < len(segments)-1):
             current_dist = 0
             current_segment += 1
             nodes_map.append(i)
 
         t_along_curve = distToTime(current_dist, segments[current_segment])
-        if (len(control_points[current_segment]) == 3):
-            headings.append(getHeading(t_along_curve, 
-                control_points[current_segment][0], control_points[current_segment][2], control_points[current_segment][1]))
-        else:
-            headings.append(getHeading(t_along_curve, 
-                control_points[current_segment][0], control_points[current_segment][2], control_points[current_segment][3], control_points[current_segment][1]))
-        
+        if (len(control_points[current_segment]) == 3): # Quadratic Bezier curve
+            headings.append(
+                quad_bezier_angle(t_along_curve, control_points[current_segment][0], control_points[current_segment][2], control_points[current_segment][1]))
+
+        else: # Cubic
+            headings.append(
+                cubic_bezier_angle(t_along_curve, control_points[current_segment][0], control_points[current_segment][2], control_points[current_segment][3], control_points[current_segment][1]))
+
         if (i > 0):
             current_dist += positions[i]-positions[i-1]
         else:
@@ -155,27 +171,3 @@ def generate_motion_profile(setpoint_velocities, control_points, segments, v_max
         new_velocities.append(new_velo)
     
     return generate_other_lists(new_velocities, control_points, segments, dt)
-
-
-
-"""
-have constraint in seconds
-have dif in distance
-
-converting from distance to seconds is complicated
-converting from seconds to distance is easy
-
-finding continous velo: building trapezoidal
-starting velocity
-CONSTANT acceleartion
-
-finding continous acceleration: smoothing into s curve
-starting velocity <- finding time it takes to move a distance so velo still matters
-starting accelration
-constant jerk
-
-how do we find velocity acceleration and jerk in our smoothing function?
-
-might pass extra parameter representing depth
-calculate lower order motion variables based on applied variable (acceleration or jerk)
-"""
