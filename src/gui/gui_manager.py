@@ -7,7 +7,7 @@ from PyQt6.QtCore import Qt
 from bezier.quadratic_bezier import *
 from bezier.cubic_bezier import *
 from gui.click_listener import *
-from gui.canvas import *
+from gui.path import *
 from gui.settings import *
 from gui.node import *
 from utilities import *
@@ -80,7 +80,7 @@ class AutonomousPlannerGUIManager(QMainWindow):
         self.max_jerk = getConfigValue('max_jerk')
 
         # Image and path widget
-        self.central_widget = DrawingWidget(self)
+        self.central_widget = PathWidget(self)
         self.setCentralWidget(self.central_widget)
         self.central_widget.setFixedSize(700, 700)
 

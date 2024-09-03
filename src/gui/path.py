@@ -31,7 +31,7 @@ def createCurveSegments(start, end, control1, control2=None):
         ox, oy = cx, cy
     return segments
 
-class DrawingWidget(QWidget):
+class PathWidget(QWidget):
     def __init__(self, parent=None, image_path=resource_path('../assets/V5RC-HighStakes-Match-2000x2000.png')):
         super().__init__(parent)
         self.parent = parent

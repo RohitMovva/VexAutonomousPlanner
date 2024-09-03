@@ -18,6 +18,7 @@ def get_system_fonts():
     return font_paths
 
 # Determine the icon path based on the operating system
+icon_path = ''
 if sys.platform == "win32":
     icon_path = 'assets/windows_icon.ico'  # Windows icon
 else:
