@@ -37,7 +37,7 @@ def forward_backwards_smoothing(arr, max_step, depth, delta_dist):
     for i in range(len(arr)-1, 1, -1): # backward pass nyoom
         adjusted_max_step = math.sqrt(arr[i]**2 + 2*max_step*delta_dist) - arr[i] # only works for trap
 
-        dif = -1 * (arr[i-1] - arr[i])
+        dif = arr[i] - arr[i-1]
         if (dif < -adjusted_max_step):
             dif = -adjusted_max_step
 
@@ -128,6 +128,7 @@ def generate_motion_profile(setpoint_velocities, control_points, segments, v_max
 
     totalDist = 0
     for segmentList in segments:
+
         totalDist += segmentList[-1]
 
     curpos = 0
@@ -159,8 +160,7 @@ def generate_motion_profile(setpoint_velocities, control_points, segments, v_max
     velocities[0] = 0
     velocities[-1] = 0
 
-    forward_backwards_smoothing(velocities, a_max, 0, dd)
-
+    velocities = forward_backwards_smoothing(velocities, a_max, 0, dd)
     time_stamps = get_times(velocities, dd)
 
     path_time = time_stamps[-1]

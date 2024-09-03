@@ -129,10 +129,13 @@ class PathWidget(QWidget):
         # self.control_points = []
         cp1 = None
         for p, current in enumerate(points[1:-1], 1):
+            print(p, " ", self.parent.nodes[p].isReverseNode)
             # previous segment
             source = QLineF(points[p - 1], current)
             # next segment
             target = QLineF(current, points[p + 1])
+
+            
             targetAngle = target.angleTo(source)
             if targetAngle > 180:
                 angle = (source.angle() + source.angleTo(target) / 2) % 360
@@ -142,13 +145,27 @@ class PathWidget(QWidget):
             revTarget = QLineF.fromPolar(source.length() * factor, angle + 180).translated(current)
             cp2 = revTarget.p2()
 
+            
             if p == 1:
-                self.line_data.append([self.path.currentPosition(), current, cp2])
-                
-                self.path.quadTo(cp2, current)
+                if (self.parent.nodes[p].isReverseNode):
+                    print("Making Linear")
+                    self.path.lineTo(cp1)
+                elif (self.parent.nodes[p-1].isReverseNode):
+                    print("Making Linear but reverse")
+                    self.path.lineTo(current)
+                else:
+                    self.line_data.append([self.path.currentPosition(), current, cp2])
+                    self.path.quadTo(cp2, current)
             else:
-                self.line_data.append([self.path.currentPosition(), current, cp1, cp2])
-                self.path.cubicTo(cp1, cp2, current)
+                if (self.parent.nodes[p].isReverseNode):
+                    print(p, " MAking quadratic")
+                    self.path.quadTo(cp1, current)
+                elif (self.parent.nodes[p-1].isReverseNode):
+                    print(p, " MAking quadratic but like in reverse")
+                    self.path.quadTo(cp2, current)
+                else:
+                    self.line_data.append([self.path.currentPosition(), current, cp1, cp2])
+                    self.path.cubicTo(cp1, cp2, current)
             revSource = QLineF.fromPolar(target.length() * factor, angle).translated(current)
             cp1 = revSource.p2()
 

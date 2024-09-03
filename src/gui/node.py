@@ -21,6 +21,7 @@ class Node(QWidget):
         self.isEndNode = False
         self.spinIntake = False
         self.clampGoal = False
+        self.isReverseNode = False
         self.turn = 0
         self.wait_time = 0
         self.hasAction = (self.spinIntake or self.clampGoal or self.turn != 0 or self.wait_time != 0)
@@ -97,6 +98,11 @@ class Node(QWidget):
         clamp_action.triggered.connect(self.toggle_clamp_goal)
         attributes_menu.addAction(clamp_action)
 
+        reverse_action = QAction('Reverse', self, checkable=True)
+        reverse_action.setChecked(self.isReverseNode)
+        reverse_action.triggered.connect(self.toggle_reverse)
+        attributes_menu.addAction(reverse_action)
+
         turn_action = QAction('Turn Value: ' + str(self.turn), self)
         turn_action.triggered.connect(self.set_turn)
         attributes_menu.addAction(turn_action)
@@ -157,6 +163,11 @@ class Node(QWidget):
         self.clampGoal = not self.clampGoal
         self.hasAction = (self.spinIntake or self.clampGoal or self.turn != 0 or self.wait_time != 0)
         print(f"Clamp Goal: {self.clampGoal}")
+
+    def toggle_reverse(self):
+        self.isReverseNode = not self.isReverseNode
+        self.hasAction = (self.spinIntake or self.clampGoal or self.isReverseNode or self.turn != 0 or self.wait_time != 0)
+        print(f"Reverse Node: {self.isReverseNode}")
 
     def set_turn(self):
         value, ok = QInputDialog.getInt(self, "Set Turn", "Enter turn (0-360):", self.turn, 0, 360)
