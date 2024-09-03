@@ -36,7 +36,6 @@ class SaveNodesDialog(QDialog):
         clipboard.setText(self.text_edit.toPlainText())
 
 
-
 class AutonomousPlannerGUIManager(QMainWindow):
     def __init__(self):
         super().__init__()
