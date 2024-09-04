@@ -150,9 +150,6 @@ class PathWidget(QWidget):
                 if (self.parent.nodes[p].isReverseNode):
                     print("Making Linear")
                     self.path.lineTo(cp1)
-                elif (self.parent.nodes[p-1].isReverseNode):
-                    print("Making Linear but reverse")
-                    self.path.lineTo(current)
                 else:
                     self.line_data.append([self.path.currentPosition(), current, cp2])
                     self.path.quadTo(cp2, current)
@@ -172,5 +169,9 @@ class PathWidget(QWidget):
         # The final curve, that joins to the last point
         if (cp1 == None):
             return
-        self.line_data.append([self.path.currentPosition(), points[-1], cp1])
-        self.path.quadTo(cp1, points[-1])
+        if (self.parent.nodes[-2].isReverseNode):
+            print("Making Linear but reverse")
+            self.path.lineTo(points[-1])
+        else:
+            self.line_data.append([self.path.currentPosition(), points[-1], cp1])
+            self.path.quadTo(cp1, points[-1])
