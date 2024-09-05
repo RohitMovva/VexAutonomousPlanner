@@ -123,6 +123,7 @@ class PathWidget(QWidget):
 
     # From @musicamante on stackoverflow rewrite later
     def buildPath(self, points):
+        print("Building path...")
         factor = 0.25
         self.path = QPainterPath(points[0])
         self.line_data = []
@@ -148,17 +149,18 @@ class PathWidget(QWidget):
             
             if p == 1:
                 if (self.parent.nodes[p].isReverseNode):
-                    print("Making Linear")
-                    self.path.lineTo(cp1)
+                    # print("Making Linear")
+                    self.path.lineTo(current)
+                    # self.line_data.append[self.path.currentPosition(), current, cp2]
                 else:
                     self.line_data.append([self.path.currentPosition(), current, cp2])
                     self.path.quadTo(cp2, current)
             else:
                 if (self.parent.nodes[p].isReverseNode):
-                    print(p, " MAking quadratic")
+                    # print(p, " MAking quadratic")
                     self.path.quadTo(cp1, current)
                 elif (self.parent.nodes[p-1].isReverseNode):
-                    print(p, " MAking quadratic but like in reverse")
+                    # print(p, " MAking quadratic but like in reverse")
                     self.path.quadTo(cp2, current)
                 else:
                     self.line_data.append([self.path.currentPosition(), current, cp1, cp2])
@@ -170,7 +172,7 @@ class PathWidget(QWidget):
         if (cp1 == None):
             return
         if (self.parent.nodes[-2].isReverseNode):
-            print("Making Linear but reverse")
+            # print("Making Linear but reverse")
             self.path.lineTo(points[-1])
         else:
             self.line_data.append([self.path.currentPosition(), points[-1], cp1])
