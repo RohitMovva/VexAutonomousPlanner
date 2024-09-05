@@ -64,7 +64,7 @@ class AutonomousPlannerGUIManager(QMainWindow):
 
 
         routes_path = getConfigValue('routes_folder_path')
-        if autonomous_path == None:
+        if routes_path == None:
             routes_path = QFileDialog.getExistingDirectory(self, "Select Routes Folder", 
                                                       str(Path(os.getcwd()).parent.parent.absolute()))
             
