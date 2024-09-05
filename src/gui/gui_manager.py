@@ -2,7 +2,7 @@ import os
 import json
 from pathlib import Path
 from PyQt6.QtWidgets import QApplication, QDialog, QVBoxLayout, QInputDialog, QMainWindow, QTextEdit, QPushButton, QFileDialog
-from PyQt6.QtGui import QAction
+from PyQt6.QtGui import QAction, QIcon
 from PyQt6.QtCore import Qt
 from bezier.quadratic_bezier import *
 from bezier.cubic_bezier import *
@@ -41,6 +41,7 @@ class AutonomousPlannerGUIManager(QMainWindow):
         super().__init__()
 
         self.setWindowTitle('Path Planner') # Totally not inspired by Pronounce that
+        self.setWindowIcon(QIcon(resource_path('../assets/windows_icon.ico')))
         self.layout = QVBoxLayout()
 
         self.nodes = []
@@ -96,6 +97,7 @@ class AutonomousPlannerGUIManager(QMainWindow):
         self.layout.addWidget(self.label)
 
         self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self.settings_dock_widget)
+
 
         self.update()
         self.create_menu_bar()
