@@ -98,7 +98,7 @@ class PathWidget(QWidget):
             segment_length = 0
 
         self.all_nodes_map.append(len(self.all_time_intervals))
-
+        print(self.all_nodes_map)
         return self.all_time_intervals, self.all_positions, self.all_velocities, self.all_accelerations, self.all_headings, self.all_nodes_map
 
     def paintEvent(self, event):
@@ -150,6 +150,7 @@ class PathWidget(QWidget):
             if p == 1:
                 if (self.parent.nodes[p].isReverseNode):
                     # print("Making Linear")
+                    self.line_data.append([self.path.currentPosition(), current])
                     self.path.lineTo(current)
                     # self.line_data.append[self.path.currentPosition(), current, cp2]
                 else:
@@ -158,9 +159,11 @@ class PathWidget(QWidget):
             else:
                 if (self.parent.nodes[p].isReverseNode):
                     # print(p, " MAking quadratic")
+                    self.line_data.append([self.path.currentPosition(), current, cp1])
                     self.path.quadTo(cp1, current)
                 elif (self.parent.nodes[p-1].isReverseNode):
                     # print(p, " MAking quadratic but like in reverse")
+                    self.line_data.append([self.path.currentPosition(), current, cp2])
                     self.path.quadTo(cp2, current)
                 else:
                     self.line_data.append([self.path.currentPosition(), current, cp1, cp2])
@@ -173,6 +176,7 @@ class PathWidget(QWidget):
             return
         if (self.parent.nodes[-2].isReverseNode):
             # print("Making Linear but reverse")
+            self.line_data.append([self.path.currentPosition(), current])
             self.path.lineTo(points[-1])
         else:
             self.line_data.append([self.path.currentPosition(), points[-1], cp1])

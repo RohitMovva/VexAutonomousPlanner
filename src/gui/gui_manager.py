@@ -274,6 +274,7 @@ class AutonomousPlannerGUIManager(QMainWindow):
                 [
                     int(node.spinIntake),
                     int(node.clampGoal),
+                    int(node.isReverseNode),
                     node.turn,
                     node.wait_time
                 ]
@@ -345,8 +346,9 @@ class AutonomousPlannerGUIManager(QMainWindow):
                 node.isEndNode = bool(node_data[3])
                 node.spinIntake = bool(node_data[4])
                 node.clampGoal = bool(node_data[5])
-                node.turn = node_data[6]
-                node.wait_time = node_data[7]
+                node.isReverseNode = bool(node_data[6])
+                node.turn = node_data[7]
+                node.wait_time = node_data[8]
                 self.nodes.append(node)
                 node.show()
 
@@ -361,6 +363,7 @@ class AutonomousPlannerGUIManager(QMainWindow):
                 int(node.isEndNode),
                 int(node.spinIntake),
                 int(node.clampGoal),
+                int(node.isReverseNode),
                 node.turn,
                 node.wait_time
             ]

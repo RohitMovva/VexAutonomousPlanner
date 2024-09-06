@@ -51,7 +51,7 @@ def generate_other_lists(velocities, control_points, segments, dt):
     accelerations = []
     time_intervals = [i*dt for i in range(0, len(velocities))]
     headings = []
-    nodes_map = []
+    nodes_map = [0]
 
     # Calculate positions
     for i in range(1, len(velocities)):
@@ -70,10 +70,12 @@ def generate_other_lists(velocities, control_points, segments, dt):
     current_dist = 0
     current_segment = 0
     for i in range(len(velocities)):
-        if (current_dist > segments[current_segment][-1] and current_segment < len(segments)-1):
+        if (current_dist >= segments[current_segment][-1] and current_segment < len(segments)-1):
+            # print("NEW THINGY: ", current_dist, " ", current_segment)
             current_dist = 0
             current_segment += 1
-            nodes_map.append(i)
+            if (current_segment < len(segments)-1):
+                nodes_map.append(i)
 
         t_along_curve = distToTime(current_dist, segments[current_segment])
         if (len(control_points[current_segment]) == 3): # Quadratic Bezier curve
@@ -88,6 +90,9 @@ def generate_other_lists(velocities, control_points, segments, dt):
             current_dist += positions[i]-positions[i-1]
         else:
             current_dist = positions[i]
+
+    nodes_map.append(len(velocities))
+    # print("NODES MAP: ", nodes_map)
 
     return time_intervals, positions, velocities, accelerations, headings, nodes_map
 
@@ -137,7 +142,6 @@ def generate_motion_profile(setpoint_velocities, control_points, segments, v_max
 
         curpos += dd
 
-    print("INFO: ", totalDist, " ", len(segments))
     current_dist = 0
     current_segment = 0
     for i in range(0, len(velocities)):
