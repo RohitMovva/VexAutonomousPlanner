@@ -24,7 +24,6 @@ class Node(QWidget):
         self.isReverseNode = False
         self.turn = 0
         self.wait_time = 0
-        self.hasAction = (self.spinIntake or self.clampGoal or self.turn != 0 or self.wait_time != 0)
         self.setFixedSize(10, 10)
         self.move(x-5, y-5)
         self.dragging = False
@@ -38,7 +37,7 @@ class Node(QWidget):
             painter.setBrush(QColor("green"))
         elif self.isEndNode:
             painter.setBrush(QColor("red"))
-        elif self.hasAction:
+        elif self.has_action():
             painter.setBrush(QColor("#1338BE"))
         else:
             painter.setBrush(QColor("#1F456E"))
@@ -154,33 +153,31 @@ class Node(QWidget):
         self.gui_instance.update_lines()
         print(f"End Node: {self.isEndNode}")
 
+    def has_action(self):
+        return self.spinIntake or self.clampGoal or self.isReverseNode or self.turn != 0 or self.wait_time != 0
+
     def toggle_spin_intake(self):
         self.spinIntake = not self.spinIntake
-        self.hasAction = (self.spinIntake or self.clampGoal or self.turn != 0 or self.wait_time != 0)
         print(f"Spin Intake: {self.spinIntake}")
 
     def toggle_clamp_goal(self):
         self.clampGoal = not self.clampGoal
-        self.hasAction = (self.spinIntake or self.clampGoal or self.turn != 0 or self.wait_time != 0)
         print(f"Clamp Goal: {self.clampGoal}")
 
     def toggle_reverse(self):
         self.isReverseNode = not self.isReverseNode
-        self.hasAction = (self.spinIntake or self.clampGoal or self.isReverseNode or self.turn != 0 or self.wait_time != 0)
         print(f"Reverse Node: {self.isReverseNode}")
 
     def set_turn(self):
         value, ok = QInputDialog.getInt(self, "Set Turn", "Enter turn (0-360):", self.turn, 0, 360)
         if ok:
             self.turn = value
-            self.hasAction = (self.spinIntake or self.clampGoal or self.turn != 0 or self.wait_time != 0)
             print(f"Turn set to: {self.turn}")
 
     def set_wait(self):
         value, ok = QInputDialog.getInt(self, "Set Wait Time", "Enter time (seconds):", self.wait_time, 0)
         if ok:
             self.wait_time = value
-            self.hasAction = (self.spinIntake or self.clampGoal or self.turn != 0 or self.wait_time != 0)
             print(f"Wait time set to: {self.wait_time}")
 
     def delete_node(self):
@@ -195,4 +192,4 @@ class Node(QWidget):
         self.gui_instance.add_node(self.x+5, self.y+5, self.gui_instance.index_of(self)+1)
 
     def __str__(self):
-        return "[" + str(self.isStartNode) + " " + str(self.isEndNode) + " " + str(self.hasAction) + "]"
+        return "[" + str(self.isStartNode) + " " + str(self.isEndNode) + " " + str(self.has_action) + "]"

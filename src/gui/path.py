@@ -78,7 +78,7 @@ class PathWidget(QWidget):
             segment_data[1].append(segments)
             segment_length += segments[-1]
 
-            if ((not self.parent.nodes[i+1].isEndNode) and (not self.parent.nodes[i+1].hasAction)):
+            if ((not self.parent.nodes[i+1].isEndNode) and (not self.parent.nodes[i+1].has_action())):
                 continue
 
             time_intervals, positions, velocities, accelerations, headings, nodes_map = motion_profile_generator.generate_motion_profile([], segment_data[0], segment_data[1], v_max, a_max, j_max)

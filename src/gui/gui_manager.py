@@ -347,7 +347,6 @@ class AutonomousPlannerGUIManager(QMainWindow):
                 node.clampGoal = bool(node_data[5])
                 node.turn = node_data[6]
                 node.wait_time = node_data[7]
-                node.hasAction = (node.spinIntake or node.clampGoal or node.turn != 0 or node.wait_time != 0)
                 self.nodes.append(node)
                 node.show()
 
