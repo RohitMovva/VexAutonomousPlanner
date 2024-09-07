@@ -124,14 +124,12 @@ def interpolate_velocity(velocities, times, tt):
     return new_velo
 
 def generate_motion_profile(setpoint_velocities, control_points, segments, v_max, a_max, j_max, dd=0.0025, dt=0.0005, K=15.0):
-    
     velocities = []
 
     totalDist = 0
     for segmentList in segments:
 
         totalDist += segmentList[-1]
-    print(totalDist)
     curpos = 0
     while (curpos <= totalDist):
         velocities.append(0)

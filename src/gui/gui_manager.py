@@ -382,7 +382,6 @@ class AutonomousPlannerGUIManager(QMainWindow):
 
     def fill_template(self, nodes_data):  
         # Create the string to insert
-        print("NODES DATA LEN: ", len(nodes_data))
         stringified = []
         for i in range(0, len(nodes_data)):
             if (len(nodes_data[i]) > 2):

@@ -122,7 +122,7 @@ class PathWidget(QWidget):
 
     # From @musicamante on stackoverflow rewrite later
     def buildPath(self, points):
-        print("Building path...")
+        # print("Building path...")
         factor = 0.25
         self.path = QPainterPath(points[0])
         self.line_data = []
