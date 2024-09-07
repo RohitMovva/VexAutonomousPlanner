@@ -98,7 +98,6 @@ class PathWidget(QWidget):
             segment_length = 0
 
         self.all_nodes_map.append(len(self.all_time_intervals))
-        print(self.all_nodes_map)
         return self.all_time_intervals, self.all_positions, self.all_velocities, self.all_accelerations, self.all_headings, self.all_nodes_map
 
     def paintEvent(self, event):
@@ -127,10 +126,8 @@ class PathWidget(QWidget):
         factor = 0.25
         self.path = QPainterPath(points[0])
         self.line_data = []
-        # self.control_points = []
         cp1 = None
         for p, current in enumerate(points[1:-1], 1):
-            print(p, " ", self.parent.nodes[p].isReverseNode)
             # previous segment
             source = QLineF(points[p - 1], current)
             # next segment
@@ -138,38 +135,23 @@ class PathWidget(QWidget):
 
             
             targetAngle = target.angleTo(source)
-            # if (self.parent.nodes[p].isReverseNode):
-            #     targetAngle = 90
-            print(source.angleTo(target))
-            print(target.angleTo(source))
-            if targetAngle > 180:
-                angle = (source.angle() + source.angleTo(target) / 2) % 360
+            if (self.parent.nodes[p].isReverseNode):
+                angle = targetAngle/2
+            elif targetAngle > 180:
+                angle = (source.angle() + (360-targetAngle) / 2) % 360
             else:
-                angle = (target.angle() + target.angleTo(source) / 2) % 360
+                angle = (target.angle() + targetAngle / 2) % 360
+            if (self.parent.nodes[p].isReverseNode):
+                revTarget = QLineF.fromPolar(source.length() * factor, angle).translated(current)
+            else:
+                revTarget = QLineF.fromPolar(source.length() * factor, angle + 180).translated(current)
 
-            revTarget = QLineF.fromPolar(source.length() * factor, angle + 180).translated(current)
             cp2 = revTarget.p2()
-
             
             if p == 1:
-                # if (self.parent.nodes[p].isReverseNode):
-                #     # print("Making Linear")
-                #     self.line_data.append([self.path.currentPosition(), current])
-                #     self.path.lineTo(current)
-                #     # self.line_data.append[self.path.currentPosition(), current, cp2]
-                # else:
                 self.line_data.append([self.path.currentPosition(), current, cp2])
                 self.path.quadTo(cp2, current)
             else:
-                # if (self.parent.nodes[p].isReverseNode):
-                #     # print(p, " MAking quadratic")
-                #     self.line_data.append([self.path.currentPosition(), current, cp1])
-                #     self.path.quadTo(cp1, current)
-                # elif (self.parent.nodes[p-1].isReverseNode):
-                    # print(p, " MAking quadratic but like in reverse")
-                    # self.line_data.append([self.path.currentPosition(), current, cp2])
-                    # self.path.quadTo(cp2, current)
-                # else:
                 self.line_data.append([self.path.currentPosition(), current, cp1, cp2])
                 self.path.cubicTo(cp1, cp2, current)
             revSource = QLineF.fromPolar(target.length() * factor, angle).translated(current)
@@ -178,10 +160,6 @@ class PathWidget(QWidget):
         # The final curve, that joins to the last point
         if (cp1 == None):
             return
-        # if (self.parent.nodes[-2].isReverseNode):
-        #     # print("Making Linear but reverse")
-        #     self.line_data.append([self.path.currentPosition(), current])
-        #     self.path.lineTo(points[-1])
-        # else:
+
         self.line_data.append([self.path.currentPosition(), points[-1], cp1])
         self.path.quadTo(cp1, points[-1])

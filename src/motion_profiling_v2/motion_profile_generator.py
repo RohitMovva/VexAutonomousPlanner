@@ -71,7 +71,6 @@ def generate_other_lists(velocities, control_points, segments, dt):
     current_segment = 0
     for i in range(len(velocities)):
         if (current_dist >= segments[current_segment][-1] and current_segment < len(segments)-1):
-            # print("NEW THINGY: ", current_dist, " ", current_segment)
             current_dist = 0
             current_segment += 1
             nodes_map.append(i)
@@ -172,7 +171,5 @@ def generate_motion_profile(setpoint_velocities, control_points, segments, v_max
     for i in range(time_steps):
         new_velo = interpolate_velocity(velocities, time_stamps, i*dt)
         new_velocities.append(new_velo)
-
-    print(len(new_velocities))
     
     return generate_other_lists(new_velocities, control_points, segments, dt)
