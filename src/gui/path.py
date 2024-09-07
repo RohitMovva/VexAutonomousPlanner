@@ -53,7 +53,7 @@ class PathWidget(QWidget):
         self.image = QPixmap(new_path)
         self.update()
     
-    def calculateScurveStuff(self, v_max=20, a_max=8, j_max=45):
+    def calculateScurveStuff(self, v_max, a_max, j_max):
         # Clear lists
         self.all_time_intervals = []
         self.all_positions = []

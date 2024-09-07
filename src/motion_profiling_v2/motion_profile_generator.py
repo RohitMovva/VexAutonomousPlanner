@@ -74,8 +74,7 @@ def generate_other_lists(velocities, control_points, segments, dt):
             # print("NEW THINGY: ", current_dist, " ", current_segment)
             current_dist = 0
             current_segment += 1
-            if (current_segment < len(segments)-1):
-                nodes_map.append(i)
+            nodes_map.append(i)
 
         t_along_curve = distToTime(current_dist, segments[current_segment])
         if (len(control_points[current_segment]) == 3): # Quadratic Bezier curve
@@ -90,9 +89,6 @@ def generate_other_lists(velocities, control_points, segments, dt):
             current_dist += positions[i]-positions[i-1]
         else:
             current_dist = positions[i]
-
-    nodes_map.append(len(velocities))
-    # print("NODES MAP: ", nodes_map)
 
     return time_intervals, positions, velocities, accelerations, headings, nodes_map
 
@@ -128,14 +124,15 @@ def interpolate_velocity(velocities, times, tt):
 
     return new_velo
 
-def generate_motion_profile(setpoint_velocities, control_points, segments, v_max, a_max, j_max, dd=0.0025, dt=0.0005, K=10.0):
+def generate_motion_profile(setpoint_velocities, control_points, segments, v_max, a_max, j_max, dd=0.0025, dt=0.0005, K=15.0):
+    
     velocities = []
 
     totalDist = 0
     for segmentList in segments:
 
         totalDist += segmentList[-1]
-
+    print(totalDist)
     curpos = 0
     while (curpos <= totalDist):
         velocities.append(0)
@@ -175,5 +172,7 @@ def generate_motion_profile(setpoint_velocities, control_points, segments, v_max
     for i in range(time_steps):
         new_velo = interpolate_velocity(velocities, time_stamps, i*dt)
         new_velocities.append(new_velo)
+
+    print(len(new_velocities))
     
     return generate_other_lists(new_velocities, control_points, segments, dt)

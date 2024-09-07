@@ -266,7 +266,7 @@ class AutonomousPlannerGUIManager(QMainWindow):
         nodes_data = []
         nodes_map = []
         if (len(self.nodes) > 2 and self.start_node and self.end_node):
-            time_intervals, positions, velocities, accelerations, headings, nodes_map = self.central_widget.calculateScurveStuff()
+            time_intervals, positions, velocities, accelerations, headings, nodes_map = self.central_widget.calculateScurveStuff(self.max_velocity, self.max_acceleration, self.max_jerk)
             for i in range(0, len(time_intervals), 50): # Every 25ms save data
                 nodes_data.append([velocities[i], headings[i]])
 
@@ -280,7 +280,6 @@ class AutonomousPlannerGUIManager(QMainWindow):
                 ]
                 for node in self.nodes
             ]
-        print(nodes_map)
         print(len(nodes_map), len(nodes_actions))
         for i in range(0, len(nodes_map)):
             nodes_data.insert(int(nodes_map[i]/50), nodes_actions[i])
@@ -383,6 +382,7 @@ class AutonomousPlannerGUIManager(QMainWindow):
 
     def fill_template(self, nodes_data):  
         # Create the string to insert
+        print("NODES DATA LEN: ", len(nodes_data))
         stringified = []
         for i in range(0, len(nodes_data)):
             if (len(nodes_data[i]) > 2):
@@ -394,7 +394,7 @@ class AutonomousPlannerGUIManager(QMainWindow):
                 stringified[-1] += f"}}"
             else:
                 stringified.append(f"{{{nodes_data[i][0]}, {nodes_data[i][1]}}}")
-
+        # print(stringified)
         # pairs = [f"{{{v}, {h}}}" for v, h in nodes_data]
         insertion = f"std::vector<std::vector<float>> {self.current_working_file} = {{{', '.join(stringified)}}};\n"
         
@@ -408,6 +408,7 @@ class AutonomousPlannerGUIManager(QMainWindow):
             for i, line in enumerate(content):
                 if line.strip().startswith(f"std::vector<std::vector<float>> {self.current_working_file} ="):
                     content[i] = insertion
+                    # print("INSERTED: ", content[i])
                     inserted = True
                     break
             if not inserted:
@@ -430,6 +431,13 @@ class AutonomousPlannerGUIManager(QMainWindow):
             ]
         
         # Write the updated content to routes.h
+        # print(content, " ", self.routes_header_path)
+        # f = open(self.routes_header_path, "a")
+        # f.writelines(content)
+        # f.close()
+
+        # f = open(self.routes_header_path, "r")
+        # print(f.read())
         with open(self.routes_header_path, "w") as routes_file:
             routes_file.writelines(content)
 
@@ -455,7 +463,7 @@ class AutonomousPlannerGUIManager(QMainWindow):
     def position_graph(self):
         self.central_widget.calculateScurveStuff(self.max_velocity, self.max_acceleration, self.max_jerk)
 
-        create_mpl_plot(self.central_widget.all_time_intervals, self.central_widget.all_velocities, 12, 8, "Position Profile", "Time (s)", "Position (ft)")
+        create_mpl_plot(self.central_widget.all_time_intervals, self.central_widget.all_positions, 12, 8, "Position Profile", "Time (s)", "Position (ft)")
 
     def velocity_graph(self):
         self.central_widget.calculateScurveStuff(self.max_velocity, self.max_acceleration, self.max_jerk)
@@ -465,9 +473,9 @@ class AutonomousPlannerGUIManager(QMainWindow):
     def acceleration_graph(self):
         self.central_widget.calculateScurveStuff(self.max_velocity, self.max_acceleration, self.max_jerk)
 
-        create_mpl_plot(self.central_widget.all_time_intervals, self.central_widget.all_velocities, 12, 8, "Acceleration Profile", "Time (s)", "Acceleration (ft/s²)")
+        create_mpl_plot(self.central_widget.all_time_intervals, self.central_widget.all_accelerations, 12, 8, "Acceleration Profile", "Time (s)", "Acceleration (ft/s²)")
 
     def heading_graph(self):
         self.central_widget.calculateScurveStuff(self.max_velocity, self.max_acceleration, self.max_jerk)
 
-        create_mpl_plot(self.central_widget.all_time_intervals, self.central_widget.all_velocities, 12, 8, "Heading Profile", "Time (s)", "Heading (degrees)")
+        create_mpl_plot(self.central_widget.all_time_intervals, self.central_widget.all_headings, 12, 8, "Heading Profile", "Time (s)", "Heading (degrees)")
