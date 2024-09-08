@@ -3,5 +3,3 @@ dist/
 src/test.py
 __pycache__/
 env/
-routes/
-config.yaml

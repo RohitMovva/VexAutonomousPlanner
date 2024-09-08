@@ -1,0 +1,3 @@
+max_acceleration: 5
+max_jerk: 45
+max_velocity: 4
