@@ -2,6 +2,5 @@ build/
 dist/
 src/test.py
 __pycache__/
-config.yaml
 env/
 routes/
