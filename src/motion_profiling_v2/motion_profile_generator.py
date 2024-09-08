@@ -123,7 +123,28 @@ def interpolate_velocity(velocities, times, tt):
 
     return new_velo
 
-def generate_motion_profile(setpoint_velocities, control_points, segments, v_max, a_max, j_max, dd=0.0025, dt=0.0005, K=15.0):
+def get_wheel_velocities(velocity, curvature, track_width):
+    # Credit to robotsquiggles for this math
+    omega = velocity * curvature
+
+    return (velocity - (track_width / 2) * omega, velocity + (track_width / 2) * omega)
+
+def limit_velocity(velocity, v_max, curvature, track_width):
+    wheel_velocities = get_wheel_velocities(velocity, curvature, track_width)
+
+    left_velocity = wheel_velocities[0]
+    right_velocity = wheel_velocities[1]
+
+    max_velocity = max(left_velocity, right_velocity)
+    if (max_velocity > v_max):
+        left_velocity = (left_velocity / max_velocity) * v_max
+        right_velocity = (right_velocity / max_velocity) * v_max
+
+    return (left_velocity + right_velocity) / 2 # average of both velocities
+
+
+
+def generate_motion_profile(setpoint_velocities, control_points, segments, v_max, a_max, j_max, track_width, dd=0.0025, dt=0.0005, K=15.0):
     velocities = []
 
     totalDist = 0
@@ -149,8 +170,12 @@ def generate_motion_profile(setpoint_velocities, control_points, segments, v_max
             curvature = quadratic_bezier_curvature(control_points[current_segment][0], control_points[current_segment][2], control_points[current_segment][1], t_along_curve)
         else:
             curvature = cubic_bezier_curvature(control_points[current_segment][0], control_points[current_segment][2], control_points[current_segment][3], control_points[current_segment][1], t_along_curve)
-
-        adjusted_vmax = max_speed_based_on_curvature(curvature, v_max, K)
+        # print("Curvature: ", curvature)
+        curvature *= (12/700) # Change from pixels to feet
+        # adjusted_vmax = max_speed_based_on_curvature(curvature, v_max, K)
+        
+        adjusted_vmax = limit_velocity(v_max, v_max, curvature, track_width)
+        print("STuff:", curvature, " ", adjusted_vmax)
 
         velocities[i] = adjusted_vmax
         current_dist += dd

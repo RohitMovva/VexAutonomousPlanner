@@ -79,6 +79,8 @@ class AutonomousPlannerGUIManager(QMainWindow):
         self.max_acceleration = getConfigValue('max_acceleration')
         self.max_jerk = getConfigValue('max_jerk')
 
+        self.track_width = getConfigValue('track_width')
+
         # Image and path widget
         self.central_widget = PathWidget(self)
         self.setCentralWidget(self.central_widget)
@@ -266,7 +268,7 @@ class AutonomousPlannerGUIManager(QMainWindow):
         nodes_data = []
         nodes_map = []
         if (len(self.nodes) > 2 and self.start_node and self.end_node):
-            time_intervals, positions, velocities, accelerations, headings, nodes_map = self.central_widget.calculateScurveStuff(self.max_velocity, self.max_acceleration, self.max_jerk)
+            time_intervals, positions, velocities, accelerations, headings, nodes_map = self.central_widget.calculateScurveStuff(self.max_velocity, self.max_acceleration, self.max_jerk, self.track_width)
             for i in range(0, len(time_intervals), 50): # Every 25ms save data
                 nodes_data.append([velocities[i], headings[i]])
 
@@ -460,21 +462,21 @@ class AutonomousPlannerGUIManager(QMainWindow):
 
 
     def position_graph(self):
-        self.central_widget.calculateScurveStuff(self.max_velocity, self.max_acceleration, self.max_jerk)
+        self.central_widget.calculateScurveStuff(self.max_velocity, self.max_acceleration, self.max_jerk, self.track_width)
 
         create_mpl_plot(self.central_widget.all_time_intervals, self.central_widget.all_positions, 12, 8, "Position Profile", "Time (s)", "Position (ft)")
 
     def velocity_graph(self):
-        self.central_widget.calculateScurveStuff(self.max_velocity, self.max_acceleration, self.max_jerk)
+        self.central_widget.calculateScurveStuff(self.max_velocity, self.max_acceleration, self.max_jerk, self.track_width)
 
         create_mpl_plot(self.central_widget.all_time_intervals, self.central_widget.all_velocities, 12, 8, "Velocity Profile", "Time (s)", "Velocity (ft/s)")
 
     def acceleration_graph(self):
-        self.central_widget.calculateScurveStuff(self.max_velocity, self.max_acceleration, self.max_jerk)
+        self.central_widget.calculateScurveStuff(self.max_velocity, self.max_acceleration, self.max_jerk, self.track_width)
 
         create_mpl_plot(self.central_widget.all_time_intervals, self.central_widget.all_accelerations, 12, 8, "Acceleration Profile", "Time (s)", "Acceleration (ft/s²)")
 
     def heading_graph(self):
-        self.central_widget.calculateScurveStuff(self.max_velocity, self.max_acceleration, self.max_jerk)
+        self.central_widget.calculateScurveStuff(self.max_velocity, self.max_acceleration, self.max_jerk, self.track_width)
 
         create_mpl_plot(self.central_widget.all_time_intervals, self.central_widget.all_headings, 12, 8, "Heading Profile", "Time (s)", "Heading (degrees)")

@@ -53,7 +53,7 @@ class PathWidget(QWidget):
         self.image = QPixmap(new_path)
         self.update()
     
-    def calculateScurveStuff(self, v_max, a_max, j_max):
+    def calculateScurveStuff(self, v_max, a_max, j_max, track_width):
         # Clear lists
         self.all_time_intervals = []
         self.all_positions = []
@@ -81,7 +81,7 @@ class PathWidget(QWidget):
             if ((not self.parent.nodes[i+1].isEndNode) and (not self.parent.nodes[i+1].has_action())):
                 continue
 
-            time_intervals, positions, velocities, accelerations, headings, nodes_map = motion_profile_generator.generate_motion_profile([], segment_data[0], segment_data[1], v_max, a_max, j_max)
+            time_intervals, positions, velocities, accelerations, headings, nodes_map = motion_profile_generator.generate_motion_profile([], segment_data[0], segment_data[1], v_max, a_max, j_max, track_width)
 
             if (self.all_time_intervals != []):
                 self.all_time_intervals.extend([time + self.all_time_intervals[-1] for time in time_intervals])
@@ -135,12 +135,27 @@ class PathWidget(QWidget):
 
             
             targetAngle = target.angleTo(source)
+            print(targetAngle)
             if (self.parent.nodes[p].isReverseNode):
-                angle = targetAngle/2
+                # if (targetAngle > 180): targetAngle -= 180
+                # if (targetAngle > 180):
+                #     targetAngle -= 180
+
+                # angle = targetAngle/2
+
+                
+                if targetAngle > 180:
+                    angle = (source.angle() + 90 + (targetAngle - 180) / 2) % 360
+                else:
+                    angle = (target.angle() - 90 + (targetAngle) / 2) % 360
+
+            
             elif targetAngle > 180:
-                angle = (source.angle() + (360-targetAngle) / 2) % 360
+                angle = (source.angle() + source.angleTo(target) / 2) % 360
             else:
-                angle = (target.angle() + targetAngle / 2) % 360
+                angle = (target.angle() + target.angleTo(source) / 2) % 360
+
+            print(angle)
             if (self.parent.nodes[p].isReverseNode):
                 revTarget = QLineF.fromPolar(source.length() * factor, angle).translated(current)
             else:
