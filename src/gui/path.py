@@ -135,27 +135,19 @@ class PathWidget(QWidget):
 
             
             targetAngle = target.angleTo(source)
-            print(targetAngle)
-            if (self.parent.nodes[p].isReverseNode):
-                # if (targetAngle > 180): targetAngle -= 180
-                # if (targetAngle > 180):
-                #     targetAngle -= 180
-
-                # angle = targetAngle/2
-
-                
+            turnVal = self.parent.nodes[p].turn
+            if (self.parent.nodes[p].turn):
+                angle = source.angle()
+            elif (self.parent.nodes[p].isReverseNode):
                 if targetAngle > 180:
                     angle = (source.angle() + 90 + (targetAngle - 180) / 2) % 360
                 else:
                     angle = (target.angle() - 90 + (targetAngle) / 2) % 360
-
-            
             elif targetAngle > 180:
                 angle = (source.angle() + source.angleTo(target) / 2) % 360
             else:
                 angle = (target.angle() + target.angleTo(source) / 2) % 360
 
-            print(angle)
             if (self.parent.nodes[p].isReverseNode):
                 revTarget = QLineF.fromPolar(source.length() * factor, angle).translated(current)
             else:
@@ -169,7 +161,7 @@ class PathWidget(QWidget):
             else:
                 self.line_data.append([self.path.currentPosition(), current, cp1, cp2])
                 self.path.cubicTo(cp1, cp2, current)
-            revSource = QLineF.fromPolar(target.length() * factor, angle).translated(current)
+            revSource = QLineF.fromPolar(target.length() * factor, angle + turnVal).translated(current)
             cp1 = revSource.p2()
 
         # The final curve, that joins to the last point

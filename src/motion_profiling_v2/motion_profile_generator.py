@@ -83,12 +83,13 @@ def generate_other_lists(velocities, control_points, segments, dt):
         else: # Cubic
             headings.append(
                 cubic_bezier_angle(t_along_curve, control_points[current_segment][0], control_points[current_segment][2], control_points[current_segment][3], control_points[current_segment][1]))
+        print(current_segment, i, headings[-1])
 
         if (i > 0):
             current_dist += positions[i]-positions[i-1]
         else:
             current_dist = positions[i]
-
+    print(nodes_map)
     return time_intervals, positions, velocities, accelerations, headings, nodes_map
 
 def get_times(velocities, dd):
@@ -144,7 +145,7 @@ def limit_velocity(velocity, v_max, curvature, track_width):
 
 
 
-def generate_motion_profile(setpoint_velocities, control_points, segments, v_max, a_max, j_max, track_width, dd=0.0025, dt=0.0005, K=15.0):
+def generate_motion_profile(setpoint_velocities, control_points, segments, v_max, a_max, j_max, track_width, dd=0.0025, dt=0.005, K=15.0): # dt=0.025
     velocities = []
 
     totalDist = 0
@@ -175,7 +176,6 @@ def generate_motion_profile(setpoint_velocities, control_points, segments, v_max
         
         curvature *= 700/12 # Change from pixels to feet
         adjusted_vmax = limit_velocity(v_max, v_max, curvature, track_width)
-        print("STuff:", curvature, " ", adjusted_vmax)
 
         velocities[i] = adjusted_vmax
         current_dist += dd

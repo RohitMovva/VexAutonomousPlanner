@@ -269,7 +269,7 @@ class AutonomousPlannerGUIManager(QMainWindow):
         nodes_map = []
         if (len(self.nodes) > 2 and self.start_node and self.end_node):
             time_intervals, positions, velocities, accelerations, headings, nodes_map = self.central_widget.calculateScurveStuff(self.max_velocity, self.max_acceleration, self.max_jerk, self.track_width)
-            for i in range(0, len(time_intervals), 50): # Every 25ms save data
+            for i in range(0, len(time_intervals), 5): # Every 25ms save data
                 nodes_data.append([velocities[i], headings[i]])
 
         nodes_actions = [
@@ -284,8 +284,8 @@ class AutonomousPlannerGUIManager(QMainWindow):
             ]
         print(len(nodes_map), len(nodes_actions))
         for i in range(0, len(nodes_map)):
-            nodes_data.insert(int(nodes_map[i]/50), nodes_actions[i])
-
+            nodes_data.insert(int(nodes_map[i]/5)+i, nodes_actions[i])
+        print(nodes_data)
         self.fill_template(nodes_data)
         with open(full_path, 'w') as file:
             file.write(nodes_string)
