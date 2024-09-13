@@ -12,9 +12,9 @@ class Node(QWidget):
         self.y = y
         print(x, y)
         # Scale pixel value down to account for the extra padding that isn't part of the field on either side, scale to between 0-1, subtract 0.5 to center and turn into inches
-        self.scale = 700/2000
-        self.absX = ((self.x * (self.scale*2000-self.scale*34*2)/(self.scale*2000)) / (self.scale*2000-self.scale*34*2) - 0.5) * 12**2
-        self.absY = ((self.y * (self.scale*2000-self.scale*34*2)/(self.scale*2000)) / (self.scale*2000-self.scale*34*2) - 0.5) * 12**2
+        self.scale = 700
+        self.absX = ((self.x / (self.scale)) - 0.5) * 12**2
+        self.absY = ((self.y / (self.scale)) - 0.5) * 12**2
 
         self.gui_instance = gui_instance
         self.isStartNode = False

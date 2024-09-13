@@ -1,9 +1,9 @@
 import os
 import json
 from pathlib import Path
-from PyQt6.QtWidgets import QApplication, QDialog, QVBoxLayout, QInputDialog, QMainWindow, QTextEdit, QPushButton, QFileDialog
-from PyQt6.QtGui import QAction, QIcon
-from PyQt6.QtCore import Qt
+from PyQt6.QtWidgets import QApplication, QDialog, QVBoxLayout, QInputDialog, QMainWindow, QTextEdit, QPushButton, QFileDialog, QGraphicsScene, QGraphicsView
+from PyQt6.QtGui import QAction, QIcon, QKeySequence, QTransform, QShortcut
+from PyQt6.QtCore import Qt, pyqtSlot
 from bezier.quadratic_bezier import *
 from bezier.cubic_bezier import *
 from gui.click_listener import *
@@ -37,8 +37,9 @@ class SaveNodesDialog(QDialog):
 
 
 class AutonomousPlannerGUIManager(QMainWindow):
-    def __init__(self):
-        super().__init__()
+    factor = 1.5
+    def __init__(self, parent=None):
+        super(AutonomousPlannerGUIManager, self).__init__(parent)
 
         self.setWindowTitle('Path Planner') # Totally not inspired by Pronounce that
         self.setWindowIcon(QIcon(resource_path('../assets/windows_icon.ico')))
@@ -81,10 +82,38 @@ class AutonomousPlannerGUIManager(QMainWindow):
 
         self.track_width = getConfigValue('track_width')
 
+        # self._scene = QGraphicsScene(self)
+        # self._view = QGraphicsView(self._scene)
+
+        # self._diedrico = Diedrico()
+        # self._diedrico.setFixedSize(2000, 2000)
+        # self._scene.addWidget(self._diedrico)
+
+        # self.setCentralWidget(self._view)
+
         # Image and path widget
         self.central_widget = PathWidget(self)
-        self.setCentralWidget(self.central_widget)
+
         self.central_widget.setFixedSize(700, 700)
+        # self._scene.addWidget(self.central_widget)
+
+        self.setCentralWidget(self.central_widget)
+
+        # self.shortcut = QShortcut(QKeySequence("Ctrl+O"), self)
+        # self.shortcut.activated.connect(self.zoom_in)
+        # QShortcut(
+        #     QKeySequence(Qt.Key_Plus),
+        #     self._view,
+        #     context=Qt.WidgetShortcut,
+        #     activated=self.zoom_in,
+        # )
+
+        # QShortcut(
+        #     QKeySequence(Qt.Key_Minus),
+        #     self._view,
+        #     context=Qt.WidgetShortcut,
+        #     activated=self.zoom_out,
+        # )
 
         # Settings Dock Widget
         self.settings_dock_widget = SettingsDockWidget(self.max_velocity, self.max_acceleration, self.max_jerk, self)
@@ -100,10 +129,27 @@ class AutonomousPlannerGUIManager(QMainWindow):
 
         self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self.settings_dock_widget)
 
-
         self.update()
         self.create_menu_bar()
 
+    # @pyqtSlot()
+    # def zoom_in(self):
+    #     scale_tr = QTransform()
+    #     scale_tr.scale(AutonomousPlannerGUIManager.factor, AutonomousPlannerGUIManager.factor)
+
+    #     tr = self._view.transform() * scale_tr
+    #     self._view.setTransform(tr)
+
+    # @pyqtSlot()
+    # def zoom_out(self):
+    #     scale_tr = QTransform()
+    #     scale_tr.scale(AutonomousPlannerGUIManager.factor, AutonomousPlannerGUIManager.factor)
+
+    #     scale_inverted, invertible = scale_tr.inverted()
+
+    #     if invertible:
+    #         tr = self._view.transform() * scale_inverted
+    #         self._view.setTransform(tr)
 
     def create_menu_bar(self):
         menu_bar = self.menuBar()

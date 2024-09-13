@@ -1,10 +1,11 @@
-from PyQt6.QtWidgets import QWidget
+from PyQt6.QtWidgets import QWidget, QLabel
 from PyQt6.QtGui import QPixmap, QPainter, QColor, QPen, QPainterPath
 from PyQt6.QtCore import Qt, QLineF, QPointF, Qt
 from math import sqrt
 from bezier.quadratic_bezier import *
 from bezier.cubic_bezier import *
 from motion_profiling_v2 import motion_profile_generator
+from gui.image_viewer import *
 from utilities import *
 
 def createCurveSegments(start, end, control1, control2=None):
@@ -39,6 +40,15 @@ class PathWidget(QWidget):
         self.image = QPixmap(image_path) if image_path else None
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
 
+        self.viewer = PhotoViewer(self)
+        self.viewer.coordinatesChanged.connect(self.handleCoords)
+        self.labelCoords = QLabel(self)
+        self.labelCoords.setAlignment(
+            Qt.AlignmentFlag.AlignRight |
+            Qt.AlignmentFlag.AlignCenter)
+
+        self.viewer.setPhoto(self.image)
+
         self.all_time_intervals = []
         self.all_positions = []
         self.all_velocities = []
@@ -48,6 +58,12 @@ class PathWidget(QWidget):
 
         self.path = None
         self.line_data = []
+
+    def handleCoords(self, point):
+        if not point.isNull():
+            self.labelCoords.setText(f'{point.x()}, {point.y()}')
+        else:
+            self.labelCoords.clear()
 
     def update_image_path(self, new_path):
         self.image = QPixmap(new_path)
@@ -104,7 +120,7 @@ class PathWidget(QWidget):
         gui_instance = self.parent
 
         painter = QPainter(self)
-        painter.drawPixmap(self.rect(), self.image)
+        # painter.drawPixmap(self.rect(), self.image)
 
         if gui_instance.start_node and gui_instance.end_node and len(gui_instance.nodes) > 1:
             points = [QPointF(gui_instance.start_node.x, gui_instance.start_node.y)]
