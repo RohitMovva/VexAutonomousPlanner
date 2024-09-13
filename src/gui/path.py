@@ -1,4 +1,4 @@
-from PyQt6.QtWidgets import QWidget, QLabel
+from PyQt6.QtWidgets import QWidget, QLabel, QGridLayout
 from PyQt6.QtGui import QPixmap, QPainter, QColor, QPen, QPainterPath
 from PyQt6.QtCore import Qt, QLineF, QPointF, Qt
 from math import sqrt
@@ -46,6 +46,20 @@ class PathWidget(QWidget):
         self.labelCoords.setAlignment(
             Qt.AlignmentFlag.AlignRight |
             Qt.AlignmentFlag.AlignCenter)
+        
+        # self.buttonOpen = QtWidgets.QPushButton(self)
+        # self.buttonOpen.setText('Open Image')
+        # self.buttonOpen.clicked.connect(self.handleOpen)
+        # self.buttonPin = QtWidgets.QPushButton(self)
+        # self.buttonPin.setText('Pin Zoom')
+        # self.buttonPin.setCheckable(True)
+        # self.buttonPin.toggled.connect(self.viewer.setZoomPinned)
+        layout = QGridLayout(self)
+        layout.addWidget(self.viewer, 0, 0, 1, 3)
+        # layout.addWidget(self.buttonOpen, 1, 0, 1, 1)
+        # layout.addWidget(self.buttonPin, 1, 1, 1, 1)
+        layout.addWidget(self.labelCoords, 1, 2, 1, 1)
+        layout.setColumnStretch(2, 2)
 
         self.viewer.setPhoto(self.image)
 
@@ -60,13 +74,24 @@ class PathWidget(QWidget):
         self.line_data = []
 
     def handleCoords(self, point):
+        x = (round(((point.x() / (2000)) - 0.5) * 12**2, 2))
+        y = (round(((point.y() / (2000)) - 0.5) * 12**2, 2))
         if not point.isNull():
-            self.labelCoords.setText(f'{point.x()}, {point.y()}')
+            self.labelCoords.setText(f'{x}, {y}')
         else:
             self.labelCoords.clear()
 
+    def mousePressEvent(self, event: QMouseEvent):
+        if event.button() == Qt.MouseButton.LeftButton:
+            x = int(event.position().x()) + 10 # I have no clue on God's green earth on why this is needed but it is
+            y = int(event.position().y()) + 10
+            print(f"Mouse clicked at ({x}, {y})")
+            self.parent.add_node(x, y)
+        super().mousePressEvent(event)
+
     def update_image_path(self, new_path):
         self.image = QPixmap(new_path)
+        self.viewer.setPhoto(self.image)
         self.update()
     
     def calculateScurveStuff(self, v_max, a_max, j_max, track_width):

@@ -1,5 +1,5 @@
 from PyQt6.QtWidgets import QApplication, QDialog, QVBoxLayout, QInputDialog, QMainWindow, QTextEdit, QPushButton, QFrame, QGraphicsScene, QGraphicsView, QGraphicsPixmapItem
-from PyQt6.QtGui import QAction, QIcon, QKeySequence, QTransform, QShortcut, QColor, QPixmap, QCursor, QBrush
+from PyQt6.QtGui import QAction, QIcon, QKeySequence, QTransform, QMouseEvent, QColor, QPixmap, QCursor, QBrush
 from PyQt6.QtCore import Qt, pyqtSignal, QPoint, QRectF, QPoint
 
 SCALE_FACTOR = 1.25
@@ -30,12 +30,19 @@ class PhotoViewer(QGraphicsView):
         self.setBackgroundBrush(QBrush(QColor(30, 30, 30)))
         self.setFrameShape(QFrame.Shape.NoFrame)
 
+    # def mousePressEvent(self, event: QMouseEvent):
+    #     if event.button() == Qt.MouseButton.LeftButton:
+    #         x = int(event.position().x()) + 10 # I have no clue on God's green earth on why this is needed but it is
+    #         y = int(event.position().y()) + 10
+    #         print(f"Mouse clicked at ({x}, {y})")
+    #         self.gui_instance.add_node(x, y)
+    #     super().mousePressEvent(event)
+
     def hasPhoto(self):
         return not self._empty
 
     def resetView(self, scale=1):
         rect = QRectF(self._photo.pixmap().rect())
-        print("THINGY: ", rect)
         if not rect.isNull():
             self.setSceneRect(rect)
             if (scale := max(1, scale)) == 1:
@@ -43,15 +50,11 @@ class PhotoViewer(QGraphicsView):
             if self.hasPhoto():
                 unity = self.transform().mapRect(QRectF(0, 0, 1, 1))
                 self.scale(1 / unity.width(), 1 / unity.height())
-                print(unity)
                 viewrect = self.viewport().rect()
-                print(viewrect)
                 scenerect = self.transform().mapRect(rect)
-                print(scenerect)
                 factor = min(viewrect.width() / scenerect.width(),
                              viewrect.height() / scenerect.height()) * scale
                 self.scale(factor, factor)
-                print(factor)
                 if not self.zoomPinned():
                     self.centerOn(self._photo)
                 self.updateCoordinates()
@@ -113,6 +116,8 @@ class PhotoViewer(QGraphicsView):
             point = self.mapToScene(pos).toPoint()
         else:
             point = QPoint()
+        # x = round(((x / (2000)) - 0.5) * 12**2, 2)
+        # y = round(((y / (2000)) - 0.5) * 12**2, 2)
         self.coordinatesChanged.emit(point)
 
     def mouseMoveEvent(self, event):
