@@ -32,36 +32,27 @@ def createCurveSegments(start, end, control1, control2=None):
         ox, oy = cx, cy
     return segments
 
-class PathWidget(QWidget):
+class PathWidget(QGraphicsView):
     def __init__(self, parent=None, image_path=resource_path('../assets/V5RC-HighStakes-Match-2000x2000.png')):
         super().__init__(parent)
         self.parent = parent
-        self.setGeometry(0, 0, 700, 700)
+        # self.setGeometry(0, 0, 700, 700)
         self.image = QPixmap(image_path) if image_path else None
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
 
-        self.viewer = PhotoViewer(self)
-        self.viewer.coordinatesChanged.connect(self.handleCoords)
-        self.labelCoords = QLabel(self)
-        self.labelCoords.setAlignment(
-            Qt.AlignmentFlag.AlignRight |
-            Qt.AlignmentFlag.AlignCenter)
-        
-        # self.buttonOpen = QtWidgets.QPushButton(self)
-        # self.buttonOpen.setText('Open Image')
-        # self.buttonOpen.clicked.connect(self.handleOpen)
-        # self.buttonPin = QtWidgets.QPushButton(self)
-        # self.buttonPin.setText('Pin Zoom')
-        # self.buttonPin.setCheckable(True)
-        # self.buttonPin.toggled.connect(self.viewer.setZoomPinned)
-        layout = QGridLayout(self)
-        layout.addWidget(self.viewer, 0, 0, 1, 3)
-        # layout.addWidget(self.buttonOpen, 1, 0, 1, 1)
-        # layout.addWidget(self.buttonPin, 1, 1, 1, 1)
-        layout.addWidget(self.labelCoords, 1, 2, 1, 1)
-        layout.setColumnStretch(2, 2)
+        # Create a QGraphicsScene
+        self.scene = QGraphicsScene()
+        self.setScene(self.scene)
 
-        self.viewer.setPhoto(self.image)
+        # Load the image and add it to the scene
+        pixmap = QPixmap(image_path)
+        self.image_item = QGraphicsPixmapItem(pixmap)
+        self.scene.addItem(self.image_item)
+
+        # Set up the view
+        self.setDragMode(QGraphicsView.DragMode.ScrollHandDrag)
+        self.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
+        self.setViewportUpdateMode(QGraphicsView.ViewportUpdateMode.FullViewportUpdate)
 
         self.all_time_intervals = []
         self.all_positions = []
@@ -73,6 +64,24 @@ class PathWidget(QWidget):
         self.path = None
         self.line_data = []
 
+    def wheelEvent(self, event):
+        # Zoom factor
+        zoom_factor = 1.15
+
+        # Zoom in or out
+        if event.angleDelta().y() > 0:
+            self.scale(zoom_factor, zoom_factor)
+        else:
+            self.scale(1 / zoom_factor, 1 / zoom_factor)
+
+    # def mousePressEvent(self, event: QMouseEvent):
+    #     if event.button() == Qt.MouseButton.LeftButton:
+    #         x = int(event.position().x()) + 10 # I have no clue on God's green earth on why this is needed but it is
+    #         y = int(event.position().y()) + 10
+    #         print(f"Mouse clicked at ({x}, {y})")
+    #         self.scene.addItem(self.super.add_node(x, y))
+    #     super().mousePressEvent(event)
+
     def handleCoords(self, point):
         x = (round(((point.x() / (2000)) - 0.5) * 12**2, 2))
         y = (round(((point.y() / (2000)) - 0.5) * 12**2, 2))
@@ -81,13 +90,13 @@ class PathWidget(QWidget):
         else:
             self.labelCoords.clear()
 
-    def mousePressEvent(self, event: QMouseEvent):
-        if event.button() == Qt.MouseButton.LeftButton:
-            x = int(event.position().x()) + 10 # I have no clue on God's green earth on why this is needed but it is
-            y = int(event.position().y()) + 10
-            print(f"Mouse clicked at ({x}, {y})")
-            self.parent.add_node(x, y)
-        super().mousePressEvent(event)
+    # def mousePressEvent(self, event: QMouseEvent):
+    #     if event.button() == Qt.MouseButton.LeftButton:
+    #         x = int(event.position().x()) + 10 # I have no clue on God's green earth on why this is needed but it is
+    #         y = int(event.position().y()) + 10
+    #         print(f"Mouse clicked at ({x}, {y})")
+    #         self.parent.add_node(x, y)
+    #     super().mousePressEvent(event)
 
     def update_image_path(self, new_path):
         self.image = QPixmap(new_path)

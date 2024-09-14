@@ -82,38 +82,11 @@ class AutonomousPlannerGUIManager(QMainWindow):
 
         self.track_width = getConfigValue('track_width')
 
-        # self._scene = QGraphicsScene(self)
-        # self._view = QGraphicsView(self._scene)
-
-        # self._diedrico = Diedrico()
-        # self._diedrico.setFixedSize(2000, 2000)
-        # self._scene.addWidget(self._diedrico)
-
-        # self.setCentralWidget(self._view)
-
         # Image and path widget
         self.central_widget = PathWidget(self)
 
-        self.central_widget.setFixedSize(700, 700)
-        # self._scene.addWidget(self.central_widget)
-
         self.setCentralWidget(self.central_widget)
-
-        # self.shortcut = QShortcut(QKeySequence("Ctrl+O"), self)
-        # self.shortcut.activated.connect(self.zoom_in)
-        # QShortcut(
-        #     QKeySequence(Qt.Key_Plus),
-        #     self._view,
-        #     context=Qt.WidgetShortcut,
-        #     activated=self.zoom_in,
-        # )
-
-        # QShortcut(
-        #     QKeySequence(Qt.Key_Minus),
-        #     self._view,
-        #     context=Qt.WidgetShortcut,
-        #     activated=self.zoom_out,
-        # )
+        self.central_widget.show()
 
         # Settings Dock Widget
         self.settings_dock_widget = SettingsDockWidget(self.max_velocity, self.max_acceleration, self.max_jerk, self)
@@ -223,6 +196,7 @@ class AutonomousPlannerGUIManager(QMainWindow):
         if (self.current_working_file != None):
             self.auto_save()
         print(f"Node created at ({node.absX}, {node.absY})")
+        return node
 
     def update_lines(self):
         self.central_widget.repaint()
