@@ -174,7 +174,7 @@ def generate_motion_profile(setpoint_velocities, control_points, segments, v_max
         # print("Curvature: ", curvature)
         # adjusted_vmax = max_speed_based_on_curvature(curvature, v_max, K)
         
-        curvature *= 700/12 # Change from pixels to feet
+        curvature *= 2000/12 # Change from pixels to feet
         adjusted_vmax = limit_velocity(v_max, v_max, curvature, track_width)
 
         velocities[i] = adjusted_vmax

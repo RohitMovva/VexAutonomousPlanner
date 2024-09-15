@@ -1,57 +1,114 @@
 import sys
-from PyQt6.QtWidgets import QApplication, QGraphicsView, QGraphicsScene, QGraphicsPixmapItem, QGraphicsRectItem, QGraphicsItem
-from PyQt6.QtGui import QPixmap, QPainter, QPen
-from PyQt6.QtCore import Qt, QRectF
+from PyQt6.QtWidgets import QApplication, QGraphicsView, QGraphicsScene, QGraphicsPixmapItem, QGraphicsRectItem, QGraphicsItem, QMenu
+from PyQt6.QtGui import QPixmap, QPainter, QPen, QColor, QBrush, QFont
+from PyQt6.QtCore import Qt, QRectF, QPointF, QSize
 
-class CustomLineItem(QGraphicsItem):
-    def __init__(self):
+class Node(QGraphicsItem):
+    def __init__(self, x, y, radius=30):
         super().__init__()
+        self.x = x
+        self.y = y
+        self.radius = radius
+        self.setPos(x, y)
+        self.setAcceptHoverEvents(True)
 
     def boundingRect(self):
-        return QRectF(0, 0, 200, 200)
+        return QRectF(-self.radius, -self.radius, 2*self.radius, 2*self.radius)
 
     def paint(self, painter, option, widget):
-        painter.setPen(QPen(Qt.GlobalColor.blue, 2))
-        painter.drawLine(0, 0, 200, 200)
-        painter.drawLine(0, 200, 200, 0)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        
+        # Draw the circle
+        painter.setPen(QPen(Qt.GlobalColor.black, 2))
+        painter.setBrush(QBrush(QColor(173, 216, 230)))  # Light blue color
+        painter.drawEllipse(self.boundingRect())
+
+        # Draw the text
+        painter.setFont(QFont("Arial", 8))
+        painter.setPen(Qt.GlobalColor.black)
+        text = f"({self.x:.0f}, {self.y:.0f})"
+        painter.drawText(self.boundingRect(), Qt.AlignmentFlag.AlignCenter, text)
+
+    def contextMenuEvent(self, event):
+        menu = QMenu()
+        action1 = menu.addAction("Action 1")
+        action2 = menu.addAction("Action 2")
+        menu.exec(event.screenPos())
 
 class ZoomableImageWidget(QGraphicsView):
-    def __init__(self, image_path):
+    def __init__(self, image_path, size=QSize):
         super().__init__()
 
-        # Create a QGraphicsScene
         self.scene = QGraphicsScene()
         self.setScene(self.scene)
 
-        # Load the image and add it to the scene
-        pixmap = QPixmap(image_path)
-        self.image_item = QGraphicsPixmapItem(pixmap)
+        self.pixmap = QPixmap(image_path)
+        self.image_item = QGraphicsPixmapItem(self.pixmap)
         self.scene.addItem(self.image_item)
 
-        # Add a sample sub-widget (a red rectangle)
-        rect_item = QGraphicsRectItem(50, 50, 100, 100)
-        rect_item.setBrush(Qt.GlobalColor.red)
-        self.scene.addItem(rect_item)
-
-        # Add our custom line item
-        line_item = CustomLineItem()
-        line_item.setPos(100, 100)  # Position the item in the scene
-        self.scene.addItem(line_item)
-
-        # Set up the view
         self.setDragMode(QGraphicsView.DragMode.ScrollHandDrag)
         self.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
         self.setViewportUpdateMode(QGraphicsView.ViewportUpdateMode.FullViewportUpdate)
 
-    def wheelEvent(self, event):
-        # Zoom factor
-        zoom_factor = 1.15
+        self.fitInView(self.image_item, Qt.AspectRatioMode.KeepAspectRatio)
 
-        # Zoom in or out
-        if event.angleDelta().y() > 0:
-            self.scale(zoom_factor, zoom_factor)
+        self.shift_pressed = False
+        self.setMouseTracking(True)
+
+        self.setFixedSize(size)
+
+    def wheelEvent(self, event):
+        zoom_factor = 1.15
+        old_pos = self.mapToScene(event.position().toPoint())
+
+        current_scale = self.transform().m11()
+        new_scale = current_scale * zoom_factor if event.angleDelta().y() > 0 else current_scale / zoom_factor
+
+        if new_scale < self.get_fit_in_view_scale():
+            new_scale = self.get_fit_in_view_scale()
+
+        factor = new_scale / current_scale
+        self.scale(factor, factor)
+
+        new_pos = self.mapToScene(event.position().toPoint())
+        delta = new_pos - old_pos
+        self.translate(delta.x(), delta.y())
+
+    def get_fit_in_view_scale(self):
+        view_rect = self.viewport().rect()
+        scene_rect = self.image_item.boundingRect()
+        return min(view_rect.width() / scene_rect.width(), view_rect.height() / scene_rect.height())
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton and self.shift_pressed:
+            scene_pos = self.mapToScene(event.position().toPoint())
+            node = Node(scene_pos.x(), scene_pos.y())
+            node.setPos(scene_pos)
+            self.scene.addItem(node)
         else:
-            self.scale(1 / zoom_factor, 1 / zoom_factor)
+            super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event):
+        item = self.itemAt(event.position().toPoint())
+        if isinstance(item, Node) or (item and isinstance(item.parentItem(), Node)):
+            self.setCursor(Qt.CursorShape.ArrowCursor)
+        elif self.shift_pressed:
+            self.setCursor(Qt.CursorShape.ArrowCursor)
+        else:
+            self.setCursor(Qt.CursorShape.OpenHandCursor)
+        super().mouseMoveEvent(event)
+
+    def keyPressEvent(self, event):
+        if event.key() == Qt.Key.Key_Shift:
+            self.shift_pressed = True
+            self.setCursor(Qt.CursorShape.ArrowCursor)
+        super().keyPressEvent(event)
+
+    def keyReleaseEvent(self, event):
+        if event.key() == Qt.Key.Key_Shift:
+            self.shift_pressed = False
+            self.setCursor(Qt.CursorShape.OpenHandCursor)
+        super().keyReleaseEvent(event)
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)

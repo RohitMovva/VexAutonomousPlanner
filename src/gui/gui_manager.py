@@ -45,7 +45,7 @@ class AutonomousPlannerGUIManager(QMainWindow):
         self.setWindowIcon(QIcon(resource_path('../assets/windows_icon.ico')))
         self.layout = QVBoxLayout()
 
-        self.nodes = []
+        # self.nodes = []
         self.start_node = None
         self.end_node = None
 
@@ -90,39 +90,17 @@ class AutonomousPlannerGUIManager(QMainWindow):
 
         # Settings Dock Widget
         self.settings_dock_widget = SettingsDockWidget(self.max_velocity, self.max_acceleration, self.max_jerk, self)
-
-        # Click listener
-        self.label = ClickableLabel(parent=self.central_widget, gui_instance=self)
-
+        
         # Add widgets to layout
         self.central_widget.setLayout(self.layout)
         self.setCentralWidget(self.central_widget)
 
-        self.layout.addWidget(self.label)
+        # self.layout.addWidget(self.label)
 
         self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self.settings_dock_widget)
 
         self.update()
         self.create_menu_bar()
-
-    # @pyqtSlot()
-    # def zoom_in(self):
-    #     scale_tr = QTransform()
-    #     scale_tr.scale(AutonomousPlannerGUIManager.factor, AutonomousPlannerGUIManager.factor)
-
-    #     tr = self._view.transform() * scale_tr
-    #     self._view.setTransform(tr)
-
-    # @pyqtSlot()
-    # def zoom_out(self):
-    #     scale_tr = QTransform()
-    #     scale_tr.scale(AutonomousPlannerGUIManager.factor, AutonomousPlannerGUIManager.factor)
-
-    #     scale_inverted, invertible = scale_tr.inverted()
-
-    #     if invertible:
-    #         tr = self._view.transform() * scale_inverted
-    #         self._view.setTransform(tr)
 
     def create_menu_bar(self):
         menu_bar = self.menuBar()
@@ -170,8 +148,8 @@ class AutonomousPlannerGUIManager(QMainWindow):
         show_heading_graph.triggered.connect(self.heading_graph)
         tools_menu.addAction(show_heading_graph)
 
-    def index_of(self, node):
-        return (self.nodes.index(node))
+    # def index_of(self, node):
+    #     return (self.nodes.index(node))
     
     def update_coordinate_display(self, x, y):
         self.settings_dock_widget.set_current_coordinates(x, y)
@@ -183,76 +161,76 @@ class AutonomousPlannerGUIManager(QMainWindow):
     def set_max_jerk(self, new_jerk):
         self.max_jerk = new_jerk
 
-    def add_node(self, x, y, pos=-1):
-        node = Node(x, y, self.central_widget, gui_instance=self)
-        if (pos == -1 and self.end_node != None):
-            pos = len(self.nodes)-1
-        if (pos == -1):
-                self.nodes.append(node)
-        else:
-            self.nodes.insert(pos, node)
-        node.show()
-        self.update_lines()
-        if (self.current_working_file != None):
-            self.auto_save()
-        print(f"Node created at ({node.absX}, {node.absY})")
-        return node
+    # def add_node(self, x, y, pos=-1):
+    #     node = Node(x, y, self.central_widget, gui_instance=self)
+    #     if (pos == -1 and self.end_node != None):
+    #         pos = len(self.nodes)-1
+    #     if (pos == -1):
+    #             self.nodes.append(node)
+    #     else:
+    #         self.nodes.insert(pos, node)
+    #     node.show()
+    #     self.update_lines()
+    #     if (self.current_working_file != None):
+    #         self.auto_save()
+    #     print(f"Node created at ({node.absX}, {node.absY})")
+    #     return node
 
     def update_lines(self):
         self.central_widget.repaint()
         self.central_widget.update()
         self.central_widget.show()
 
-    def remove_node(self, node):
-        if node in self.nodes:
-            self.nodes.remove(node)
-            if node == self.start_node:
-                self.start_node = None
-            if node == self.end_node:
-                self.end_node = None
-        self.update_lines()
-        if (self.current_working_file != None):
-            self.auto_save()
+    # def remove_node(self, node):
+    #     if node in self.nodes:
+    #         self.nodes.remove(node)
+    #         if node == self.start_node:
+    #             self.start_node = None
+    #         if node == self.end_node:
+    #             self.end_node = None
+    #     self.update_lines()
+    #     if (self.current_working_file != None):
+    #         self.auto_save()
 
-    def set_start_node(self, node):
-        if self.start_node:
-            self.start_node.isStartNode = False
-            self.start_node.update()
-            self.central_widget.update()
-        self.start_node = node
+    # def set_start_node(self, node):
+    #     if self.start_node:
+    #         self.start_node.isStartNode = False
+    #         self.start_node.update()
+    #         self.central_widget.update()
+    #     self.start_node = node
 
-        # Move start node to start of nodes list
-        nodeindex = 0
-        for i in range(len(self.nodes)):
-            if self.nodes[i] == self.start_node:
-                nodeindex = i
+    #     # Move start node to start of nodes list
+    #     nodeindex = 0
+    #     for i in range(len(self.nodes)):
+    #         if self.nodes[i] == self.start_node:
+    #             nodeindex = i
 
-        temp = self.nodes[0]
-        self.nodes[0] = self.start_node
-        self.nodes[nodeindex] = temp
+    #     temp = self.nodes[0]
+    #     self.nodes[0] = self.start_node
+    #     self.nodes[nodeindex] = temp
 
-    def clear_start_node(self):
-        self.start_node = None
+    # def clear_start_node(self):
+    #     self.start_node = None
 
-    def set_end_node(self, node):
-        if self.end_node:
-            self.end_node.isEndNode = False
-            self.end_node.update()
-            self.central_widget.update()
-        self.end_node = node
+    # def set_end_node(self, node):
+    #     if self.end_node:
+    #         self.end_node.isEndNode = False
+    #         self.end_node.update()
+    #         self.central_widget.update()
+    #     self.end_node = node
 
-        # Move end node to end of nodes list
-        nodeindex = 0
-        for i in range(len(self.nodes)):
-            if self.nodes[i] == self.end_node:
-                nodeindex = i
+    #     # Move end node to end of nodes list
+    #     nodeindex = 0
+    #     for i in range(len(self.nodes)):
+    #         if self.nodes[i] == self.end_node:
+    #             nodeindex = i
 
-        temp = self.nodes[-1]
-        self.nodes[-1] = self.end_node
-        self.nodes[nodeindex] = temp
+    #     temp = self.nodes[-1]
+    #     self.nodes[-1] = self.end_node
+    #     self.nodes[nodeindex] = temp
 
-    def clear_end_node(self):
-        self.end_node = None
+    # def clear_end_node(self):
+    #     self.end_node = None
 
     def save_nodes_to_string(self):
         nodes_string = self.convert_nodes()
@@ -267,7 +245,8 @@ class AutonomousPlannerGUIManager(QMainWindow):
 
     def save_nodes_to_file(self):
         nodes_string = ""
-        if (len(self.nodes) > 0):
+        nodes = self.central_widget.get_nodes()
+        if (len(nodes) > 0):
             nodes_string = self.convert_nodes()
         full_path = None
 
@@ -287,7 +266,7 @@ class AutonomousPlannerGUIManager(QMainWindow):
             full_path = self.routes_folder_path + "/" + self.current_working_file + ".txt"
         nodes_data = []
         nodes_map = []
-        if (len(self.nodes) > 2 and self.start_node and self.end_node):
+        if (len(nodes) > 2 and self.start_node and self.end_node):
             time_intervals, positions, velocities, accelerations, headings, nodes_map = self.central_widget.calculateScurveStuff(self.max_velocity, self.max_acceleration, self.max_jerk, self.track_width)
             for i in range(0, len(time_intervals), 5): # Every 25ms save data
                 nodes_data.append([velocities[i], headings[i]])
@@ -300,7 +279,7 @@ class AutonomousPlannerGUIManager(QMainWindow):
                     node.turn,
                     node.wait_time
                 ]
-                for node in self.nodes
+                for node in nodes
             ]
         print(len(nodes_map), len(nodes_actions))
         for i in range(0, len(nodes_map)):
@@ -339,20 +318,13 @@ class AutonomousPlannerGUIManager(QMainWindow):
                     with open(full_path, 'w+') as file: # Creates file if it isn't already created
                         pass
                 print(f"Set current working file at {full_path}")
-                if (len(self.nodes) > 0 or os.stat(full_path).st_size == 0):
+                if (len(self.central_widget.get_nodes) > 0 or os.stat(full_path).st_size == 0):
                     self.auto_save()
                 else:
                     self.load_nodes_from_file(False)
 
     def clear_nodes(self):
-        self.clearing_nodes = True
-        while self.nodes:
-            node = self.nodes.pop()
-            node.delete_node()
-        self.start_node = None
-        self.end_node = None
-        self.clearing_nodes = False
-        self.update_lines()
+        self.central_widget.clear_nodes()
         print("Clearing all nodes...")
 
     def load_nodes(self, str):
@@ -376,6 +348,7 @@ class AutonomousPlannerGUIManager(QMainWindow):
         self.update_lines()
 
     def convert_nodes(self, as_list=False):
+        nodes = self.central_widget.get_nodes
         nodes_data = [
             [
                 node.x,
@@ -388,7 +361,7 @@ class AutonomousPlannerGUIManager(QMainWindow):
                 node.turn,
                 node.wait_time
             ]
-            for node in self.nodes
+            for node in nodes
         ]
         if (as_list):
             return nodes_data
@@ -396,7 +369,7 @@ class AutonomousPlannerGUIManager(QMainWindow):
         return nodes_string
     
     def auto_save(self):
-        if (self.current_working_file != None and self.start_node and self.end_node and not self.clearing_nodes):
+        if (self.current_working_file != None and self.central_widget.start_node and self.central_widget.end_node and not self.clearing_nodes):
             if (len(self.nodes) > 0):
                 self.save_nodes_to_file()
             else:
