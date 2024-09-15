@@ -6,7 +6,7 @@ from bezier.cubic_bezier import *
 
 # Node that stores data for auton route
 class Node(QGraphicsItem):
-    def __init__(self, x, y, parent=None, radius=10, gui_instance=None):
+    def __init__(self, x, y, parent=None, radius=10):
         super().__init__()
         self.widget = QWidget()
         self.x = x
@@ -41,12 +41,6 @@ class Node(QGraphicsItem):
     def boundingRect(self):
         return QRectF(-self.radius, -self.radius, 2*self.radius, 2*self.radius)
     
-    # def itemChange(self, change, value):
-    #     print("OOHMWE")
-    #     if change == QGraphicsItem.GraphicsItemChange.ItemPositionChange and self.scene():
-    #         self.scene().views()[0].update_path()
-    #     return super().itemChange(change, value)
-
     def paint(self, painter, option, widget):
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         
@@ -150,7 +144,7 @@ class Node(QGraphicsItem):
                 self.isEndNode = False
         else:
             self.parent.clear_start_node()
-        # self.repaint()
+
         self.parent.update_path()
         print(f"Start Node: {self.isStartNode}")
 
@@ -209,4 +203,11 @@ class Node(QGraphicsItem):
         self.parent.add_node(new_point, self.parent.index_of(self)+1)
 
     def __str__(self):
-        return "[" + str(self.isStartNode) + " " + str(self.isEndNode) + " " + str(self.has_action) + "]"
+        return "[" + \
+    str(self.isStartNode) + " " + \
+    str(self.isEndNode) + " " + \
+    str(self.isReverseNode) + " " + \
+    str(self.turn) + " " + \
+    str(self.wait_time) + " " + \
+    str(self.has_action()) + " " + \
+    "]"

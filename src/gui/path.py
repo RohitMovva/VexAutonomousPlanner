@@ -1,11 +1,10 @@
-from PyQt6.QtWidgets import QWidget, QLabel, QGridLayout, QGraphicsProxyWidget, QGraphicsPathItem
-from PyQt6.QtGui import QPixmap, QPainter, QColor, QPen, QPainterPath
-from PyQt6.QtCore import Qt, QLineF, QPointF, Qt, QSize
+from PyQt6.QtWidgets import QGraphicsPathItem, QGraphicsScene, QGraphicsView, QGraphicsPixmapItem, QApplication
+from PyQt6.QtGui import QPixmap, QPainter, QColor, QPen, QPainterPath, QColor, QPixmap
+from PyQt6.QtCore import Qt, QLineF, Qt, QSize, Qt
 from math import sqrt
 from bezier.quadratic_bezier import *
 from bezier.cubic_bezier import *
 from motion_profiling_v2 import motion_profile_generator
-from gui.image_viewer import *
 from gui.node import *
 from utilities import *
 import json
@@ -153,15 +152,11 @@ class PathWidget(QGraphicsView):
     def mousePressEvent(self, event: QMouseEvent):
         if event.button() == Qt.MouseButton.LeftButton and event.modifiers() & Qt.KeyboardModifier.ShiftModifier:
             scene_pos = self.mapToScene(event.position().toPoint())
-            print(scene_pos)
             node = self.add_node(scene_pos)
-            # node.setPos(scene_pos)
-            # self.scene.addItem(node)
 
             print(f"Mouse clicked at ({scene_pos.x()}, {scene_pos.y()})")
             
             # Create a new Node instance
-
             self.scene.addItem(node)
         
         # Call the parent class mousePressEvent to maintain drag functionality
@@ -178,6 +173,9 @@ class PathWidget(QGraphicsView):
         else:
             QApplication.setOverrideCursor(Qt.CursorShape.OpenHandCursor)
         super().mouseMoveEvent(event)
+
+    def leaveEvent(self, QEvent):
+        QApplication.setOverrideCursor(Qt.CursorShape.ArrowCursor)
 
     def keyPressEvent(self, event):
         if event.key() == Qt.Key.Key_Shift:
@@ -291,9 +289,11 @@ class PathWidget(QGraphicsView):
             
             targetAngle = target.angleTo(source)
             turnVal = self.nodes[p].turn
+            print(self.nodes[p])
             if (self.nodes[p].turn):
                 angle = source.angle()
             elif (self.nodes[p].isReverseNode):
+                print("REVERSE NODE")
                 if targetAngle > 180:
                     angle = (source.angle() + 90 + (targetAngle - 180) / 2) % 360
                 else:
@@ -326,42 +326,6 @@ class PathWidget(QGraphicsView):
         self.line_data.append([self.path.currentPosition(), points[-1], cp1])
         self.path.quadTo(cp1, points[-1])
 
-    # def paintEvent(self, event):
-    #     super().paintEvent(event)  # Call the parent class paintEvent to draw the background
-
-    #     if self.start_node and self.end_node and len(self.nodes) > 1:
-    #         painter = QPainter(self.viewport())
-    #         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-            
-    #         # Transform the painter to account for the view's transformation
-    #         painter.setTransform(self.transform().inverted()[0], True)
-            
-    #         pen = QPen(QColor("black"), 2)
-    #         painter.setPen(pen)
-    #         painter.drawPath(self.path)
-    #         painter.end()
-
-
-    # def paintEvent(self, event):
-    #     gui_instance = self.parent
-
-    #     painter = QPainter(self)
-    #     # painter.drawPixmap(self.rect(), self.image)
-
-    #     if self.start_node and self.end_node and len(self.nodes) > 1:
-    #         points = [QPointF(self.start_node.x, self.start_node.y)]
-    #         for node in self.nodes:
-    #             if node.isEndNode or node.isStartNode:
-    #                 continue
-    #             points.append(QPointF(node.x, node.y))
-    #         points.append(QPointF(self.end_node.x, self.end_node.y))
-    #         self.buildPath(points)
-    #         # painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-    #         # pen = QPen(QColor("black"), 2)
-    #         # painter.setPen(pen)
-    #         # painter.drawPath(self.path)
-    #         # painter.end()
-
     def update_lines(self):
         self.repaint()
         self.update()
@@ -372,7 +336,7 @@ class PathWidget(QGraphicsView):
         return self.nodes
 
     def add_node(self, point, pos=-1):
-        node = Node(point.x(), point.y(), self, gui_instance=self)
+        node = Node(point.x(), point.y(), self)
         if (pos == -1 and self.end_node != None):
             pos = len(self.nodes)-1
         if (pos == -1):
@@ -385,7 +349,8 @@ class PathWidget(QGraphicsView):
 
         node.show()
         self.update_path()
-        
+        self.auto_save()
+
         print(f"Node created at ({node.absX}, {node.absY})")
         return node
     
@@ -454,13 +419,14 @@ class PathWidget(QGraphicsView):
 
         self.update_path()
         self.update()
+        self.auto_save()
 
     def load_nodes(self, str):
         nodes_data = json.loads(str)
         self.clear_nodes()
         for node_data in nodes_data:
             if (len(node_data) > 4):
-                node = Node(node_data[0], node_data[1], self, gui_instance=self)
+                node = self.add_node(QPointF(node_data[0], node_data[1]))
                 self.start_node = node if bool(node_data[2]) else self.start_node
                 node.isStartNode = bool(node_data[2])
                 self.end_node = node if bool(node_data[3]) else self.end_node
