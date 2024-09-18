@@ -14,9 +14,9 @@ class Node(QGraphicsItem):
         print(x, y)
 
         # Scale pixel value down to account for the extra padding that isn't part of the field on either side, scale to between 0-1, subtract 0.5 to center and turn into inches
-        self.imageSize = 700
-        self.absX = ((self.x / (self.imageSize)) - 0.5) * 12**2
-        self.absY = ((self.y / (self.imageSize)) - 0.5) * 12**2
+        self.imageSize = 2000
+        self.absX = ((self.x / (self.imageSize)) - 0.5) * 12.325**2
+        self.absY = ((self.y / (self.imageSize)) - 0.5) * 12.325**2
 
 
         self.parent = parent
@@ -174,12 +174,14 @@ class Node(QGraphicsItem):
 
     def toggle_reverse(self):
         self.isReverseNode = not self.isReverseNode
+        self.parent.update_path()
         print(f"Reverse Node: {self.isReverseNode}")
 
     def set_turn(self):
         value, ok = QInputDialog.getInt(self, "Set Turn", "Enter turn (0-360):", self.turn, 0, 360)
         if ok:
             self.turn = value
+            self.parent.update_path()
             print(f"Turn set to: {self.turn}")
 
     def set_wait(self):

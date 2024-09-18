@@ -102,6 +102,12 @@ class AutonomousPlannerGUIManager(QMainWindow):
         self.update()
         self.create_menu_bar()
 
+    def updateCoords(self, p):
+        # p = self.mapToScene(event.position().toPoint())
+        x = round(((p.x() / (2000)) - 0.5) * 12.325**2, 2)
+        y = round(((p.y() / (2000)) - 0.5) * 12.325**2, 2)
+        self.settings_dock_widget.set_current_coordinates(x, y)
+
     def create_menu_bar(self):
         menu_bar = self.menuBar()
 
@@ -172,6 +178,30 @@ class AutonomousPlannerGUIManager(QMainWindow):
         if ok and nodes_string:
             self.central_widget.load_nodes(nodes_string)
 
+    def recalculate_nodes_map(self):
+        current_dist = 0
+    current_segment = 0
+    # for i in range(len(self.)):
+    #     if (current_dist >= segments[current_segment][-1] and current_segment < len(segments)-1):
+    #         current_dist = 0
+    #         current_segment += 1
+    #         nodes_map.append(i)
+
+    #     t_along_curve = distToTime(current_dist, segments[current_segment])
+    #     if (len(control_points[current_segment]) == 3): # Quadratic Bezier curve
+    #         headings.append(
+    #             quad_bezier_angle(t_along_curve, control_points[current_segment][0], control_points[current_segment][2], control_points[current_segment][1]))
+
+    #     else: # Cubic
+    #         headings.append(
+    #             cubic_bezier_angle(t_along_curve, control_points[current_segment][0], control_points[current_segment][2], control_points[current_segment][3], control_points[current_segment][1]))
+    #     print(current_segment, i, headings[-1])
+
+    #     if (i > 0):
+    #         current_dist += positions[i]-positions[i-1]
+    #     else:
+    #         current_dist = positions[i]
+
     def save_nodes_to_file(self):
         nodes_string = ""
         nodes = self.central_widget.get_nodes()
@@ -197,7 +227,7 @@ class AutonomousPlannerGUIManager(QMainWindow):
         nodes_map = []
         if (len(nodes) > 2 and self.start_node and self.end_node):
             time_intervals, positions, velocities, accelerations, headings, nodes_map = self.central_widget.calculateScurveStuff(self.max_velocity, self.max_acceleration, self.max_jerk, self.track_width)
-            for i in range(0, len(time_intervals), 5): # Every 25ms save data
+            for i in range(0, len(time_intervals), 1): # Every 25ms save data
                 nodes_data.append([velocities[i], headings[i]])
 
         nodes_actions = [
@@ -210,9 +240,10 @@ class AutonomousPlannerGUIManager(QMainWindow):
                 ]
                 for node in nodes
             ]
+        
         print(len(nodes_map), len(nodes_actions))
         for i in range(0, len(nodes_map)):
-            nodes_data.insert(int(nodes_map[i]/5)+i, nodes_actions[i])
+            nodes_data.insert(int(nodes_map[i]/1)+i, nodes_actions[i])
         print(nodes_data)
         self.fill_template(nodes_data)
         with open(full_path, 'w') as file:

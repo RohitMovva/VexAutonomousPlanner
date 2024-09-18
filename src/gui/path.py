@@ -28,9 +28,10 @@ def createCurveSegments(start, end, control1, control2=None):
             cx, cy = quadratic_bezier_point(start, control1, end, t)
         dx, dy = ox-cx, oy-cy
         currlen += sqrt(dx**2 + dy**2)
-        segments.append(currlen*(12/2000))
+        segments.append(currlen*(12.325/2000))
 
         ox, oy = cx, cy
+    # print("SEGMENT LEN THING: ", segments[-1])
     return segments
 
 class PathWidget(QGraphicsView):
@@ -172,6 +173,9 @@ class PathWidget(QGraphicsView):
             QApplication.setOverrideCursor(Qt.CursorShape.ArrowCursor)
         else:
             QApplication.setOverrideCursor(Qt.CursorShape.OpenHandCursor)
+        scene_pos = self.mapToScene(event.position().toPoint())
+
+        self.parent.updateCoords(scene_pos)
         super().mouseMoveEvent(event)
 
     def leaveEvent(self, QEvent):
@@ -229,7 +233,7 @@ class PathWidget(QGraphicsView):
 
             if ((not self.nodes[i+1].isEndNode) and (not self.nodes[i+1].has_action())):
                 continue
-
+            print("SEGMENT LENGTH: ", segment_length)
             time_intervals, positions, velocities, accelerations, headings, nodes_map = motion_profile_generator.generate_motion_profile([], segment_data[0], segment_data[1], v_max, a_max, j_max, track_width)
 
             if (self.all_time_intervals != []):
@@ -289,12 +293,9 @@ class PathWidget(QGraphicsView):
             
             targetAngle = target.angleTo(source)
             turnVal = self.nodes[p].turn
-            print(self.nodes[p])
-            print(turnVal)
             if (self.nodes[p].turn):
                 angle = source.angle()
             elif (self.nodes[p].isReverseNode):
-                print("REVERSE NODE")
                 if targetAngle > 180:
                     angle = (source.angle() + 90 + (targetAngle - 180) / 2) % 360
                 else:

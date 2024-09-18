@@ -89,7 +89,7 @@ def generate_other_lists(velocities, control_points, segments, dt):
             current_dist += positions[i]-positions[i-1]
         else:
             current_dist = positions[i]
-    print(nodes_map)
+    print("END THING: ", positions[-1])
     return time_intervals, positions, velocities, accelerations, headings, nodes_map
 
 def get_times(velocities, dd):
@@ -143,9 +143,11 @@ def limit_velocity(velocity, v_max, curvature, track_width):
 
     return (left_velocity + right_velocity) / 2 # average of both velocities
 
+# def get_other_nodes_map(dt)
 
 
-def generate_motion_profile(setpoint_velocities, control_points, segments, v_max, a_max, j_max, track_width, dd=0.0025, dt=0.005, K=15.0): # dt=0.025
+
+def generate_motion_profile(setpoint_velocities, control_points, segments, v_max, a_max, j_max, track_width, dd=0.0025, dt=0.04, K=15.0, otherdt=0.04): # dt=0.025
     velocities = []
 
     totalDist = 0
@@ -174,7 +176,7 @@ def generate_motion_profile(setpoint_velocities, control_points, segments, v_max
         # print("Curvature: ", curvature)
         # adjusted_vmax = max_speed_based_on_curvature(curvature, v_max, K)
         
-        curvature *= 2000/12 # Change from pixels to feet
+        curvature *= 2000/12.325 # Change from pixels to feet
         adjusted_vmax = limit_velocity(v_max, v_max, curvature, track_width)
 
         velocities[i] = adjusted_vmax
