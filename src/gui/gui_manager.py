@@ -277,7 +277,8 @@ class AutonomousPlannerGUIManager(QMainWindow):
         self.central_widget.update_path()
 
     def convert_nodes(self, as_list=False):
-        nodes = self.central_widget.get_nodes
+        nodes = self.central_widget.get_nodes()
+        print(nodes)
         nodes_data = [
             [
                 node.x,

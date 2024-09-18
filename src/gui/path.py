@@ -199,7 +199,7 @@ class PathWidget(QGraphicsView):
 
     def update_image_path(self, new_path):
         self.image = QPixmap(new_path)
-        self.viewer.setPhoto(self.image)
+        self.image_item.setPixmap(self.image)
         self.update()
     
     def calculateScurveStuff(self, v_max, a_max, j_max, track_width):
@@ -290,6 +290,7 @@ class PathWidget(QGraphicsView):
             targetAngle = target.angleTo(source)
             turnVal = self.nodes[p].turn
             print(self.nodes[p])
+            print(turnVal)
             if (self.nodes[p].turn):
                 angle = source.angle()
             elif (self.nodes[p].isReverseNode):
@@ -436,7 +437,7 @@ class PathWidget(QGraphicsView):
                 node.isReverseNode = bool(node_data[6])
                 node.turn = node_data[7]
                 node.wait_time = node_data[8]
-                self.nodes.append(node)
+
                 node.show()
 
         self.update_path()
