@@ -104,8 +104,8 @@ class AutonomousPlannerGUIManager(QMainWindow):
 
     def updateCoords(self, p):
         # p = self.mapToScene(event.position().toPoint())
-        x = round(((p.x() / (2000)) - 0.5) * 12.325**2, 2)
-        y = round(((p.y() / (2000)) - 0.5) * 12.325**2, 2)
+        x = round(((p.x() / (2000)) - 0.5) * 12.1614143912**2, 2)
+        y = round(((p.y() / (2000)) - 0.5) * 12.1614143912**2, 2)
         self.settings_dock_widget.set_current_coordinates(x, y)
 
     def create_menu_bar(self):
