@@ -1,4 +1,5 @@
-from PyQt6.QtWidgets import QLabel, QWidget, QDockWidget, QFormLayout, QSpinBox, QComboBox
+from PyQt6.QtWidgets import QLabel, QWidget, QDockWidget, QFormLayout, QSpinBox, QComboBox, QVBoxLayout, QSpacerItem, QSizePolicy
+from PyQt6.QtCore import Qt
 from bezier.quadratic_bezier import *
 from bezier.cubic_bezier import *
 from utilities import *
@@ -6,10 +7,11 @@ from utilities import *
 class SettingsDockWidget(QDockWidget):
     def __init__(self, max_velocity, max_acceleration, max_jerk, parent=None):
         super().__init__("Settings", parent)
-
         self.parent = parent
+
         # Create the settings widget
         settings_widget = QWidget()
+        main_layout = QVBoxLayout()
         settings_layout = QFormLayout()
 
         # Add Field Type drop-down menu
@@ -20,7 +22,6 @@ class SettingsDockWidget(QDockWidget):
         self.field_type_combo.currentIndexChanged.connect(self.on_field_type_changed)
 
         # Add max jerk, acceleration, and velocity inputs
-
         self.velocity_input = QSpinBox()
         self.velocity_input.setRange(0, 100)  # Adjust range as needed
         self.velocity_input.setValue(max_velocity)
@@ -39,17 +40,26 @@ class SettingsDockWidget(QDockWidget):
         settings_layout.addRow("Max Jerk (ft/s³):", self.jerk_input)
         self.jerk_input.valueChanged.connect(self.on_jerk_changed)
 
+        # Add the form layout to the main layout
+        main_layout.addLayout(settings_layout)
+
+        # Add a spacer to push the following widgets to the bottom
+        main_layout.addItem(QSpacerItem(20, 40, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Expanding))
+
         # Add labels to display current x and y coordinates
+        coord_layout = QFormLayout()
         self.current_x_label = QLabel("0")
-        settings_layout.addRow("Current X:", self.current_x_label)
-
+        coord_layout.addRow("Current X:", self.current_x_label)
         self.current_y_label = QLabel("0")
-        settings_layout.addRow("Current Y:", self.current_y_label)
+        coord_layout.addRow("Current Y:", self.current_y_label)
 
-        # Set the layout for the settings widget
-        settings_widget.setLayout(settings_layout)
+        # Add the coordinate layout to the main layout
+        main_layout.addLayout(coord_layout)
+
+        # Set the main layout for the settings widget
+        settings_widget.setLayout(main_layout)
         self.setWidget(settings_widget)
-
+        
     def set_current_coordinates(self, x, y):
         self.current_x_label.setText(str(x))
         self.current_y_label.setText(str(y))

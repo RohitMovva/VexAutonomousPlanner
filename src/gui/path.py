@@ -9,10 +9,23 @@ from gui.node import *
 from utilities import *
 import json
 
+# def convertPoint(p: QPointF):
+#     p.setX(((p.x() / (2000)) - 0.5) * 12.1622315686**2)
+#     p.setY(((p.y() / (2000)) - 0.5) * 12.1622315686**2)
+
+#     return p
+
 def createCurveSegments(start, end, control1, control2=None):
     numsegments = 1001
     segments = [0]
     ox, oy = None, None
+    # start = convertPoint(start)
+    # end = convertPoint(end)
+    # control1 = convertPoint(control1)
+    # if (control2):
+
+    #     control2 = convertPoint(control2)
+    # start = convertPoint(start)
     if (control2):
         ox, oy = cubic_bezier_point(start, control1, control2, end, 0)
     else:
@@ -20,17 +33,20 @@ def createCurveSegments(start, end, control1, control2=None):
     dx, dy = None, None
     currlen = 0
     for i in range(1, numsegments):
-        t = (i+1)/numsegments
+        t = (i)/numsegments
         cx, cy = None, None
         if (control2):
             cx, cy = cubic_bezier_point(start, control1, control2, end, t)
         else:
             cx, cy = quadratic_bezier_point(start, control1, end, t)
+
+        # print("THINGYS: ", cx, cy, end)
         dx, dy = ox-cx, oy-cy
         currlen += sqrt(dx**2 + dy**2)
-        segments.append(currlen*(12.325/2000))
+        segments.append(currlen * (12.3420663695/2000)) #
 
         ox, oy = cx, cy
+    print("DIFFS: ", ox, " ",oy)
     # print("SEGMENT LEN THING: ", segments[-1])
     return segments
 
@@ -118,10 +134,11 @@ class PathWidget(QGraphicsView):
         if (event.modifiers() & Qt.KeyboardModifier.ShiftModifier):
             return
         # Zoom factor
-        zoom_factor = 1.15
+        zoom_factor = 1.3
 
         # Get the current transformation
         old_pos = self.mapToScene(event.position().toPoint())
+        # old_pos = self.
 
         # Current scale factor
         current_scale = self.transform().m11()
@@ -167,15 +184,19 @@ class PathWidget(QGraphicsView):
 
     def mouseMoveEvent(self, event):
         item = self.itemAt(event.position().toPoint())
+        scene_pos = self.mapToScene(event.position().toPoint())
         if isinstance(item, Node) or (item and isinstance(item.parentItem(), Node)):
             QApplication.setOverrideCursor(Qt.CursorShape.ArrowCursor)
+            self.parent.updateCoords(scene_pos)
         elif self.shift_pressed:
+            QApplication.setOverrideCursor(Qt.CursorShape.ArrowCursor)
+            self.parent.updateCoords(scene_pos)
+        elif (scene_pos.x() < 0 or scene_pos.x() > 2000 or scene_pos.y() < 0 or scene_pos.y() > 2000):
             QApplication.setOverrideCursor(Qt.CursorShape.ArrowCursor)
         else:
             QApplication.setOverrideCursor(Qt.CursorShape.OpenHandCursor)
-        scene_pos = self.mapToScene(event.position().toPoint())
+            self.parent.updateCoords(scene_pos)
 
-        self.parent.updateCoords(scene_pos)
         super().mouseMoveEvent(event)
 
     def leaveEvent(self, QEvent):

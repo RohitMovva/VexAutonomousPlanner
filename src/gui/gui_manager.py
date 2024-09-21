@@ -104,8 +104,10 @@ class AutonomousPlannerGUIManager(QMainWindow):
 
     def updateCoords(self, p):
         # p = self.mapToScene(event.position().toPoint())
-        x = round(((p.x() / (2000)) - 0.5) * 12.1614143912**2, 2)
-        y = round(((p.y() / (2000)) - 0.5) * 12.1614143912**2, 2)
+        x = round(((p.x() / (2000)) - 0.5) * 12.3266567842 * 12, 3)
+        y = round(((p.y() / (2000)) - 0.5) * 12.3266567842 * 12, 3)
+
+
         self.settings_dock_widget.set_current_coordinates(x, y)
 
     def create_menu_bar(self):
@@ -333,7 +335,7 @@ class AutonomousPlannerGUIManager(QMainWindow):
         print("AUTO SAVING")
         print(self.current_working_file, " ", self.central_widget.start_node, " ", self.central_widget.end_node)
         if (self.current_working_file != None and self.central_widget.start_node and self.central_widget.end_node and not self.clearing_nodes):
-            if (len(self.nodes) > 0):
+            if (len(self.central_widget.get_nodes()) > 0):
                 print("SAVING FR")
                 self.save_nodes_to_file()
             else:
