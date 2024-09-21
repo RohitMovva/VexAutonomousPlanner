@@ -103,6 +103,8 @@ class PathWidget(QGraphicsView):
         self.zoom_factor = 1.0
         self.initial_fit = True
 
+        self.mouseDown = False
+
     def fit_image_to_view(self):
         self.fitInView(self.image_item, Qt.AspectRatioMode.KeepAspectRatio)
         if self.initial_fit:
@@ -168,6 +170,8 @@ class PathWidget(QGraphicsView):
         self.initial_fit = False
 
     def mousePressEvent(self, event: QMouseEvent):
+        self.mouseDown = True
+
         if event.button() == Qt.MouseButton.LeftButton and event.modifiers() & Qt.KeyboardModifier.ShiftModifier:
             scene_pos = self.mapToScene(event.position().toPoint())
             node = self.add_node(scene_pos)
@@ -180,7 +184,14 @@ class PathWidget(QGraphicsView):
         # Call the parent class mousePressEvent to maintain drag functionality
         else:
             # Call the parent class mousePressEvent for other cases (like panning)
+            QApplication.setOverrideCursor(Qt.CursorShape.ClosedHandCursor)
             super().mousePressEvent(event)
+
+    def mouseReleaseEvent(self, event: QMouseEvent):
+        self.mouseDown = False
+
+        QApplication.setOverrideCursor(Qt.CursorShape.OpenHandCursor)
+        super().mouseReleaseEvent(event)
 
     def mouseMoveEvent(self, event):
         item = self.itemAt(event.position().toPoint())
@@ -193,6 +204,9 @@ class PathWidget(QGraphicsView):
             self.parent.updateCoords(scene_pos)
         elif (scene_pos.x() < 0 or scene_pos.x() > 2000 or scene_pos.y() < 0 or scene_pos.y() > 2000):
             QApplication.setOverrideCursor(Qt.CursorShape.ArrowCursor)
+        elif (self.mouseDown):
+            QApplication.setOverrideCursor(Qt.CursorShape.ClosedHandCursor)
+            self.parent.updateCoords(scene_pos)
         else:
             QApplication.setOverrideCursor(Qt.CursorShape.OpenHandCursor)
             self.parent.updateCoords(scene_pos)
