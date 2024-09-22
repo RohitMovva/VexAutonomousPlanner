@@ -156,6 +156,10 @@ class AutonomousPlannerGUIManager(QMainWindow):
         show_heading_graph.triggered.connect(self.heading_graph)
         tools_menu.addAction(show_heading_graph)
 
+        show_coords_graph = QAction('Show Coords Graph', self)
+        show_coords_graph.triggered.connect(self.coords_graph)
+        tools_menu.addAction(show_coords_graph)
+
     # def index_of(self, node):
     #     return (self.nodes.index(node))
     
@@ -182,7 +186,7 @@ class AutonomousPlannerGUIManager(QMainWindow):
 
     def recalculate_nodes_map(self):
         current_dist = 0
-    current_segment = 0
+        current_segment = 0
     # for i in range(len(self.)):
     #     if (current_dist >= segments[current_segment][-1] and current_segment < len(segments)-1):
     #         current_dist = 0
@@ -227,10 +231,11 @@ class AutonomousPlannerGUIManager(QMainWindow):
             full_path = self.routes_folder_path + "/" + self.current_working_file + ".txt"
         nodes_data = []
         nodes_map = []
-        if (len(nodes) > 2 and self.start_node and self.end_node):
-            time_intervals, positions, velocities, accelerations, headings, nodes_map = self.central_widget.calculateScurveStuff(self.max_velocity, self.max_acceleration, self.max_jerk, self.track_width)
+        if (len(self.central_widget.get_nodes()) > 2 and self.central_widget.start_node and self.central_widget.end_node):
+            time_intervals, positions, velocities, accelerations, headings, nodes_map, coords = self.central_widget.calculateScurveStuff(self.max_velocity, self.max_acceleration, self.max_jerk, self.track_width)
             for i in range(0, len(time_intervals), 1): # Every 25ms save data
-                nodes_data.append([velocities[i], headings[i]])
+                nodes_data.append([coords[i][0], coords[i][1], headings[i]])
+                # nodes_data.append([velocities[i], headings[i]])
 
         nodes_actions = [
                 [
@@ -246,7 +251,6 @@ class AutonomousPlannerGUIManager(QMainWindow):
         print(len(nodes_map), len(nodes_actions))
         for i in range(0, len(nodes_map)):
             nodes_data.insert(int(nodes_map[i]/1)+i, nodes_actions[i])
-        print(nodes_data)
         self.fill_template(nodes_data)
         with open(full_path, 'w') as file:
             file.write(nodes_string)
@@ -314,8 +318,8 @@ class AutonomousPlannerGUIManager(QMainWindow):
         print(nodes)
         nodes_data = [
             [
-                node.x,
-                node.y,
+                node.x(),
+                node.y(),
                 int(node.isStartNode),
                 int(node.isEndNode),
                 int(node.spinIntake),
@@ -332,14 +336,11 @@ class AutonomousPlannerGUIManager(QMainWindow):
         return nodes_string
     
     def auto_save(self):
-        print("AUTO SAVING")
-        print(self.current_working_file, " ", self.central_widget.start_node, " ", self.central_widget.end_node)
         if (self.current_working_file != None and self.central_widget.start_node and self.central_widget.end_node and not self.clearing_nodes):
+            print("Auto Saving...")
             if (len(self.central_widget.get_nodes()) > 0):
-                print("SAVING FR")
                 self.save_nodes_to_file()
             else:
-                print("LOADING AWOERO")
                 self.load_nodes_from_file(False)
 
     def fill_template(self, nodes_data):  
@@ -391,14 +392,6 @@ class AutonomousPlannerGUIManager(QMainWindow):
                 "#endif\n"
             ]
         
-        # Write the updated content to routes.h
-        # print(content, " ", self.routes_header_path)
-        # f = open(self.routes_header_path, "a")
-        # f.writelines(content)
-        # f.close()
-
-        # f = open(self.routes_header_path, "r")
-        # print(f.read())
         with open(self.routes_header_path, "w") as routes_file:
             routes_file.writelines(content)
 
@@ -440,3 +433,12 @@ class AutonomousPlannerGUIManager(QMainWindow):
         self.central_widget.calculateScurveStuff(self.max_velocity, self.max_acceleration, self.max_jerk, self.track_width)
 
         create_mpl_plot(self.central_widget.all_time_intervals, self.central_widget.all_headings, 12, 8, "Heading Profile", "Time (s)", "Heading (degrees)")
+
+    def coords_graph(self):
+        self.central_widget.calculateScurveStuff(self.max_velocity, self.max_acceleration, self.max_jerk, self.track_width)
+
+        x, y = zip(*self.central_widget.all_coords)
+        y = [-1*i for i in y]
+
+        create_mpl_plot(x, y, 8, 8, "Coordinate Profile", "X", "Y", 
+                        (-1*(12.3266567842 * 6), (12.3266567842 * 6)), (-1*(12.3266567842 * 6), (12.3266567842 * 6)), 1)

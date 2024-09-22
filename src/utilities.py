@@ -45,15 +45,21 @@ def setConfigValue(keyname, value):
     with open(resource_path('../config.yaml'), 'w') as file:
                 yaml.safe_dump(config, file)
 
-def create_mpl_plot(xlist, ylist, width, height, title, xlabel, ylabel):
+def create_mpl_plot(xlist, ylist, width, height, title, xlabel, ylabel, xlim=None, ylim=None, numCols=3):
     plt.figure(figsize=(width, height))
 
-    plt.subplot(3, 1, 1)
+    plt.subplot(numCols, 1, 1)
     plt.plot(xlist, ylist)
     plt.title(title)
     plt.xlabel(xlabel)
     plt.ylabel(ylabel)
 
+    if (xlim != None):
+        plt.xlim(xlim[0], xlim[1])
+    if (ylim != None):
+        plt.ylim(ylim[0], ylim[1])
+
 
     plt.tight_layout()
     plt.show()
+    

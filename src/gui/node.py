@@ -6,17 +6,14 @@ from bezier.cubic_bezier import *
 
 # Node that stores data for auton route
 class Node(QGraphicsItem):
-    def __init__(self, x, y, parent=None, radius=10):
+    def __init__(self, x, y, parent=None, radius=15.0):
         super().__init__()
         self.widget = QWidget()
-        self.x = x
-        self.y = y
-        print(x, y)
 
         # Scale pixel value down to account for the extra padding that isn't part of the field on either side, scale to between 0-1, subtract 0.5 to center and turn into inches
         self.imageSize = 2000
-        self.absX = ((self.x / (self.imageSize)) - 0.5) * 12.325**2
-        self.absY = ((self.y / (self.imageSize)) - 0.5) * 12.325**2
+        self.absX = ((self.x() / (self.imageSize)) - 0.5) * 12.3266567842 * 12
+        self.absY = ((self.y() / (self.imageSize)) - 0.5) * 12.3266567842 * 12
 
 
         self.parent = parent
@@ -43,16 +40,20 @@ class Node(QGraphicsItem):
     
     def paint(self, painter, option, widget):
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        
+        brushColor = None
         if self.isStartNode:
-            painter.setBrush(QColor("green"))
+            brushColor = QColor("green")
         elif self.isEndNode:
-            painter.setBrush(QColor("red"))
+            brushColor = QColor("red")
         elif self.has_action():
-            painter.setBrush(QColor("#1338BE"))
+            brushColor = QColor("#1338BE")
         else:
-            painter.setBrush(QColor("#1F456E"))
+            brushColor = QColor("#1F456E")
 
+        brushColor.setAlphaF(0.65)
+        painter.setBrush(brushColor)
+
+        # painter.setOpacity(.5)
         painter.drawEllipse(self.boundingRect())
 
     def mousePressEvent(self, event):
@@ -72,6 +73,7 @@ class Node(QGraphicsItem):
         if event.button() == Qt.MouseButton.LeftButton:
             self.drag_start_position = None
             self.parent.update_path()
+            self.parent.save()
         super().mouseReleaseEvent(event)
 
     def itemChange(self, change, value):

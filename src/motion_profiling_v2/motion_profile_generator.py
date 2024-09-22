@@ -52,6 +52,7 @@ def generate_other_lists(velocities, control_points, segments, dt):
     time_intervals = [i*dt for i in range(0, len(velocities))]
     headings = []
     nodes_map = [0]
+    coords = []
 
     # Calculate positions
     for i in range(1, len(velocities)):
@@ -69,6 +70,7 @@ def generate_other_lists(velocities, control_points, segments, dt):
     # Calculate headings
     current_dist = 0
     current_segment = 0
+
     for i in range(len(velocities)):
         if (current_dist >= segments[current_segment][-1] and current_segment < len(segments)-1):
             current_dist = 0
@@ -76,21 +78,25 @@ def generate_other_lists(velocities, control_points, segments, dt):
             nodes_map.append(i)
 
         t_along_curve = distToTime(current_dist, segments[current_segment])
+        x = None
+        y = None
         if (len(control_points[current_segment]) == 3): # Quadratic Bezier curve
             headings.append(
                 quad_bezier_angle(t_along_curve, control_points[current_segment][0], control_points[current_segment][2], control_points[current_segment][1]))
-
+            x, y = quadratic_bezier_point(control_points[current_segment][0], control_points[current_segment][2], control_points[current_segment][1], t_along_curve)
         else: # Cubic
             headings.append(
                 cubic_bezier_angle(t_along_curve, control_points[current_segment][0], control_points[current_segment][2], control_points[current_segment][3], control_points[current_segment][1]))
-        print(current_segment, i, headings[-1])
+            x, y = cubic_bezier_point(control_points[current_segment][0], control_points[current_segment][2], control_points[current_segment][3], control_points[current_segment][1], t_along_curve)
+
+        coords.append((((x / 2000) - 0.5) * 12.3266567842 * 12, ((y / 2000) - 0.5) * 12.3266567842 * 12))
 
         if (i > 0):
             current_dist += positions[i]-positions[i-1]
         else:
             current_dist = positions[i]
-    print("END THING: ", positions[-1])
-    return time_intervals, positions, velocities, accelerations, headings, nodes_map
+
+    return time_intervals, positions, velocities, accelerations, headings, nodes_map, coords
 
 def get_times(velocities, dd):
     res = []
@@ -125,7 +131,7 @@ def interpolate_velocity(velocities, times, tt):
     return new_velo
 
 def get_wheel_velocities(velocity, curvature, track_width):
-    # Credit to robotsquiggles for this math
+    # Credit to robotsquiggles for this math even though it's pretty simple lol
     omega = velocity * curvature
 
     return (velocity - (track_width / 2) * omega, velocity + (track_width / 2) * omega)
@@ -143,11 +149,7 @@ def limit_velocity(velocity, v_max, curvature, track_width):
 
     return (left_velocity + right_velocity) / 2 # average of both velocities
 
-# def get_other_nodes_map(dt)
-
-
-
-def generate_motion_profile(setpoint_velocities, control_points, segments, v_max, a_max, j_max, track_width, dd=0.0025, dt=0.04, K=15.0, otherdt=0.04): # dt=0.025
+def generate_motion_profile(setpoint_velocities, control_points, segments, v_max, a_max, j_max, track_width, dd=0.0025, dt=0.004, K=15.0, otherdt=0.04): # dt=0.025
     velocities = []
 
     totalDist = 0
@@ -173,9 +175,6 @@ def generate_motion_profile(setpoint_velocities, control_points, segments, v_max
             curvature = quadratic_bezier_curvature(control_points[current_segment][0], control_points[current_segment][2], control_points[current_segment][1], t_along_curve)
         else:
             curvature = cubic_bezier_curvature(control_points[current_segment][0], control_points[current_segment][2], control_points[current_segment][3], control_points[current_segment][1], t_along_curve)
-        # print("Curvature: ", curvature)
-        # adjusted_vmax = max_speed_based_on_curvature(curvature, v_max, K)
-        
         curvature *= 2000/12.3420663695 # Change from pixels to feet
         adjusted_vmax = limit_velocity(v_max, v_max, curvature, track_width)
 

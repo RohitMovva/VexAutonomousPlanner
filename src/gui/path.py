@@ -9,23 +9,10 @@ from gui.node import *
 from utilities import *
 import json
 
-# def convertPoint(p: QPointF):
-#     p.setX(((p.x() / (2000)) - 0.5) * 12.1622315686**2)
-#     p.setY(((p.y() / (2000)) - 0.5) * 12.1622315686**2)
-
-#     return p
-
 def createCurveSegments(start, end, control1, control2=None):
     numsegments = 1001
     segments = [0]
     ox, oy = None, None
-    # start = convertPoint(start)
-    # end = convertPoint(end)
-    # control1 = convertPoint(control1)
-    # if (control2):
-
-    #     control2 = convertPoint(control2)
-    # start = convertPoint(start)
     if (control2):
         ox, oy = cubic_bezier_point(start, control1, control2, end, 0)
     else:
@@ -40,14 +27,11 @@ def createCurveSegments(start, end, control1, control2=None):
         else:
             cx, cy = quadratic_bezier_point(start, control1, end, t)
 
-        # print("THINGYS: ", cx, cy, end)
         dx, dy = ox-cx, oy-cy
         currlen += sqrt(dx**2 + dy**2)
         segments.append(currlen * (12.3420663695/2000)) #
 
         ox, oy = cx, cy
-    print("DIFFS: ", ox, " ",oy)
-    # print("SEGMENT LEN THING: ", segments[-1])
     return segments
 
 class PathWidget(QGraphicsView):
@@ -190,7 +174,10 @@ class PathWidget(QGraphicsView):
     def mouseReleaseEvent(self, event: QMouseEvent):
         self.mouseDown = False
 
-        QApplication.setOverrideCursor(Qt.CursorShape.OpenHandCursor)
+        if (self.shift_pressed):
+            QApplication.setOverrideCursor(Qt.CursorShape.ArrowCursor)
+        else:
+            QApplication.setOverrideCursor(Qt.CursorShape.OpenHandCursor)
         super().mouseReleaseEvent(event)
 
     def mouseMoveEvent(self, event):
@@ -249,6 +236,7 @@ class PathWidget(QGraphicsView):
         self.all_accelerations = []
         self.all_headings = []
         self.all_nodes_map = []
+        self.all_coords = []
 
         current_position = 0
         segment_data = [[], []]
@@ -268,8 +256,7 @@ class PathWidget(QGraphicsView):
 
             if ((not self.nodes[i+1].isEndNode) and (not self.nodes[i+1].has_action())):
                 continue
-            print("SEGMENT LENGTH: ", segment_length)
-            time_intervals, positions, velocities, accelerations, headings, nodes_map = motion_profile_generator.generate_motion_profile([], segment_data[0], segment_data[1], v_max, a_max, j_max, track_width)
+            time_intervals, positions, velocities, accelerations, headings, nodes_map, coords = motion_profile_generator.generate_motion_profile([], segment_data[0], segment_data[1], v_max, a_max, j_max, track_width)
 
             if (self.all_time_intervals != []):
                 self.all_time_intervals.extend([time + self.all_time_intervals[-1] for time in time_intervals])
@@ -280,17 +267,18 @@ class PathWidget(QGraphicsView):
             self.all_accelerations.extend(accelerations)
             self.all_headings.extend(headings)
             self.all_nodes_map.extend((mapping+len(self.all_time_intervals)-len(time_intervals)) for mapping in nodes_map)
+            self.all_coords.extend(coords)
 
             current_position += segment_length
             segment_data = [[], []]
             segment_length = 0
 
         self.all_nodes_map.append(len(self.all_time_intervals))
-        return self.all_time_intervals, self.all_positions, self.all_velocities, self.all_accelerations, self.all_headings, self.all_nodes_map
+
+        return self.all_time_intervals, self.all_positions, self.all_velocities, self.all_accelerations, self.all_headings, self.all_nodes_map, self.all_coords
 
     def update_path(self):
-        # This method should update self.path based on self.nodes, self.start_node, and self.end_node
-        # Implement your path building logic here
+        # Should update with any new, moved, modified, or removed nodes
         if self.start_node and self.end_node and len(self.nodes) > 1:
             points = [self.start_node.pos()]
             for node in self.nodes:
@@ -299,18 +287,18 @@ class PathWidget(QGraphicsView):
                 points.append(node.pos())
             points.append(self.end_node.pos())
             self.buildPath(points)
-
-            pen = QPen(QColor("black"), 3)
-            self.path_item.setPen(pen)
-            self.path_item.setPath(self.path)
+            
         else:
             self.path = QPainterPath()
 
-            pen = QPen(QColor("black"), 3)
-            self.path_item.setPen(pen)
-            self.path_item.setPath(self.path)
+        pen = QPen(QColor("#0a0612"), 4) # dark purple (looks cool)
+        self.path_item.setPen(pen)
+        self.path_item.setPath(self.path)
             
         self.viewport().update()  # Request a repaint of the viewport
+
+    def save(self):
+        self.parent.auto_save()
 
     # Modified version of path generation logic from @musicamante on stackoverflow
     def buildPath(self, points):
@@ -484,3 +472,4 @@ class PathWidget(QGraphicsView):
     def auto_save(self):
         if (self.parent.current_working_file != None):
             self.parent.auto_save()
+            
