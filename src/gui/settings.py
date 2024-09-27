@@ -1,8 +1,20 @@
-from PyQt6.QtWidgets import QLabel, QWidget, QDockWidget, QFormLayout, QSpinBox, QComboBox, QVBoxLayout, QSpacerItem, QSizePolicy
 from PyQt6.QtCore import Qt
-from bezier.quadratic_bezier import *
+from PyQt6.QtWidgets import (
+    QComboBox,
+    QDockWidget,
+    QFormLayout,
+    QLabel,
+    QSizePolicy,
+    QSpacerItem,
+    QSpinBox,
+    QVBoxLayout,
+    QWidget,
+)
+
 from bezier.cubic_bezier import *
+from bezier.quadratic_bezier import *
 from utilities import *
+
 
 class SettingsDockWidget(QDockWidget):
     def __init__(self, max_velocity, max_acceleration, max_jerk, parent=None):
@@ -44,7 +56,11 @@ class SettingsDockWidget(QDockWidget):
         main_layout.addLayout(settings_layout)
 
         # Add a spacer to push the following widgets to the bottom
-        main_layout.addItem(QSpacerItem(20, 40, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Expanding))
+        main_layout.addItem(
+            QSpacerItem(
+                20, 40, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Expanding
+            )
+        )
 
         # Add labels to display current x and y coordinates
         coord_layout = QFormLayout()
@@ -59,7 +75,7 @@ class SettingsDockWidget(QDockWidget):
         # Set the main layout for the settings widget
         settings_widget.setLayout(main_layout)
         self.setWidget(settings_widget)
-        
+
     def set_current_coordinates(self, x, y):
         self.current_x_label.setText(str(x))
         self.current_y_label.setText(str(y))

@@ -1,8 +1,10 @@
-from PyQt6.QtWidgets import QWidget, QMenu, QInputDialog, QGraphicsItem
-from PyQt6.QtGui import QMouseEvent, QPainter, QColor, QAction, QPen, QBrush, QFont
-from PyQt6.QtCore import Qt, QPoint, QRectF, QPointF
-from bezier.quadratic_bezier import *
+from PyQt6.QtCore import QPoint, QPointF, QRectF, Qt
+from PyQt6.QtGui import QAction, QBrush, QColor, QFont, QMouseEvent, QPainter, QPen
+from PyQt6.QtWidgets import QGraphicsItem, QInputDialog, QMenu, QWidget
+
 from bezier.cubic_bezier import *
+from bezier.quadratic_bezier import *
+
 
 # Node that stores data for auton route
 class Node(QGraphicsItem):
@@ -14,7 +16,6 @@ class Node(QGraphicsItem):
         self.imageSize = 2000
         self.absX = ((self.x() / (self.imageSize)) - 0.5) * 12.3266567842 * 12
         self.absY = ((self.y() / (self.imageSize)) - 0.5) * 12.3266567842 * 12
-
 
         self.parent = parent
         self.isStartNode = False
@@ -34,10 +35,10 @@ class Node(QGraphicsItem):
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemSendsGeometryChanges)
         self.drag_start_position = None
         # self.setWidget(self.widget)
-    
+
     def boundingRect(self):
-        return QRectF(-self.radius, -self.radius, 2*self.radius, 2*self.radius)
-    
+        return QRectF(-self.radius, -self.radius, 2 * self.radius, 2 * self.radius)
+
     def paint(self, painter, option, widget):
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         brushColor = None
@@ -87,48 +88,48 @@ class Node(QGraphicsItem):
         attributes_menu = QMenu("Attributes")
         node_menu = QMenu("Node Actions")
 
-        start_action = QAction('Start Node', checkable=True)
+        start_action = QAction("Start Node", checkable=True)
         start_action.setChecked(self.isStartNode)
         start_action.triggered.connect(self.toggle_start_node)
         attributes_menu.addAction(start_action)
 
-        end_action = QAction('End Node', checkable=True)
+        end_action = QAction("End Node", checkable=True)
         end_action.setChecked(self.isEndNode)
         end_action.triggered.connect(self.toggle_end_node)
         attributes_menu.addAction(end_action)
 
-        spin_action = QAction('Spin Intake', checkable=True)
+        spin_action = QAction("Spin Intake", checkable=True)
         spin_action.setChecked(self.spinIntake)
         spin_action.triggered.connect(self.toggle_spin_intake)
         attributes_menu.addAction(spin_action)
 
-        clamp_action = QAction('Clamp Goal', checkable=True)
+        clamp_action = QAction("Clamp Goal", checkable=True)
         clamp_action.setChecked(self.clampGoal)
         clamp_action.triggered.connect(self.toggle_clamp_goal)
         attributes_menu.addAction(clamp_action)
 
-        reverse_action = QAction('Reverse', checkable=True)
+        reverse_action = QAction("Reverse", checkable=True)
         reverse_action.setChecked(self.isReverseNode)
         reverse_action.triggered.connect(self.toggle_reverse)
         attributes_menu.addAction(reverse_action)
 
-        turn_action = QAction('Turn Value: ' + str(self.turn))
+        turn_action = QAction("Turn Value: " + str(self.turn))
         turn_action.triggered.connect(self.set_turn)
         attributes_menu.addAction(turn_action)
 
-        wait_action = QAction('Wait time: ' + str(self.wait_time))
+        wait_action = QAction("Wait time: " + str(self.wait_time))
         wait_action.triggered.connect(self.set_wait)
         attributes_menu.addAction(wait_action)
 
-        delete_action = QAction('Delete Node')
+        delete_action = QAction("Delete Node")
         delete_action.triggered.connect(self.delete_node)
         node_menu.addAction(delete_action)
 
-        insert_node_before_action = QAction('Insert Node Before')
+        insert_node_before_action = QAction("Insert Node Before")
         insert_node_before_action.triggered.connect(self.insert_node_before)
         node_menu.addAction(insert_node_before_action)
 
-        insert_node_after_action = QAction('Insert Node After')
+        insert_node_after_action = QAction("Insert Node After")
         insert_node_after_action.triggered.connect(self.insert_node_after)
         node_menu.addAction(insert_node_after_action)
 
@@ -164,7 +165,13 @@ class Node(QGraphicsItem):
         print(f"End Node: {self.isEndNode}")
 
     def has_action(self):
-        return self.spinIntake or self.clampGoal or self.isReverseNode or self.turn != 0 or self.wait_time != 0
+        return (
+            self.spinIntake
+            or self.clampGoal
+            or self.isReverseNode
+            or self.turn != 0
+            or self.wait_time != 0
+        )
 
     def toggle_spin_intake(self):
         self.spinIntake = not self.spinIntake
@@ -180,14 +187,18 @@ class Node(QGraphicsItem):
         print(f"Reverse Node: {self.isReverseNode}")
 
     def set_turn(self):
-        value, ok = QInputDialog.getInt(self, "Set Turn", "Enter turn (0-360):", self.turn, 0, 360)
+        value, ok = QInputDialog.getInt(
+            self, "Set Turn", "Enter turn (0-360):", self.turn, 0, 360
+        )
         if ok:
             self.turn = value
             self.parent.update_path()
             print(f"Turn set to: {self.turn}")
 
     def set_wait(self):
-        value, ok = QInputDialog.getInt(self, "Set Wait Time", "Enter time (seconds):", self.wait_time, 0)
+        value, ok = QInputDialog.getInt(
+            self, "Set Wait Time", "Enter time (seconds):", self.wait_time, 0
+        )
         if ok:
             self.wait_time = value
             print(f"Wait time set to: {self.wait_time}")
@@ -198,20 +209,28 @@ class Node(QGraphicsItem):
         print(f"Node at ({self.x}, {self.y}) deleted")
 
     def insert_node_before(self):
-        new_point = QPointF(self.pos().x()+5, self.pos().y()+5)
+        new_point = QPointF(self.pos().x() + 5, self.pos().y() + 5)
         self.parent.add_node(new_point, self.parent.index_of(self))
-    
+
     def insert_node_after(self):
         print(self.pos())
-        new_point = QPointF(self.pos().x()+5, self.pos().y()+5)
-        self.parent.add_node(new_point, self.parent.index_of(self)+1)
+        new_point = QPointF(self.pos().x() + 5, self.pos().y() + 5)
+        self.parent.add_node(new_point, self.parent.index_of(self) + 1)
 
     def __str__(self):
-        return "[" + \
-    str(self.isStartNode) + " " + \
-    str(self.isEndNode) + " " + \
-    str(self.isReverseNode) + " " + \
-    str(self.turn) + " " + \
-    str(self.wait_time) + " " + \
-    str(self.has_action()) + " " + \
-    "]"
+        return (
+            "["
+            + str(self.isStartNode)
+            + " "
+            + str(self.isEndNode)
+            + " "
+            + str(self.isReverseNode)
+            + " "
+            + str(self.turn)
+            + " "
+            + str(self.wait_time)
+            + " "
+            + str(self.has_action())
+            + " "
+            + "]"
+        )

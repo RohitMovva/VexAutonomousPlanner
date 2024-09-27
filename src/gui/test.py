@@ -1,7 +1,17 @@
 import sys
-from PyQt6.QtWidgets import QApplication, QGraphicsView, QGraphicsScene, QGraphicsPixmapItem, QGraphicsRectItem, QGraphicsItem, QMenu
-from PyQt6.QtGui import QPixmap, QPainter, QPen, QColor, QBrush, QFont
-from PyQt6.QtCore import Qt, QRectF, QPointF, QSize
+
+from PyQt6.QtCore import QPointF, QRectF, QSize, Qt
+from PyQt6.QtGui import QBrush, QColor, QFont, QPainter, QPen, QPixmap
+from PyQt6.QtWidgets import (
+    QApplication,
+    QGraphicsItem,
+    QGraphicsPixmapItem,
+    QGraphicsRectItem,
+    QGraphicsScene,
+    QGraphicsView,
+    QMenu,
+)
+
 
 class Node(QGraphicsItem):
     def __init__(self, x, y, radius=30):
@@ -13,11 +23,11 @@ class Node(QGraphicsItem):
         self.setAcceptHoverEvents(True)
 
     def boundingRect(self):
-        return QRectF(-self.radius, -self.radius, 2*self.radius, 2*self.radius)
+        return QRectF(-self.radius, -self.radius, 2 * self.radius, 2 * self.radius)
 
     def paint(self, painter, option, widget):
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        
+
         # Draw the circle
         painter.setPen(QPen(Qt.GlobalColor.black, 2))
         painter.setBrush(QBrush(QColor(173, 216, 230)))  # Light blue color
@@ -34,6 +44,7 @@ class Node(QGraphicsItem):
         action1 = menu.addAction("Action 1")
         action2 = menu.addAction("Action 2")
         menu.exec(event.screenPos())
+
 
 class ZoomableImageWidget(QGraphicsView):
     def __init__(self, image_path, size=QSize):
@@ -62,7 +73,11 @@ class ZoomableImageWidget(QGraphicsView):
         old_pos = self.mapToScene(event.position().toPoint())
 
         current_scale = self.transform().m11()
-        new_scale = current_scale * zoom_factor if event.angleDelta().y() > 0 else current_scale / zoom_factor
+        new_scale = (
+            current_scale * zoom_factor
+            if event.angleDelta().y() > 0
+            else current_scale / zoom_factor
+        )
 
         if new_scale < self.get_fit_in_view_scale():
             new_scale = self.get_fit_in_view_scale()
@@ -77,7 +92,10 @@ class ZoomableImageWidget(QGraphicsView):
     def get_fit_in_view_scale(self):
         view_rect = self.viewport().rect()
         scene_rect = self.image_item.boundingRect()
-        return min(view_rect.width() / scene_rect.width(), view_rect.height() / scene_rect.height())
+        return min(
+            view_rect.width() / scene_rect.width(),
+            view_rect.height() / scene_rect.height(),
+        )
 
     def mousePressEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton and self.shift_pressed:
@@ -110,8 +128,9 @@ class ZoomableImageWidget(QGraphicsView):
             self.setCursor(Qt.CursorShape.OpenHandCursor)
         super().keyReleaseEvent(event)
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     app = QApplication(sys.argv)
-    widget = ZoomableImageWidget('../../assets/V5RC-HighStakes-Match-2000x2000.png')
+    widget = ZoomableImageWidget("../../assets/V5RC-HighStakes-Match-2000x2000.png")
     widget.show()
     sys.exit(app.exec())
