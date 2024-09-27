@@ -3,8 +3,7 @@ from bisect import bisect_left  # Binary Search
 
 import numpy as np
 
-from bezier.cubic_bezier import *
-from bezier.quadratic_bezier import *
+from bezier import quadratic_bezier, cubic_bezier
 
 
 def max_speed_based_on_curvature(curvature, V_base, K):
@@ -12,15 +11,15 @@ def max_speed_based_on_curvature(curvature, V_base, K):
 
 
 def distToTime(distance, segments):
-    l = 0
-    r = len(segments) - 1
+    left = 0
+    right = len(segments) - 1
     mid = None
-    while l <= r:
-        mid = int(l + (r - l) / 2)
+    while left <= right:
+        mid = int(left + (right - left) / 2)
         if segments[mid] < distance:
-            l = mid + 1
+            left = mid + 1
         elif segments[mid] > distance:
-            r = mid - 1
+            right = mid - 1
         else:
             break
 
@@ -94,14 +93,14 @@ def generate_other_lists(velocities, control_points, segments, dt):
         y = None
         if len(control_points[current_segment]) == 3:  # Quadratic Bezier curve
             headings.append(
-                quad_bezier_angle(
+                quadratic_bezier.quad_bezier_angle(
                     t_along_curve,
                     control_points[current_segment][0],
                     control_points[current_segment][2],
                     control_points[current_segment][1],
                 )
             )
-            x, y = quadratic_bezier_point(
+            x, y = quadratic_bezier.quadratic_bezier_point(
                 control_points[current_segment][0],
                 control_points[current_segment][2],
                 control_points[current_segment][1],
@@ -109,7 +108,7 @@ def generate_other_lists(velocities, control_points, segments, dt):
             )
         else:  # Cubic
             headings.append(
-                cubic_bezier_angle(
+                cubic_bezier.cubic_bezier_angle(
                     t_along_curve,
                     control_points[current_segment][0],
                     control_points[current_segment][2],
@@ -117,7 +116,7 @@ def generate_other_lists(velocities, control_points, segments, dt):
                     control_points[current_segment][1],
                 )
             )
-            x, y = cubic_bezier_point(
+            x, y = cubic_bezier.cubic_bezier_point(
                 control_points[current_segment][0],
                 control_points[current_segment][2],
                 control_points[current_segment][3],
@@ -238,14 +237,14 @@ def generate_motion_profile(
         t_along_curve = distToTime(current_dist, segments[current_segment])
         curvature = None
         if len(control_points[current_segment]) < 4:  # Quadratic
-            curvature = quadratic_bezier_curvature(
+            curvature = quadratic_bezier.quadratic_bezier_curvature(
                 control_points[current_segment][0],
                 control_points[current_segment][2],
                 control_points[current_segment][1],
                 t_along_curve,
             )
         else:
-            curvature = cubic_bezier_curvature(
+            curvature = cubic_bezier.cubic_bezier_curvature(
                 control_points[current_segment][0],
                 control_points[current_segment][2],
                 control_points[current_segment][3],

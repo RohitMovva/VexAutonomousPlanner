@@ -35,12 +35,6 @@ def quadratic_bezier_curvature(p0, p1, p2, t):
     return calculate_curvature(first_derivative, second_derivative)
 
 
-def quadratic_bezier_point(P0, P1, P2, t):
-    x = (1 - t) ** 2 * P0.x() + 2 * (1 - t) * t * P1.x() + t**2 * P2.x()
-    y = (1 - t) ** 2 * P0.y() + 2 * (1 - t) * t * P1.y() + t**2 * P2.y()
-    return x, y
-
-
 def quad_bezier_angle(t, P0, P1, P2):
     tangentX = (2 * (1 - t) * (P1.x() - P0.x())) + (2 * t * (P2.x() - P1.x()))
     tangentY = (2 * (1 - t) * (P1.y() - P0.y())) + (2 * t * (P2.y() - P1.y()))

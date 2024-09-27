@@ -2,14 +2,12 @@ import json
 import os
 from pathlib import Path
 
-from PyQt6.QtCore import Qt, pyqtSlot
-from PyQt6.QtGui import QAction, QIcon, QKeySequence, QShortcut, QTransform
+from PyQt6.QtCore import Qt
+from PyQt6.QtGui import QAction, QIcon
 from PyQt6.QtWidgets import (
     QApplication,
     QDialog,
     QFileDialog,
-    QGraphicsScene,
-    QGraphicsView,
     QInputDialog,
     QMainWindow,
     QPushButton,
@@ -17,13 +15,8 @@ from PyQt6.QtWidgets import (
     QVBoxLayout,
 )
 
-from bezier.cubic_bezier import *
-from bezier.quadratic_bezier import *
-from gui.click_listener import *
-from gui.node import *
-from gui.path import *
-from gui.settings import *
-from utilities import *
+import utilities
+from gui import node, path, settings
 
 
 # Should be integrated directly with the Gui class
@@ -57,7 +50,7 @@ class AutonomousPlannerGUIManager(QMainWindow):
         super(AutonomousPlannerGUIManager, self).__init__(parent)
 
         self.setWindowTitle("Path Planner")  # Totally not inspired by Pronounce that
-        self.setWindowIcon(QIcon(resource_path("../assets/windows_icon.ico")))
+        self.setWindowIcon(QIcon(utilities.resource_path("../assets/windows_icon.ico")))
         self.layout = QVBoxLayout()
 
         # self.nodes = []
@@ -70,45 +63,45 @@ class AutonomousPlannerGUIManager(QMainWindow):
 
         self.clearing_nodes = False
 
-        autonomous_path = getConfigValue("autonomous_repository_path")
-        if autonomous_path == None:
+        autonomous_path = utilities.getConfigValue("autonomous_repository_path")
+        if autonomous_path is None:
             autonomous_path = QFileDialog.getExistingDirectory(
                 self,
                 "Select Autonomous Program Directory",
                 str(Path(os.getcwd()).parent.parent.absolute()),
             )
 
-            setConfigValue("autonomous_repository_path", autonomous_path + "/routes.h")
+            utilities.setConfigValue("autonomous_repository_path", autonomous_path + "/routes.h")
             print(f"Added autonomous repository path: {autonomous_path}/routes.h")
 
-        routes_path = getConfigValue("routes_folder_path")
-        if routes_path == None:
+        routes_path = utilities.getConfigValue("routes_folder_path")
+        if routes_path is None:
             routes_path = QFileDialog.getExistingDirectory(
                 self,
                 "Select Routes Folder",
                 str(Path(os.getcwd()).parent.parent.absolute()),
             )
 
-            setConfigValue("routes_folder_path", routes_path)
+            utilities.setConfigValue("routes_folder_path", routes_path)
             print(f"Added routes folder path: {routes_path}")
 
         self.routes_header_path = autonomous_path
         self.routes_folder_path = routes_path
 
-        self.max_velocity = getConfigValue("max_velocity")
-        self.max_acceleration = getConfigValue("max_acceleration")
-        self.max_jerk = getConfigValue("max_jerk")
+        self.max_velocity = utilities.getConfigValue("max_velocity")
+        self.max_acceleration = utilities.getConfigValue("max_acceleration")
+        self.max_jerk = utilities.getConfigValue("max_jerk")
 
-        self.track_width = getConfigValue("track_width")
+        self.track_width = utilities.getConfigValue("track_width")
 
         # Image and path widget
-        self.central_widget = PathWidget(self)
+        self.central_widget = path.PathWidget(self)
 
         self.setCentralWidget(self.central_widget)
         self.central_widget.show()
 
         # Settings Dock Widget
-        self.settings_dock_widget = SettingsDockWidget(
+        self.settings_dock_widget = settings.SettingsDockWidget(
             self.max_velocity, self.max_acceleration, self.max_jerk, self
         )
 
@@ -210,9 +203,9 @@ class AutonomousPlannerGUIManager(QMainWindow):
         if ok and nodes_string:
             self.central_widget.load_nodes(nodes_string)
 
-    def recalculate_nodes_map(self):
-        current_dist = 0
-        current_segment = 0
+    # def recalculate_nodes_map(self):
+    #     current_dist = 0
+    #     current_segment = 0
 
     # for i in range(len(self.)):
     #     if (current_dist >= segments[current_segment][-1] and current_segment < len(segments)-1):
@@ -242,7 +235,7 @@ class AutonomousPlannerGUIManager(QMainWindow):
             nodes_string = self.convert_nodes()
         full_path = None
 
-        if self.current_working_file == None:
+        if self.current_working_file is None:
             file_name, ok = QInputDialog.getText(
                 self, "Save Route to File", "Enter file name (without extension):"
             )
@@ -317,7 +310,7 @@ class AutonomousPlannerGUIManager(QMainWindow):
             file_name = (
                 self.routes_folder_path + "/" + self.current_working_file + ".txt"
             )
-        if file_name != None:
+        if file_name is not None:
             with open(file_name, "r") as file:
                 nodes_string = file.read()
             print(f"Route loaded from {file_name}")
@@ -330,7 +323,7 @@ class AutonomousPlannerGUIManager(QMainWindow):
         if ok and file_name:
             self.current_working_file = file_name
             folder = self.routes_folder_path
-            if folder == None:
+            if folder is None:
                 folder = QFileDialog.getExistingDirectory(
                     self,
                     "Select Directory to Save File",
@@ -343,7 +336,7 @@ class AutonomousPlannerGUIManager(QMainWindow):
                 if not os.path.exists(full_path):
                     with open(
                         full_path, "w+"
-                    ) as file:  # Creates file if it isn't already created
+                    ):  # Creates file if it isn't already created
                         pass
                 print(f"Set current working file at {full_path}")
                 if (
@@ -363,20 +356,20 @@ class AutonomousPlannerGUIManager(QMainWindow):
         self.clear_nodes()
         for node_data in nodes_data:
             if len(node_data) > 4:
-                node = Node(
+                new_node = node.Node(
                     node_data[0], node_data[1], self.central_widget, gui_instance=self
                 )
-                self.start_node = node if bool(node_data[2]) else self.start_node
-                node.isStartNode = bool(node_data[2])
-                self.end_node = node if bool(node_data[3]) else self.end_node
-                node.isEndNode = bool(node_data[3])
-                node.spinIntake = bool(node_data[4])
-                node.clampGoal = bool(node_data[5])
-                node.isReverseNode = bool(node_data[6])
-                node.turn = node_data[7]
-                node.wait_time = node_data[8]
-                self.nodes.append(node)
-                node.show()
+                self.start_node = new_node if bool(node_data[2]) else self.start_node
+                new_node.isStartNode = bool(node_data[2])
+                self.end_node = new_node if bool(node_data[3]) else self.end_node
+                new_node.isEndNode = bool(node_data[3])
+                new_node.spinIntake = bool(node_data[4])
+                new_node.clampGoal = bool(node_data[5])
+                new_node.isReverseNode = bool(node_data[6])
+                new_node.turn = node_data[7]
+                new_node.wait_time = node_data[8]
+                self.nodes.append(new_node)
+                new_node.show()
 
         self.central_widget.update_path()
 
@@ -404,7 +397,7 @@ class AutonomousPlannerGUIManager(QMainWindow):
 
     def auto_save(self):
         if (
-            self.current_working_file != None
+            self.current_working_file is not None
             and self.central_widget.start_node
             and self.central_widget.end_node
             and not self.clearing_nodes
@@ -420,12 +413,12 @@ class AutonomousPlannerGUIManager(QMainWindow):
         stringified = []
         for i in range(0, len(nodes_data)):
             if len(nodes_data[i]) > 2:
-                stringified.append(f"{{")
+                stringified.append("{")
                 for j in range(0, len(nodes_data[i])):
                     stringified[-1] += f"{nodes_data[i][j]}"
                     if j < len(nodes_data[i]) - 1:
-                        stringified[-1] += f", "
-                stringified[-1] += f"}}"
+                        stringified[-1] += ", "
+                stringified[-1] += "}"
             else:
                 stringified.append(f"{{{nodes_data[i][0]}, {nodes_data[i][1]}}}")
         # print(stringified)
@@ -472,31 +465,31 @@ class AutonomousPlannerGUIManager(QMainWindow):
     def changeField(self, fieldType):
         if fieldType == "High Stakes Match":
             self.central_widget.update_image_path(
-                resource_path("../assets/V5RC-HighStakes-Match-2000x2000.png")
+                utilities.resource_path("../assets/V5RC-HighStakes-Match-2000x2000.png")
             )
         else:
             self.central_widget.update_image_path(
-                resource_path("../assets/V5RC-HighStakes-Skills-2000x2000.png")
+                utilities.resource_path("../assets/V5RC-HighStakes-Skills-2000x2000.png")
             )
 
     def setVelocity(self, newVelocity):
         self.max_velocity = newVelocity
-        setConfigValue("max_velocity", self.max_velocity)
+        utilities.setConfigValue("max_velocity", self.max_velocity)
 
     def setAcceleration(self, newAcceleration):
         self.max_acceleration = newAcceleration
-        setConfigValue("max_acceleration", self.max_acceleration)
+        utilities.setConfigValue("max_acceleration", self.max_acceleration)
 
     def setJerk(self, newJerk):
         self.max_jerk = newJerk
-        setConfigValue("max_jerk", self.max_jerk)
+        utilities.setConfigValue("max_jerk", self.max_jerk)
 
     def position_graph(self):
         self.central_widget.calculateScurveStuff(
             self.max_velocity, self.max_acceleration, self.max_jerk, self.track_width
         )
 
-        create_mpl_plot(
+        utilities.create_mpl_plot(
             self.central_widget.all_time_intervals,
             self.central_widget.all_positions,
             12,
@@ -511,7 +504,7 @@ class AutonomousPlannerGUIManager(QMainWindow):
             self.max_velocity, self.max_acceleration, self.max_jerk, self.track_width
         )
 
-        create_mpl_plot(
+        utilities.create_mpl_plot(
             self.central_widget.all_time_intervals,
             self.central_widget.all_velocities,
             12,
@@ -526,7 +519,7 @@ class AutonomousPlannerGUIManager(QMainWindow):
             self.max_velocity, self.max_acceleration, self.max_jerk, self.track_width
         )
 
-        create_mpl_plot(
+        utilities.create_mpl_plot(
             self.central_widget.all_time_intervals,
             self.central_widget.all_accelerations,
             12,
@@ -541,7 +534,7 @@ class AutonomousPlannerGUIManager(QMainWindow):
             self.max_velocity, self.max_acceleration, self.max_jerk, self.track_width
         )
 
-        create_mpl_plot(
+        utilities.create_mpl_plot(
             self.central_widget.all_time_intervals,
             self.central_widget.all_headings,
             12,
@@ -559,7 +552,7 @@ class AutonomousPlannerGUIManager(QMainWindow):
         x, y = zip(*self.central_widget.all_coords)
         y = [-1 * i for i in y]
 
-        create_mpl_plot(
+        utilities.create_mpl_plot(
             x,
             y,
             8,

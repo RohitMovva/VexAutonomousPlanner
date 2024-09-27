@@ -38,7 +38,7 @@ def resource_path(relative_path):
 def getConfigValue(keyname):
     with open(resource_path("../config.yaml"), "r") as file:
         config = yaml.safe_load(file)
-    if config == None:
+    if config is None:
         config = {}
     return config.get(keyname)  # Prevents error if key doesn't exist in dict
 
@@ -64,9 +64,9 @@ def create_mpl_plot(
     plt.xlabel(xlabel)
     plt.ylabel(ylabel)
 
-    if xlim != None:
+    if xlim is not None:
         plt.xlim(xlim[0], xlim[1])
-    if ylim != None:
+    if ylim is not None:
         plt.ylim(ylim[0], ylim[1])
 
     plt.tight_layout()

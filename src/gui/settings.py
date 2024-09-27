@@ -1,4 +1,3 @@
-from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import (
     QComboBox,
     QDockWidget,
@@ -11,9 +10,6 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from bezier.cubic_bezier import *
-from bezier.quadratic_bezier import *
-from utilities import *
 
 
 class SettingsDockWidget(QDockWidget):

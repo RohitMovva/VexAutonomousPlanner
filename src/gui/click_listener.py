@@ -3,10 +3,6 @@ from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QMouseEvent
 from PyQt6.QtWidgets import QLabel
 
-from bezier.cubic_bezier import *
-from bezier.quadratic_bezier import *
-from utilities import *
-
 
 class ClickableLabel(QLabel):
     def __init__(self, parent=None, gui_instance=None):

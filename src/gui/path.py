@@ -1,8 +1,8 @@
 import json
 from math import sqrt
 
-from PyQt6.QtCore import QLineF, QSize, Qt
-from PyQt6.QtGui import QColor, QPainter, QPainterPath, QPen, QPixmap
+from PyQt6.QtCore import QLineF, QSize, Qt, QPointF
+from PyQt6.QtGui import QColor, QPainter, QPainterPath, QPen, QPixmap, QMouseEvent
 from PyQt6.QtWidgets import (
     QApplication,
     QGraphicsPathItem,
@@ -11,11 +11,13 @@ from PyQt6.QtWidgets import (
     QGraphicsView,
 )
 
-from bezier.cubic_bezier import *
-from bezier.quadratic_bezier import *
-from gui.node import *
+# from bezier.cubic_bezier import *
+# from bezier.quadratic_bezier import *
+from bezier import quadratic_bezier, cubic_bezier
+# from gui.node import *
+from gui import node
 from motion_profiling_v2 import motion_profile_generator
-from utilities import *
+import utilities
 
 
 def createCurveSegments(start, end, control1, control2=None):
@@ -23,18 +25,18 @@ def createCurveSegments(start, end, control1, control2=None):
     segments = [0]
     ox, oy = None, None
     if control2:
-        ox, oy = cubic_bezier_point(start, control1, control2, end, 0)
+        ox, oy = cubic_bezier.cubic_bezier_point(start, control1, control2, end, 0)
     else:
-        ox, oy = quadratic_bezier_point(start, control1, end, 0)
+        ox, oy = quadratic_bezier.quadratic_bezier_point(start, control1, end, 0)
     dx, dy = None, None
     currlen = 0
     for i in range(1, numsegments):
         t = (i) / numsegments
         cx, cy = None, None
         if control2:
-            cx, cy = cubic_bezier_point(start, control1, control2, end, t)
+            cx, cy = cubic_bezier.cubic_bezier_point(start, control1, control2, end, t)
         else:
-            cx, cy = quadratic_bezier_point(start, control1, end, t)
+            cx, cy = quadratic_bezier.quadratic_bezier_point(start, control1, end, t)
 
         dx, dy = ox - cx, oy - cy
         currlen += sqrt(dx**2 + dy**2)
@@ -48,7 +50,7 @@ class PathWidget(QGraphicsView):
     def __init__(
         self,
         parent=None,
-        image_path=resource_path("../assets/V5RC-HighStakes-Match-2000x2000.png"),
+        image_path=utilities.resource_path("../assets/V5RC-HighStakes-Match-2000x2000.png"),
         size=QSize(250, 250),
     ):
         super().__init__(parent)
@@ -201,7 +203,7 @@ class PathWidget(QGraphicsView):
     def mouseMoveEvent(self, event):
         item = self.itemAt(event.position().toPoint())
         scene_pos = self.mapToScene(event.position().toPoint())
-        if isinstance(item, Node) or (item and isinstance(item.parentItem(), Node)):
+        if isinstance(item, node.Node) or (item and isinstance(item.parentItem(), node.Node)):
             QApplication.setOverrideCursor(Qt.CursorShape.ArrowCursor)
             self.parent.updateCoords(scene_pos)
         elif self.shift_pressed:
@@ -398,7 +400,7 @@ class PathWidget(QGraphicsView):
             cp1 = revSource.p2()
 
         # The final curve, that joins to the last point
-        if cp1 == None:
+        if cp1 is None:
             return
 
         self.line_data.append([self.path.currentPosition(), points[-1], cp1])
@@ -414,23 +416,23 @@ class PathWidget(QGraphicsView):
         return self.nodes
 
     def add_node(self, point, pos=-1):
-        node = Node(point.x(), point.y(), self)
-        if pos == -1 and self.end_node != None:
+        new_node = node.Node(point.x(), point.y(), self)
+        if pos == -1 and self.end_node is not None:
             pos = len(self.nodes) - 1
         if pos == -1:
-            self.nodes.append(node)
+            self.nodes.append(new_node)
         else:
-            self.nodes.insert(pos, node)
+            self.nodes.insert(pos, new_node)
 
-        node.setPos(point)
-        self.scene.addItem(node)
+        new_node.setPos(point)
+        self.scene.addItem(new_node)
 
-        node.show()
+        new_node.show()
         self.update_path()
         self.auto_save()
 
-        print(f"Node created at ({node.absX}, {node.absY})")
-        return node
+        print(f"Node created at ({new_node.absX}, {new_node.absY})")
+        return new_node
 
     def remove_node(self, node):
         if node in self.nodes:
@@ -523,5 +525,5 @@ class PathWidget(QGraphicsView):
         return self.nodes.index(node)
 
     def auto_save(self):
-        if self.parent.current_working_file != None:
+        if self.parent.current_working_file is not None:
             self.parent.auto_save()

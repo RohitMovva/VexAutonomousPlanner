@@ -1,9 +1,6 @@
 from PyQt6.QtCore import QPoint, QPointF, QRectF, Qt
-from PyQt6.QtGui import QAction, QBrush, QColor, QFont, QMouseEvent, QPainter, QPen
+from PyQt6.QtGui import QAction, QColor, QPainter
 from PyQt6.QtWidgets import QGraphicsItem, QInputDialog, QMenu, QWidget
-
-from bezier.cubic_bezier import *
-from bezier.quadratic_bezier import *
 
 
 # Node that stores data for auton route
@@ -206,7 +203,7 @@ class Node(QGraphicsItem):
     def delete_node(self):
         self.parent.remove_node(self)
         self.scene().removeItem(self)
-        print(f"Node at ({self.x}, {self.y}) deleted")
+        print(f"Node at ({self.x()}, {self.y()}) deleted")
 
     def insert_node_before(self):
         new_point = QPointF(self.pos().x() + 5, self.pos().y() + 5)

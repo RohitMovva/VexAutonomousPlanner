@@ -4,10 +4,8 @@ import matplotlib.pyplot as plt
 import qdarktheme
 from PyQt6.QtWidgets import QApplication
 
-from bezier.cubic_bezier import *
-from bezier.quadratic_bezier import *
-from gui.gui_manager import *
-from utilities import *
+import utilities
+from gui import gui_manager
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
@@ -16,10 +14,10 @@ if __name__ == "__main__":
     plt.style.use("dark_background")
 
     if getattr(sys, "frozen", False):
-        create_files()
-        load_fonts()
+        utilities.create_files()
+        utilities.load_fonts()
 
-    window = AutonomousPlannerGUIManager()
+    window = gui_manager.AutonomousPlannerGUIManager()
     window.show()
 
     sys.exit(app.exec())
