@@ -205,10 +205,10 @@ class PathWidget(QGraphicsView):
         scene_pos = self.mapToScene(event.position().toPoint())
         if isinstance(item, node.Node) or (item and isinstance(item.parentItem(), node.Node)):
             QApplication.setOverrideCursor(Qt.CursorShape.ArrowCursor)
-            self.parent.updateCoords(scene_pos)
+            self.parent.update_coords(scene_pos)
         elif self.shift_pressed:
             QApplication.setOverrideCursor(Qt.CursorShape.ArrowCursor)
-            self.parent.updateCoords(scene_pos)
+            self.parent.update_coords(scene_pos)
         elif (
             scene_pos.x() < 0
             or scene_pos.x() > 2000
@@ -218,10 +218,10 @@ class PathWidget(QGraphicsView):
             QApplication.setOverrideCursor(Qt.CursorShape.ArrowCursor)
         elif self.mouseDown:
             QApplication.setOverrideCursor(Qt.CursorShape.ClosedHandCursor)
-            self.parent.updateCoords(scene_pos)
+            self.parent.update_coords(scene_pos)
         else:
             QApplication.setOverrideCursor(Qt.CursorShape.OpenHandCursor)
-            self.parent.updateCoords(scene_pos)
+            self.parent.update_coords(scene_pos)
 
         super().mouseMoveEvent(event)
 
