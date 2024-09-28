@@ -2,7 +2,7 @@
 
 An application for easy, action oriented, generation of paths for VEX robotics.
 
-Created by team 77717A Flip
+Created by team 77717F Flip
 
 ## Installation
 The project can be accessed either by cloning or by downloading the latest excecutable from the Releases tab on the side.
