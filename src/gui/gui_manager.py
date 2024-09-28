@@ -63,7 +63,7 @@ class AutonomousPlannerGUIManager(QMainWindow):
 
         self.clearing_nodes = False
 
-        autonomous_path = utilities.getConfigValue("autonomous_repository_path")
+        autonomous_path = utilities.get_config_value("autonomous_repository_path")
         if autonomous_path is None:
             autonomous_path = QFileDialog.getExistingDirectory(
                 self,
@@ -71,10 +71,10 @@ class AutonomousPlannerGUIManager(QMainWindow):
                 str(Path(os.getcwd()).parent.parent.absolute()),
             )
 
-            utilities.setConfigValue("autonomous_repository_path", autonomous_path + "/routes.h")
+            utilities.set_config_value("autonomous_repository_path", autonomous_path + "/routes.h")
             print(f"Added autonomous repository path: {autonomous_path}/routes.h")
 
-        routes_path = utilities.getConfigValue("routes_folder_path")
+        routes_path = utilities.get_config_value("routes_folder_path")
         if routes_path is None:
             routes_path = QFileDialog.getExistingDirectory(
                 self,
@@ -82,17 +82,17 @@ class AutonomousPlannerGUIManager(QMainWindow):
                 str(Path(os.getcwd()).parent.parent.absolute()),
             )
 
-            utilities.setConfigValue("routes_folder_path", routes_path)
+            utilities.set_config_value("routes_folder_path", routes_path)
             print(f"Added routes folder path: {routes_path}")
 
         self.routes_header_path = autonomous_path
         self.routes_folder_path = routes_path
 
-        self.max_velocity = utilities.getConfigValue("max_velocity")
-        self.max_acceleration = utilities.getConfigValue("max_acceleration")
-        self.max_jerk = utilities.getConfigValue("max_jerk")
+        self.max_velocity = utilities.get_config_value("max_velocity")
+        self.max_acceleration = utilities.get_config_value("max_acceleration")
+        self.max_jerk = utilities.get_config_value("max_jerk")
 
-        self.track_width = utilities.getConfigValue("track_width")
+        self.track_width = utilities.get_config_value("track_width")
 
         # Image and path widget
         self.central_widget = path.PathWidget(self)
@@ -118,7 +118,7 @@ class AutonomousPlannerGUIManager(QMainWindow):
         self.update()
         self.create_menu_bar()
 
-    def updateCoords(self, p):
+    def update_coords(self, p):
         # p = self.mapToScene(event.position().toPoint())
         x = round(((p.x() / (2000)) - 0.5) * 12.3266567842 * 12, 3)
         y = round(((p.y() / (2000)) - 0.5) * 12.3266567842 * 12, 3)
@@ -271,7 +271,7 @@ class AutonomousPlannerGUIManager(QMainWindow):
                 headings,
                 nodes_map,
                 coords,
-            ) = self.central_widget.calculateScurveStuff(
+            ) = self.central_widget.generate_motion_profile_lists(
                 self.max_velocity,
                 self.max_acceleration,
                 self.max_jerk,
@@ -360,12 +360,12 @@ class AutonomousPlannerGUIManager(QMainWindow):
                     node_data[0], node_data[1], self.central_widget, gui_instance=self
                 )
                 self.start_node = new_node if bool(node_data[2]) else self.start_node
-                new_node.isStartNode = bool(node_data[2])
+                new_node.is_start_node = bool(node_data[2])
                 self.end_node = new_node if bool(node_data[3]) else self.end_node
-                new_node.isEndNode = bool(node_data[3])
-                new_node.spinIntake = bool(node_data[4])
-                new_node.clampGoal = bool(node_data[5])
-                new_node.isReverseNode = bool(node_data[6])
+                new_node.is_end_node = bool(node_data[3])
+                new_node.spin_intake = bool(node_data[4])
+                new_node.clamp_goal = bool(node_data[5])
+                new_node.is_reverse_node = bool(node_data[6])
                 new_node.turn = node_data[7]
                 new_node.wait_time = node_data[8]
                 self.nodes.append(new_node)
@@ -462,7 +462,7 @@ class AutonomousPlannerGUIManager(QMainWindow):
         with open(self.routes_header_path, "w") as routes_file:
             routes_file.writelines(content)
 
-    def changeField(self, fieldType):
+    def switch_field(self, fieldType):
         if fieldType == "High Stakes Match":
             self.central_widget.update_image_path(
                 utilities.resource_path("../assets/V5RC-HighStakes-Match-2000x2000.png")
@@ -472,20 +472,20 @@ class AutonomousPlannerGUIManager(QMainWindow):
                 utilities.resource_path("../assets/V5RC-HighStakes-Skills-2000x2000.png")
             )
 
-    def setVelocity(self, newVelocity):
+    def set_velocity(self, newVelocity):
         self.max_velocity = newVelocity
-        utilities.setConfigValue("max_velocity", self.max_velocity)
+        utilities.set_config_value("max_velocity", self.max_velocity)
 
-    def setAcceleration(self, newAcceleration):
+    def set_acceleration(self, newAcceleration):
         self.max_acceleration = newAcceleration
-        utilities.setConfigValue("max_acceleration", self.max_acceleration)
+        utilities.set_config_value("max_acceleration", self.max_acceleration)
 
-    def setJerk(self, newJerk):
+    def set_jerk(self, newJerk):
         self.max_jerk = newJerk
-        utilities.setConfigValue("max_jerk", self.max_jerk)
+        utilities.set_config_value("max_jerk", self.max_jerk)
 
     def position_graph(self):
-        self.central_widget.calculateScurveStuff(
+        self.central_widget.generate_motion_profile_lists(
             self.max_velocity, self.max_acceleration, self.max_jerk, self.track_width
         )
 
@@ -500,7 +500,7 @@ class AutonomousPlannerGUIManager(QMainWindow):
         )
 
     def velocity_graph(self):
-        self.central_widget.calculateScurveStuff(
+        self.central_widget.generate_motion_profile_lists(
             self.max_velocity, self.max_acceleration, self.max_jerk, self.track_width
         )
 
@@ -515,7 +515,7 @@ class AutonomousPlannerGUIManager(QMainWindow):
         )
 
     def acceleration_graph(self):
-        self.central_widget.calculateScurveStuff(
+        self.central_widget.generate_motion_profile_lists(
             self.max_velocity, self.max_acceleration, self.max_jerk, self.track_width
         )
 
@@ -530,7 +530,7 @@ class AutonomousPlannerGUIManager(QMainWindow):
         )
 
     def heading_graph(self):
-        self.central_widget.calculateScurveStuff(
+        self.central_widget.generate_motion_profile_lists(
             self.max_velocity, self.max_acceleration, self.max_jerk, self.track_width
         )
 
@@ -545,7 +545,7 @@ class AutonomousPlannerGUIManager(QMainWindow):
         )
 
     def coords_graph(self):
-        self.central_widget.calculateScurveStuff(
+        self.central_widget.generate_motion_profile_lists(
             self.max_velocity, self.max_acceleration, self.max_jerk, self.track_width
         )
 

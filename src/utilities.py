@@ -35,7 +35,7 @@ def resource_path(relative_path):
     return os.path.join(base_path, relative_path)
 
 
-def getConfigValue(keyname):
+def get_config_value(keyname):
     with open(resource_path("../config.yaml"), "r") as file:
         config = yaml.safe_load(file)
     if config is None:
@@ -43,7 +43,7 @@ def getConfigValue(keyname):
     return config.get(keyname)  # Prevents error if key doesn't exist in dict
 
 
-def setConfigValue(keyname, value):
+def set_config_value(keyname, value):
     with open(resource_path("../config.yaml"), "r") as file:
         config = yaml.safe_load(file)
     if config is None:

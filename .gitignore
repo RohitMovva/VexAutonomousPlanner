@@ -1,5 +1,5 @@
 build/
 dist/
-src/test.py
 __pycache__/
 env/
+test.py

@@ -20,7 +20,7 @@ from motion_profiling_v2 import motion_profile_generator
 import utilities
 
 
-def createCurveSegments(start, end, control1, control2=None):
+def create_curve_segments(start, end, control1, control2=None):
     numsegments = 1001
     segments = [0]
     ox, oy = None, None
@@ -240,7 +240,7 @@ class PathWidget(QGraphicsView):
             QApplication.setOverrideCursor(Qt.CursorShape.OpenHandCursor)
         super().keyReleaseEvent(event)
 
-    def handleCoords(self, point):
+    def handle_coords(self, point):
         x = round(((point.x() / (2000)) - 0.5) * 12**2, 2)
         y = round(((point.y() / (2000)) - 0.5) * 12**2, 2)
         if not point.isNull():
@@ -253,7 +253,7 @@ class PathWidget(QGraphicsView):
         self.image_item.setPixmap(self.image)
         self.update()
 
-    def calculateScurveStuff(self, v_max, a_max, j_max, track_width):
+    def generate_motion_profile_lists(self, v_max, a_max, j_max, track_width):
         # Clear lists
         self.all_time_intervals = []
         self.all_positions = []
@@ -270,10 +270,10 @@ class PathWidget(QGraphicsView):
             line = self.line_data[i][:]
 
             if len(line) == 3:
-                segments = createCurveSegments(line[0], line[1], line[2])
+                segments = create_curve_segments(line[0], line[1], line[2])
 
             else:
-                segments = createCurveSegments(line[0], line[1], line[2], line[3])
+                segments = create_curve_segments(line[0], line[1], line[2], line[3])
 
             segment_data[0].append(line)
             segment_data[1].append(segments)
@@ -336,7 +336,7 @@ class PathWidget(QGraphicsView):
                     continue
                 points.append(node.pos())
             points.append(self.end_node.pos())
-            self.buildPath(points)
+            self.build_path(points)
 
         else:
             self.path = QPainterPath()
@@ -351,7 +351,7 @@ class PathWidget(QGraphicsView):
         self.parent.auto_save()
 
     # Modified version of path generation logic from @musicamante on stackoverflow
-    def buildPath(self, points):
+    def build_path(self, points):
         # print("Building path...")
         factor = 0.25
         self.path = QPainterPath(points[0])
@@ -431,7 +431,7 @@ class PathWidget(QGraphicsView):
         self.update_path()
         self.auto_save()
 
-        print(f"Node created at ({new_node.absX}, {new_node.absY})")
+        print(f"Node created at ({new_node.abs_x}, {new_node.abs_y})")
         return new_node
 
     def remove_node(self, node):
@@ -446,7 +446,7 @@ class PathWidget(QGraphicsView):
 
     def set_start_node(self, node):
         if self.start_node:
-            self.start_node.isStartNode = False
+            self.start_node.is_start_node = False
             self.start_node.update()
             self.update()
         self.start_node = node
@@ -465,7 +465,7 @@ class PathWidget(QGraphicsView):
 
     def set_end_node(self, node):
         if self.end_node:
-            self.end_node.isEndNode = False
+            self.end_node.is_end_node = False
             self.end_node.update()
             self.update()
         self.end_node = node
@@ -508,12 +508,12 @@ class PathWidget(QGraphicsView):
             if len(node_data) > 4:
                 node = self.add_node(QPointF(node_data[0], node_data[1]))
                 self.start_node = node if bool(node_data[2]) else self.start_node
-                node.isStartNode = bool(node_data[2])
+                node.is_start_node = bool(node_data[2])
                 self.end_node = node if bool(node_data[3]) else self.end_node
-                node.isEndNode = bool(node_data[3])
-                node.spinIntake = bool(node_data[4])
-                node.clampGoal = bool(node_data[5])
-                node.isReverseNode = bool(node_data[6])
+                node.is_end_node = bool(node_data[3])
+                node.spin_intake = bool(node_data[4])
+                node.clamp_goal = bool(node_data[5])
+                node.is_reverse_node = bool(node_data[6])
                 node.turn = node_data[7]
                 node.wait_time = node_data[8]
 

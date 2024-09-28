@@ -10,7 +10,7 @@ def max_speed_based_on_curvature(curvature, V_base, K):
     return V_base / (1 + K * curvature)
 
 
-def distToTime(distance, segments):
+def distance_to_time(distance, segments):
     left = 0
     right = len(segments) - 1
     mid = None
@@ -88,7 +88,7 @@ def generate_other_lists(velocities, control_points, segments, dt):
             current_segment += 1
             nodes_map.append(i)
 
-        t_along_curve = distToTime(current_dist, segments[current_segment])
+        t_along_curve = distance_to_time(current_dist, segments[current_segment])
         x = None
         y = None
         if len(control_points[current_segment]) == 3:  # Quadratic Bezier curve
@@ -234,7 +234,7 @@ def generate_motion_profile(
             current_dist = 0
             current_segment += 1
 
-        t_along_curve = distToTime(current_dist, segments[current_segment])
+        t_along_curve = distance_to_time(current_dist, segments[current_segment])
         curvature = None
         if len(control_points[current_segment]) < 4:  # Quadratic
             curvature = quadratic_bezier.quadratic_bezier_curvature(
