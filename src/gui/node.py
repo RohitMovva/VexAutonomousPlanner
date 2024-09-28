@@ -27,6 +27,7 @@ class Node(QGraphicsItem):
         self.radius = radius
         self.setPos(x, y)
         self.setAcceptHoverEvents(True)
+        self.image_rect = QRectF(0, 0, 2000, 2000)
 
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsMovable)
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemSendsGeometryChanges)
@@ -75,8 +76,16 @@ class Node(QGraphicsItem):
         super().mouseReleaseEvent(event)
 
     def itemChange(self, change, value):
-        if change == QGraphicsItem.GraphicsItemChange.ItemPositionHasChanged:
+        # def itemChange(self, change, value):
+        if change == QGraphicsItem.GraphicsItemChange.ItemPositionChange and self.scene():
+            new_pos = value
+            if self.image_rect:
+                # Restrict the movement within the image boundaries
+                new_pos.setX(max(min(new_pos.x(), self.image_rect.right() - self.radius), self.image_rect.left() + self.radius))
+                new_pos.setY(max(min(new_pos.y(), self.image_rect.bottom() - self.radius), self.image_rect.top() + self.radius))
+
             self.update()  # Trigger a repaint to update the coordinates
+            return new_pos
         return super().itemChange(change, value)
 
     def contextMenuEvent(self, event):
