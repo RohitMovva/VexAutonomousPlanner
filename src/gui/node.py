@@ -201,7 +201,8 @@ class Node(QGraphicsItem):
 
         # Show the dialog and get the result
         if dialog.exec() == QInputDialog.DialogCode.Accepted:
-            self.wait_time = dialog.intValue()
+            self.turn = dialog.intValue()
+            self.parent.update_path()
             print(f"Turn set to: {self.turn}")
 
     def set_wait(self):
