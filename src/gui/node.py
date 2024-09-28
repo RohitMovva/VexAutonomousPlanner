@@ -184,20 +184,46 @@ class Node(QGraphicsItem):
         print(f"Reverse Node: {self.isReverseNode}")
 
     def set_turn(self):
-        value, ok = QInputDialog.getInt(
-            self, "Set Turn", "Enter turn (0-360):", self.turn, 0, 360
-        )
-        if ok:
-            self.turn = value
-            self.parent.update_path()
+        # Get the position of the node in screen coordinates
+        scene_pos = self.scenePos()
+        view_pos = self.scene().views()[0].mapFromScene(scene_pos)
+        screen_pos = self.scene().views()[0].viewport().mapToGlobal(view_pos)
+
+        # Create the dialog
+        dialog = QInputDialog(self.scene().views()[0])
+        dialog.setWindowTitle("Set Turn")
+        dialog.setLabelText("Enter turn (0-360):")
+        dialog.setIntRange(0, 360)
+        dialog.setIntValue(self.turn)
+        
+        # Set the position of the dialog
+        dialog.move(int(screen_pos.x() + self.radius), int(screen_pos.y() + self.radius))
+
+        # Show the dialog and get the result
+        if dialog.exec() == QInputDialog.DialogCode.Accepted:
+            self.wait_time = dialog.intValue()
             print(f"Turn set to: {self.turn}")
 
     def set_wait(self):
-        value, ok = QInputDialog.getInt(
-            self, "Set Wait Time", "Enter time (seconds):", self.wait_time, 0
-        )
-        if ok:
-            self.wait_time = value
+        # Get the position of the node in screen coordinates
+        scene_pos = self.scenePos()
+        view_pos = self.scene().views()[0].mapFromScene(scene_pos)
+        screen_pos = self.scene().views()[0].viewport().mapToGlobal(view_pos)
+
+        # Create the dialog
+        dialog = QInputDialog(self.scene().views()[0])
+        dialog.setWindowTitle("Set Wait Time")
+        dialog.setLabelText("Enter time (seconds):")
+        dialog.setInputMode(QInputDialog.InputMode.IntInput)
+        dialog.setIntValue(self.wait_time)
+        dialog.setIntMinimum(0)
+
+        # Set the position of the dialog
+        dialog.move(int(screen_pos.x() + self.radius), int(screen_pos.y() + self.radius))
+
+        # Show the dialog and get the result
+        if dialog.exec() == QInputDialog.DialogCode.Accepted:
+            self.wait_time = dialog.intValue()
             print(f"Wait time set to: {self.wait_time}")
 
     def delete_node(self):
