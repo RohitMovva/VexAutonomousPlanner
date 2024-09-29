@@ -212,9 +212,8 @@ def generate_motion_profile(
     j_max,
     track_width,
     dd=0.0025,
-    dt=0.004,
+    dt=0.025,
     K=15.0,
-    otherdt=0.04,
 ):  # dt=0.025
     velocities = []
 

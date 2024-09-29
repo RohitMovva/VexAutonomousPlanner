@@ -285,13 +285,13 @@ class AutonomousPlannerGUIManager(QMainWindow):
 
         nodes_actions = [
             [
-                int(node.spinIntake),
-                int(node.clampGoal),
-                int(node.isReverseNode),
-                node.turn,
-                node.wait_time,
+                int(cur_node.spin_intake),
+                int(cur_node.clamp_goal),
+                int(cur_node.is_reverse_node),
+                cur_node.turn,
+                cur_node.wait_time,
             ]
-            for node in nodes
+            for cur_node in nodes
         ]
 
         print(len(nodes_map), len(nodes_actions))
@@ -380,17 +380,17 @@ class AutonomousPlannerGUIManager(QMainWindow):
         print(nodes)
         nodes_data = [
             [
-                node.x(),
-                node.y(),
-                int(node.isStartNode),
-                int(node.isEndNode),
-                int(node.spinIntake),
-                int(node.clampGoal),
-                int(node.isReverseNode),
-                node.turn,
-                node.wait_time,
+                cur_node.x(),
+                cur_node.y(),
+                int(cur_node.is_start_node),
+                int(cur_node.is_end_node),
+                int(cur_node.spin_intake),
+                int(cur_node.clamp_goal),
+                int(cur_node.is_reverse_node),
+                cur_node.turn,
+                cur_node.wait_time,
             ]
-            for node in nodes
+            for cur_node in nodes
         ]
         if as_list:
             return nodes_data
