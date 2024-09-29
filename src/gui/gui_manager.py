@@ -71,7 +71,9 @@ class AutonomousPlannerGUIManager(QMainWindow):
                 str(Path(os.getcwd()).parent.parent.absolute()),
             )
 
-            utilities.set_config_value("autonomous_repository_path", autonomous_path + "/routes.h")
+            utilities.set_config_value(
+                "autonomous_repository_path", autonomous_path + "/routes.h"
+            )
             print(f"Added autonomous repository path: {autonomous_path}/routes.h")
 
         routes_path = utilities.get_config_value("routes_folder_path")
@@ -469,7 +471,9 @@ class AutonomousPlannerGUIManager(QMainWindow):
             )
         else:
             self.central_widget.update_image_path(
-                utilities.resource_path("../assets/V5RC-HighStakes-Skills-2000x2000.png")
+                utilities.resource_path(
+                    "../assets/V5RC-HighStakes-Skills-2000x2000.png"
+                )
             )
 
     def set_velocity(self, newVelocity):

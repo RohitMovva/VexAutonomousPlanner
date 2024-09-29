@@ -1,8 +1,8 @@
 import json
 from math import sqrt
 
-from PyQt6.QtCore import QLineF, QSize, Qt, QPointF
-from PyQt6.QtGui import QColor, QPainter, QPainterPath, QPen, QPixmap, QMouseEvent
+from PyQt6.QtCore import QLineF, QPointF, QSize, Qt
+from PyQt6.QtGui import QColor, QMouseEvent, QPainter, QPainterPath, QPen, QPixmap
 from PyQt6.QtWidgets import (
     QApplication,
     QGraphicsPathItem,
@@ -11,17 +11,14 @@ from PyQt6.QtWidgets import (
     QGraphicsView,
 )
 
-# from bezier.cubic_bezier import *
-# from bezier.quadratic_bezier import *
-from bezier import quadratic_bezier, cubic_bezier
-# from gui.node import *
+import utilities
+from bezier import cubic_bezier, quadratic_bezier
 from gui import node
 from motion_profiling_v2 import motion_profile_generator
-import utilities
 
 
 def create_curve_segments(start, end, control1, control2=None):
-    numsegments = 1001
+    numsegments = 1000
     segments = [0]
     ox, oy = None, None
     if control2:
@@ -30,7 +27,7 @@ def create_curve_segments(start, end, control1, control2=None):
         ox, oy = quadratic_bezier.quadratic_bezier_point(start, control1, end, 0)
     dx, dy = None, None
     currlen = 0
-    for i in range(1, numsegments):
+    for i in range(1, numsegments + 1):
         t = (i) / numsegments
         cx, cy = None, None
         if control2:
@@ -50,7 +47,9 @@ class PathWidget(QGraphicsView):
     def __init__(
         self,
         parent=None,
-        image_path=utilities.resource_path("../assets/V5RC-HighStakes-Match-2000x2000.png"),
+        image_path=utilities.resource_path(
+            "../assets/V5RC-HighStakes-Match-2000x2000.png"
+        ),
         size=QSize(250, 250),
     ):
         super().__init__(parent)
@@ -203,7 +202,9 @@ class PathWidget(QGraphicsView):
     def mouseMoveEvent(self, event):
         item = self.itemAt(event.position().toPoint())
         scene_pos = self.mapToScene(event.position().toPoint())
-        if isinstance(item, node.Node) or (item and isinstance(item.parentItem(), node.Node)):
+        if isinstance(item, node.Node) or (
+            item and isinstance(item.parentItem(), node.Node)
+        ):
             QApplication.setOverrideCursor(Qt.CursorShape.ArrowCursor)
             self.parent.update_coords(scene_pos)
         elif self.shift_pressed:
@@ -225,7 +226,7 @@ class PathWidget(QGraphicsView):
 
         super().mouseMoveEvent(event)
 
-    def leaveEvent(self, QEvent):
+    def leaveEvent(self, event):
         QApplication.setOverrideCursor(Qt.CursorShape.ArrowCursor)
 
     def keyPressEvent(self, event):
@@ -240,7 +241,7 @@ class PathWidget(QGraphicsView):
             QApplication.setOverrideCursor(Qt.CursorShape.OpenHandCursor)
         super().keyReleaseEvent(event)
 
-    def handle_coords(self, point):
+    def handle_coords(self, point: QPointF):
         x = round(((point.x() / (2000)) - 0.5) * 12**2, 2)
         y = round(((point.y() / (2000)) - 0.5) * 12**2, 2)
         if not point.isNull():
@@ -248,12 +249,14 @@ class PathWidget(QGraphicsView):
         else:
             self.labelCoords.clear()
 
-    def update_image_path(self, new_path):
+    def update_image_path(self, new_path: str):
         self.image = QPixmap(new_path)
         self.image_item.setPixmap(self.image)
         self.update()
 
-    def generate_motion_profile_lists(self, v_max, a_max, j_max, track_width):
+    def generate_motion_profile_lists(
+        self, v_max: float, a_max: float, j_max: float, track_width: float
+    ):
         # Clear lists
         self.all_time_intervals = []
         self.all_positions = []
@@ -279,7 +282,7 @@ class PathWidget(QGraphicsView):
             segment_data[1].append(segments)
             segment_length += segments[-1]
 
-            if (not self.nodes[i + 1].isEndNode) and (
+            if (not self.nodes[i + 1].is_end_node) and (
                 not self.nodes[i + 1].has_action()
             ):
                 continue
@@ -332,7 +335,7 @@ class PathWidget(QGraphicsView):
         if self.start_node and self.end_node and len(self.nodes) > 1:
             points = [self.start_node.pos()]
             for node in self.nodes:
-                if node.isEndNode or node.isStartNode:
+                if node.is_end_node or node.is_start_node:
                     continue
                 points.append(node.pos())
             points.append(self.end_node.pos())
@@ -351,7 +354,7 @@ class PathWidget(QGraphicsView):
         self.parent.auto_save()
 
     # Modified version of path generation logic from @musicamante on stackoverflow
-    def build_path(self, points):
+    def build_path(self, points: list[QPointF]):
         # print("Building path...")
         factor = 0.25
         self.path = QPainterPath(points[0])
@@ -367,7 +370,7 @@ class PathWidget(QGraphicsView):
             turnVal = self.nodes[p].turn
             if self.nodes[p].turn:
                 angle = source.angle()
-            elif self.nodes[p].isReverseNode:
+            elif self.nodes[p].is_reverse_node:
                 if targetAngle > 180:
                     angle = (source.angle() + 90 + (targetAngle - 180) / 2) % 360
                 else:
@@ -377,7 +380,7 @@ class PathWidget(QGraphicsView):
             else:
                 angle = (target.angle() + target.angleTo(source) / 2) % 360
 
-            if self.nodes[p].isReverseNode:
+            if self.nodes[p].is_reverse_node:
                 revTarget = QLineF.fromPolar(
                     source.length() * factor, angle
                 ).translated(current)
@@ -415,7 +418,7 @@ class PathWidget(QGraphicsView):
     def get_nodes(self):
         return self.nodes
 
-    def add_node(self, point, pos=-1):
+    def add_node(self, point: QPointF, pos=-1):
         new_node = node.Node(point.x(), point.y(), self)
         if pos == -1 and self.end_node is not None:
             pos = len(self.nodes) - 1
@@ -434,22 +437,22 @@ class PathWidget(QGraphicsView):
         print(f"Node created at ({new_node.abs_x}, {new_node.abs_y})")
         return new_node
 
-    def remove_node(self, node):
-        if node in self.nodes:
-            self.nodes.remove(node)
-            if node == self.start_node:
+    def remove_node(self, remove_node):
+        if remove_node in self.nodes:
+            self.nodes.remove(remove_node)
+            if remove_node == self.start_node:
                 self.start_node = None
-            if node == self.end_node:
+            if remove_node == self.end_node:
                 self.end_node = None
 
         self.update_path()
 
-    def set_start_node(self, node):
+    def set_start_node(self, new_start_node):
         if self.start_node:
             self.start_node.is_start_node = False
             self.start_node.update()
             self.update()
-        self.start_node = node
+        self.start_node = new_start_node
 
         # Move start node to start of nodes list
         nodeindex = 0
@@ -501,8 +504,8 @@ class PathWidget(QGraphicsView):
         self.update()
         self.auto_save()
 
-    def load_nodes(self, str):
-        nodes_data = json.loads(str)
+    def load_nodes(self, node_str):
+        nodes_data = json.loads(node_str)
         self.clear_nodes()
         for node_data in nodes_data:
             if len(node_data) > 4:

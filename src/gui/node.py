@@ -5,14 +5,9 @@ from PyQt6.QtWidgets import QGraphicsItem, QInputDialog, QMenu, QWidget
 
 # Node that stores data for auton route
 class Node(QGraphicsItem):
-    def __init__(self, x, y, parent=None, radius=15.0):
+    def __init__(self, x: float, y: float, parent=None, radius=15.0):
         super().__init__()
         self.widget = QWidget()
-
-        # Scale pixel value down to account for the extra padding that isn't part of the field on either side, scale to between 0-1, subtract 0.5 to center and turn into inches
-        self.image_size = 2000
-        self.abs_x = ((self.x() / (self.image_size)) - 0.5) * 12.3266567842 * 12
-        self.abs_y = ((self.y() / (self.image_size)) - 0.5) * 12.3266567842 * 12
 
         self.parent = parent
         self.is_start_node = False
@@ -28,6 +23,11 @@ class Node(QGraphicsItem):
         self.setPos(x, y)
         self.setAcceptHoverEvents(True)
         self.image_rect = QRectF(0, 0, 2000, 2000)
+
+        # Scale pixel value down to account for the extra padding that isn't part of the field on either side, scale to between 0-1, subtract 0.5 to center and turn into inches
+        self.image_size = 2000
+        self.abs_x = ((self.x() / (self.image_size)) - 0.5) * 12.3266567842 * 12
+        self.abs_y = ((self.y() / (self.image_size)) - 0.5) * 12.3266567842 * 12
 
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsMovable)
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemSendsGeometryChanges)
@@ -75,13 +75,26 @@ class Node(QGraphicsItem):
             self.parent.save()
         super().mouseReleaseEvent(event)
 
-    def itemChange(self, change, value):
-        if change == QGraphicsItem.GraphicsItemChange.ItemPositionChange and self.scene():
+    def itemChange(self, change, value: QPointF):
+        if (
+            change == QGraphicsItem.GraphicsItemChange.ItemPositionChange
+            and self.scene()
+        ):
             new_pos = value
             if self.image_rect:
                 # Restrict the movement within the image boundaries
-                new_pos.setX(max(min(new_pos.x(), self.image_rect.right() - self.radius), self.image_rect.left() + self.radius))
-                new_pos.setY(max(min(new_pos.y(), self.image_rect.bottom() - self.radius), self.image_rect.top() + self.radius))
+                new_pos.setX(
+                    max(
+                        min(new_pos.x(), self.image_rect.right() - self.radius),
+                        self.image_rect.left() + self.radius,
+                    )
+                )
+                new_pos.setY(
+                    max(
+                        min(new_pos.y(), self.image_rect.bottom() - self.radius),
+                        self.image_rect.top() + self.radius,
+                    )
+                )
 
             self.update()  # Trigger a repaint to update the coordinates
             return new_pos
@@ -203,9 +216,11 @@ class Node(QGraphicsItem):
         dialog.setLabelText("Enter turn (0-360):")
         dialog.setIntRange(0, 360)
         dialog.setIntValue(self.turn)
-        
+
         # Set the position of the dialog
-        dialog.move(int(screen_pos.x() + self.radius), int(screen_pos.y() + self.radius))
+        dialog.move(
+            int(screen_pos.x() + self.radius), int(screen_pos.y() + self.radius)
+        )
 
         # Show the dialog and get the result
         if dialog.exec() == QInputDialog.DialogCode.Accepted:
@@ -228,7 +243,9 @@ class Node(QGraphicsItem):
         dialog.setIntMinimum(0)
 
         # Set the position of the dialog
-        dialog.move(int(screen_pos.x() + self.radius), int(screen_pos.y() + self.radius))
+        dialog.move(
+            int(screen_pos.x() + self.radius), int(screen_pos.y() + self.radius)
+        )
 
         # Show the dialog and get the result
         if dialog.exec() == QInputDialog.DialogCode.Accepted:

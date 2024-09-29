@@ -11,7 +11,6 @@ from PyQt6.QtWidgets import (
 )
 
 
-
 class SettingsDockWidget(QDockWidget):
     def __init__(self, max_velocity, max_acceleration, max_jerk, parent=None):
         super().__init__("Settings", parent)

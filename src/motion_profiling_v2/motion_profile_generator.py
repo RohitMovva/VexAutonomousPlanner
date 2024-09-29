@@ -3,7 +3,7 @@ from bisect import bisect_left  # Binary Search
 
 import numpy as np
 
-from bezier import quadratic_bezier, cubic_bezier
+from bezier import cubic_bezier, quadratic_bezier
 
 
 def max_speed_based_on_curvature(curvature, V_base, K):
