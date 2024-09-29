@@ -78,7 +78,7 @@ class SettingsDockWidget(QDockWidget):
     def on_field_type_changed(self):
         field_type = self.field_type_combo.currentText()
         print(f"Field Type changed: {field_type}")
-        self.parent.changeField(field_type)
+        self.parent.switch_field(field_type)
 
     def on_velocity_changed(self):
         max_velocity = self.velocity_input.value()

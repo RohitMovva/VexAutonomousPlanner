@@ -464,7 +464,7 @@ class AutonomousPlannerGUIManager(QMainWindow):
         with open(self.routes_header_path, "w") as routes_file:
             routes_file.writelines(content)
 
-    def switch_field(self, fieldType):
+    def switch_field(self, fieldType: str):
         if fieldType == "High Stakes Match":
             self.central_widget.update_image_path(
                 utilities.resource_path("../assets/V5RC-HighStakes-Match-2000x2000.png")
@@ -476,16 +476,16 @@ class AutonomousPlannerGUIManager(QMainWindow):
                 )
             )
 
-    def set_velocity(self, newVelocity):
-        self.max_velocity = newVelocity
+    def set_velocity(self, new_velocity):
+        self.max_velocity = new_velocity
         utilities.set_config_value("max_velocity", self.max_velocity)
 
-    def set_acceleration(self, newAcceleration):
-        self.max_acceleration = newAcceleration
+    def set_acceleration(self, new_acceleration):
+        self.max_acceleration = new_acceleration
         utilities.set_config_value("max_acceleration", self.max_acceleration)
 
-    def set_jerk(self, newJerk):
-        self.max_jerk = newJerk
+    def set_jerk(self, new_jerk):
+        self.max_jerk = new_jerk
         utilities.set_config_value("max_jerk", self.max_jerk)
 
     def position_graph(self):
