@@ -1,4 +1,6 @@
 import sys
+import ctypes
+import time
 
 import matplotlib.pyplot as plt
 import qdarktheme
@@ -16,6 +18,11 @@ if __name__ == "__main__":
     if getattr(sys, "frozen", False):
         utilities.create_files()
         utilities.load_fonts()
+
+    # myappid = 'Flip.PathPlanner.0.2.0' # arbitrary string
+    # ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
+    # print(myappid)
+    # time.sleep(1)
 
     window = gui_manager.AutonomousPlannerGUIManager()
     window.show()

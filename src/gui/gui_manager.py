@@ -50,7 +50,7 @@ class AutonomousPlannerGUIManager(QMainWindow):
         super(AutonomousPlannerGUIManager, self).__init__(parent)
 
         self.setWindowTitle("Path Planner")  # Totally not inspired by Pronounce that
-        self.setWindowIcon(QIcon(utilities.resource_path("../assets/windows_icon.ico")))
+        self.setWindowIcon(QIcon(utilities.resource_path("../assets/flip_logo.ico")))
         self.layout = QVBoxLayout()
 
         # self.nodes = []
