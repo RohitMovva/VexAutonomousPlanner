@@ -1,9 +1,17 @@
 # VexAutonomousPlanner
 
-## Setup
-Run from source code or excecutables in the Actions tab
+An application for easy, action oriented, generation of paths for VEX robotics.
 
-After running the project, a file selector will open, select the parent folder of the routes.h file. After this another file selector will open, select what folder you would like the paths (these are not the {velocity, heading} pairs but rather a list of coordinates of the points and data related to those points) to save to, if you are running the code directly this will already exist as the "routes" folder. If not running the code direclty I recommend creating one yourself and selecting that.
+Created by team 77717F Flip
 
-## File management
-I recommend using the "Set Current Working File" button every time you open the project, doing this will make sure the changes you make are auto saved and the route will auto update in the routes.h header file.
+## Installation
+The project can be accessed either by cloning or by downloading the latest excecutable from the Releases tab on the side.
+
+On the first run of the application you will be prompted to select a "routes" folder, this is just a folder where paths you generate will be stored. You will also be prompted to select another folder to save the path in vector form ({x, y, heading}), which can be used in combination with a feedback loop (like PID) to control the robot itself.
+
+## Credits
+This project was made possible by:
+
+- [Jonathan Bayless](https://github.com/baylessj/robotsquiggles)
+- [Jerry Lum](https://github.com/Jerrylum/path.jerryio)
+- [FRC Team 254: The Cheesy Poofs](https://www.youtube.com/watch?v=8319J1BEHwM)

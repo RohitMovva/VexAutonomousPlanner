@@ -11,7 +11,6 @@ from PyQt6.QtWidgets import (
 )
 
 
-
 class SettingsDockWidget(QDockWidget):
     def __init__(self, max_velocity, max_acceleration, max_jerk, parent=None):
         super().__init__("Settings", parent)
@@ -79,7 +78,7 @@ class SettingsDockWidget(QDockWidget):
     def on_field_type_changed(self):
         field_type = self.field_type_combo.currentText()
         print(f"Field Type changed: {field_type}")
-        self.parent.changeField(field_type)
+        self.parent.switch_field(field_type)
 
     def on_velocity_changed(self):
         max_velocity = self.velocity_input.value()

@@ -5,21 +5,16 @@ from PyQt6.QtWidgets import QGraphicsItem, QInputDialog, QMenu, QWidget
 
 # Node that stores data for auton route
 class Node(QGraphicsItem):
-    def __init__(self, x, y, parent=None, radius=15.0):
+    def __init__(self, x: float, y: float, parent=None, radius=15.0):
         super().__init__()
         self.widget = QWidget()
 
-        # Scale pixel value down to account for the extra padding that isn't part of the field on either side, scale to between 0-1, subtract 0.5 to center and turn into inches
-        self.imageSize = 2000
-        self.absX = ((self.x() / (self.imageSize)) - 0.5) * 12.3266567842 * 12
-        self.absY = ((self.y() / (self.imageSize)) - 0.5) * 12.3266567842 * 12
-
         self.parent = parent
-        self.isStartNode = False
-        self.isEndNode = False
-        self.spinIntake = False
-        self.clampGoal = False
-        self.isReverseNode = False
+        self.is_start_node = False
+        self.is_end_node = False
+        self.spin_intake = False
+        self.clamp_goal = False
+        self.is_reverse_node = False
         self.turn = 0
         self.wait_time = 0
         self.dragging = False
@@ -27,6 +22,12 @@ class Node(QGraphicsItem):
         self.radius = radius
         self.setPos(x, y)
         self.setAcceptHoverEvents(True)
+        self.image_rect = QRectF(0, 0, 2000, 2000)
+
+        # Scale pixel value down to account for the extra padding that isn't part of the field on either side, scale to between 0-1, subtract 0.5 to center and turn into inches
+        self.image_size = 2000
+        self.abs_x = ((self.x() / (self.image_size)) - 0.5) * 12.3266567842 * 12
+        self.abs_y = ((self.y() / (self.image_size)) - 0.5) * 12.3266567842 * 12
 
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsMovable)
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemSendsGeometryChanges)
@@ -39,9 +40,9 @@ class Node(QGraphicsItem):
     def paint(self, painter, option, widget):
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         brushColor = None
-        if self.isStartNode:
+        if self.is_start_node:
             brushColor = QColor("green")
-        elif self.isEndNode:
+        elif self.is_end_node:
             brushColor = QColor("red")
         elif self.has_action():
             brushColor = QColor("#1338BE")
@@ -74,9 +75,29 @@ class Node(QGraphicsItem):
             self.parent.save()
         super().mouseReleaseEvent(event)
 
-    def itemChange(self, change, value):
-        if change == QGraphicsItem.GraphicsItemChange.ItemPositionHasChanged:
+    def itemChange(self, change, value: QPointF):
+        if (
+            change == QGraphicsItem.GraphicsItemChange.ItemPositionChange
+            and self.scene()
+        ):
+            new_pos = value
+            if self.image_rect:
+                # Restrict the movement within the image boundaries
+                new_pos.setX(
+                    max(
+                        min(new_pos.x(), self.image_rect.right() - self.radius),
+                        self.image_rect.left() + self.radius,
+                    )
+                )
+                new_pos.setY(
+                    max(
+                        min(new_pos.y(), self.image_rect.bottom() - self.radius),
+                        self.image_rect.top() + self.radius,
+                    )
+                )
+
             self.update()  # Trigger a repaint to update the coordinates
+            return new_pos
         return super().itemChange(change, value)
 
     def contextMenuEvent(self, event):
@@ -86,27 +107,27 @@ class Node(QGraphicsItem):
         node_menu = QMenu("Node Actions")
 
         start_action = QAction("Start Node", checkable=True)
-        start_action.setChecked(self.isStartNode)
+        start_action.setChecked(self.is_start_node)
         start_action.triggered.connect(self.toggle_start_node)
         attributes_menu.addAction(start_action)
 
         end_action = QAction("End Node", checkable=True)
-        end_action.setChecked(self.isEndNode)
+        end_action.setChecked(self.is_end_node)
         end_action.triggered.connect(self.toggle_end_node)
         attributes_menu.addAction(end_action)
 
         spin_action = QAction("Spin Intake", checkable=True)
-        spin_action.setChecked(self.spinIntake)
+        spin_action.setChecked(self.spin_intake)
         spin_action.triggered.connect(self.toggle_spin_intake)
         attributes_menu.addAction(spin_action)
 
         clamp_action = QAction("Clamp Goal", checkable=True)
-        clamp_action.setChecked(self.clampGoal)
+        clamp_action.setChecked(self.clamp_goal)
         clamp_action.triggered.connect(self.toggle_clamp_goal)
         attributes_menu.addAction(clamp_action)
 
         reverse_action = QAction("Reverse", checkable=True)
-        reverse_action.setChecked(self.isReverseNode)
+        reverse_action.setChecked(self.is_reverse_node)
         reverse_action.triggered.connect(self.toggle_reverse)
         attributes_menu.addAction(reverse_action)
 
@@ -136,68 +157,99 @@ class Node(QGraphicsItem):
         context_menu.exec(event.screenPos())
 
     def toggle_start_node(self):
-        self.isStartNode = not self.isStartNode
-        if self.isStartNode:
+        self.is_start_node = not self.is_start_node
+        if self.is_start_node:
             self.parent.set_start_node(self)
-            if self.isEndNode:
+            if self.is_end_node:
                 self.parent.clear_end_node()
-                self.isEndNode = False
+                self.is_end_node = False
         else:
             self.parent.clear_start_node()
 
         self.parent.update_path()
-        print(f"Start Node: {self.isStartNode}")
+        print(f"Start Node: {self.is_start_node}")
 
     def toggle_end_node(self):
-        self.isEndNode = not self.isEndNode
-        if self.isEndNode:
+        self.is_end_node = not self.is_end_node
+        if self.is_end_node:
             self.parent.set_end_node(self)
-            if self.isStartNode:
+            if self.is_start_node:
                 self.parent.clear_start_node()
-                self.isStartNode = False
+                self.is_start_node = False
         else:
             self.parent.clear_end_node()
         self.update()
         self.parent.update_path()
-        print(f"End Node: {self.isEndNode}")
+        print(f"End Node: {self.is_end_node}")
 
     def has_action(self):
         return (
-            self.spinIntake
-            or self.clampGoal
-            or self.isReverseNode
+            self.spin_intake
+            or self.clamp_goal
+            or self.is_reverse_node
             or self.turn != 0
             or self.wait_time != 0
         )
 
     def toggle_spin_intake(self):
-        self.spinIntake = not self.spinIntake
-        print(f"Spin Intake: {self.spinIntake}")
+        self.spin_intake = not self.spin_intake
+        print(f"Spin Intake: {self.spin_intake}")
 
     def toggle_clamp_goal(self):
-        self.clampGoal = not self.clampGoal
-        print(f"Clamp Goal: {self.clampGoal}")
+        self.clamp_goal = not self.clamp_goal
+        print(f"Clamp Goal: {self.clamp_goal}")
 
     def toggle_reverse(self):
-        self.isReverseNode = not self.isReverseNode
+        self.is_reverse_node = not self.is_reverse_node
         self.parent.update_path()
-        print(f"Reverse Node: {self.isReverseNode}")
+        print(f"Reverse Node: {self.is_reverse_node}")
 
     def set_turn(self):
-        value, ok = QInputDialog.getInt(
-            self, "Set Turn", "Enter turn (0-360):", self.turn, 0, 360
+        # Get the position of the node in screen coordinates
+        scene_pos = self.scenePos()
+        view_pos = self.scene().views()[0].mapFromScene(scene_pos)
+        screen_pos = self.scene().views()[0].viewport().mapToGlobal(view_pos)
+
+        # Create the dialog
+        dialog = QInputDialog(self.scene().views()[0])
+        dialog.setWindowTitle("Set Turn")
+        dialog.setLabelText("Enter turn (0-360):")
+        dialog.setIntRange(0, 360)
+        dialog.setIntValue(self.turn)
+
+        # Set the position of the dialog
+        dialog.move(
+            int(screen_pos.x() + self.radius), int(screen_pos.y() + self.radius)
         )
-        if ok:
-            self.turn = value
+
+        # Show the dialog and get the result
+        if dialog.exec() == QInputDialog.DialogCode.Accepted:
+            self.turn = dialog.intValue()
             self.parent.update_path()
             print(f"Turn set to: {self.turn}")
 
     def set_wait(self):
-        value, ok = QInputDialog.getInt(
-            self, "Set Wait Time", "Enter time (seconds):", self.wait_time, 0
+        # Get the position of the node in screen coordinates
+        scene_pos = self.scenePos()
+        view_pos = self.scene().views()[0].mapFromScene(scene_pos)
+        screen_pos = self.scene().views()[0].viewport().mapToGlobal(view_pos)
+
+        # Create the dialog
+        dialog = QInputDialog(self.scene().views()[0])
+        dialog.setWindowTitle("Set Wait Time")
+        dialog.setLabelText("Enter time (seconds):")
+        dialog.setInputMode(QInputDialog.InputMode.IntInput)
+        dialog.setIntValue(self.wait_time)
+        dialog.setIntMinimum(0)
+
+        # Set the position of the dialog
+        dialog.move(
+            int(screen_pos.x() + self.radius), int(screen_pos.y() + self.radius)
         )
-        if ok:
-            self.wait_time = value
+
+        # Show the dialog and get the result
+        if dialog.exec() == QInputDialog.DialogCode.Accepted:
+            self.wait_time = dialog.intValue()
             print(f"Wait time set to: {self.wait_time}")
 
     def delete_node(self):
@@ -217,11 +269,11 @@ class Node(QGraphicsItem):
     def __str__(self):
         return (
             "["
-            + str(self.isStartNode)
+            + str(self.is_start_node)
             + " "
-            + str(self.isEndNode)
+            + str(self.is_end_node)
             + " "
-            + str(self.isReverseNode)
+            + str(self.is_reverse_node)
             + " "
             + str(self.turn)
             + " "
