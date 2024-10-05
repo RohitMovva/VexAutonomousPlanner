@@ -20,7 +20,7 @@ def get_system_fonts():
 # Determine the icon path based on the operating system
 icon_path = ''
 if sys.platform == "win32":
-    icon_path = 'assets\flip_logo.ico'  # Windows icon
+    icon_path = 'assets/flip_logo.ico'  # Windows icon
 else:
     icon_path = 'assets/linux_icon.png'  # Linux icon
 
