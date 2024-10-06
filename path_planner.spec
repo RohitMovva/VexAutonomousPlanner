@@ -22,7 +22,7 @@ icon_path = ''
 if sys.platform == "win32":
     icon_path = 'assets/flip_logo.ico'  # Windows icon
 else:
-    icon_path = 'assets/linux_icon.png'  # Linux icon
+    icon_path = 'assets/flip_logo.png'  # Linux icon
 
 a = Analysis(
     ['src/main.py'],
