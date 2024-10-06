@@ -49,7 +49,8 @@ def forward_backwards_smoothing(arr, max_step, depth, delta_dist):
             dif = -adjusted_max_step
 
         arr[i - 1] = arr[i] - dif
-
+    
+    # print("EDGES: ", arr[0], " ", arr[-1])
     return arr
 
 
@@ -64,7 +65,7 @@ def generate_other_lists(velocities, control_points, segments, dt):
 
     # Calculate positions
     for i in range(1, len(velocities)):
-        position = positions[-1] + velocities[i - 1] * dt
+        position = positions[-1] + velocities[i] * dt # (velocities[i] + velocities[i - 1])/2
         positions.append(position)
 
     # Calculate accelerations
@@ -148,18 +149,18 @@ def generate_other_lists(velocities, control_points, segments, dt):
 
 
 def get_times(velocities, dd):
-    res = []
+    res = [0]
 
     curr_t = 0
     prev_v = 0
-    for i in range(len(velocities)):
+    for i in range(1, len(velocities)):
         current_dt = 0
         curr_accel = (velocities[i] ** 2 - prev_v**2) / (dd * 2)  # CORRECT FORMULA
-        if i > 0:
-            if abs(curr_accel) > 1e-5:
-                current_dt = (velocities[i] - prev_v) / curr_accel
-            elif abs(prev_v) > 1e-5:
-                current_dt = dd / velocities[i]
+
+        if abs(curr_accel) > 1e-5:
+            current_dt = (velocities[i] - prev_v) / curr_accel
+        elif abs(prev_v) > 1e-5:
+            current_dt = dd / velocities[i]
 
         curr_t += current_dt
         prev_v = velocities[i]
@@ -226,11 +227,12 @@ def generate_motion_profile(
 
         curpos += dd
 
+    print("THINGY: ", curpos)
     current_dist = 0
     current_segment = 0
     for i in range(0, len(velocities)):
         if current_dist > segments[current_segment][-1]:
-            current_dist = 0
+            current_dist = dd
             current_segment += 1
 
         t_along_curve = distance_to_time(current_dist, segments[current_segment])
@@ -250,11 +252,13 @@ def generate_motion_profile(
                 control_points[current_segment][1],
                 t_along_curve,
             )
-        curvature *= 2000 / 12.3420663695  # Change from pixels to feet
+        curvature *= 2000 / 12.3266567842  # Change from pixels to feet
         adjusted_vmax = limit_velocity(v_max, v_max, curvature, track_width)
 
         velocities[i] = adjusted_vmax
         current_dist += dd
+
+    print("THINGY2: ", current_dist)
 
     velocities[0] = 0
     velocities[-1] = 0
@@ -268,7 +272,10 @@ def generate_motion_profile(
 
     new_velocities = []
     for i in range(time_steps):
+        print(time_stamps[-1], i*dt)
         new_velo = interpolate_velocity(velocities, time_stamps, i * dt)
         new_velocities.append(new_velo)
+    new_velocities.append(0)
+    # print("START VAL: ", new_velocities[0])
 
     return generate_other_lists(new_velocities, control_points, segments, dt)

@@ -18,7 +18,7 @@ from motion_profiling_v2 import motion_profile_generator
 
 
 def create_curve_segments(start, end, control1, control2=None):
-    numsegments = 1000
+    numsegments = 100
     segments = [0]
     ox, oy = None, None
     if control2:
@@ -27,8 +27,8 @@ def create_curve_segments(start, end, control1, control2=None):
         ox, oy = quadratic_bezier.quadratic_bezier_point(start, control1, end, 0)
     dx, dy = None, None
     currlen = 0
-    for i in range(1, numsegments + 1):
-        t = (i) / numsegments
+    for i in range(1, numsegments+1):
+        t = (i) / (numsegments)
         cx, cy = None, None
         if control2:
             cx, cy = cubic_bezier.cubic_bezier_point(start, control1, control2, end, t)
@@ -37,7 +37,8 @@ def create_curve_segments(start, end, control1, control2=None):
 
         dx, dy = ox - cx, oy - cy
         currlen += sqrt(dx**2 + dy**2)
-        segments.append(currlen * (12.3420663695 / 2000))  #
+        segments.append(currlen * (12.3266567842 / 2000))  #
+        # print(segments[-1] - segments[-2])
 
         ox, oy = cx, cy
     return segments
@@ -318,6 +319,8 @@ class PathWidget(QGraphicsView):
             segment_data = [[], []]
             segment_length = 0
 
+        print("DIFF: ", current_position, " ", self.all_positions[-1], " ", current_position-self.all_positions[-1])
+        print("END VELO: ", self.all_velocities[-1])
         self.all_nodes_map.append(len(self.all_time_intervals))
 
         return (
@@ -504,12 +507,18 @@ class PathWidget(QGraphicsView):
         self.update()
         self.auto_save()
 
+    def convert_point(self, point: QPointF):
+        point.setX((point.x()/(12.3266567842*12) + 0.5) * 2000)
+        point.setY((point.y()/(12.3266567842*12) + 0.5) * 2000)
+
+        return point
+
     def load_nodes(self, node_str):
         nodes_data = json.loads(node_str)
         self.clear_nodes()
         for node_data in nodes_data:
             if len(node_data) > 4:
-                node = self.add_node(QPointF(node_data[0], node_data[1]))
+                node = self.add_node(self.convert_point(QPointF(node_data[0], node_data[1])))
                 self.start_node = node if bool(node_data[2]) else self.start_node
                 node.is_start_node = bool(node_data[2])
                 self.end_node = node if bool(node_data[3]) else self.end_node

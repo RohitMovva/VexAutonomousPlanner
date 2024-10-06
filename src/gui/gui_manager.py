@@ -376,12 +376,12 @@ class AutonomousPlannerGUIManager(QMainWindow):
         self.central_widget.update_path()
 
     def convert_nodes(self, as_list=False):
-        nodes = self.central_widget.get_nodes()
+        nodes: list[node.Node] = self.central_widget.get_nodes()
         print(nodes)
         nodes_data = [
             [
-                cur_node.x(),
-                cur_node.y(),
+                cur_node.get_abs_x(),
+                cur_node.get_abs_y(),
                 int(cur_node.is_start_node),
                 int(cur_node.is_end_node),
                 int(cur_node.spin_intake),

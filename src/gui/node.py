@@ -34,6 +34,14 @@ class Node(QGraphicsItem):
         self.drag_start_position = None
         # self.setWidget(self.widget)
 
+    def get_abs_x(self):
+        self.abs_x = ((self.x() / (self.image_size)) - 0.5) * 12.3266567842 * 12
+        return self.abs_x
+
+    def get_abs_y(self):
+        self.abs_y = ((self.y() / (self.image_size)) - 0.5) * 12.3266567842 * 12
+        return self.abs_y
+
     def boundingRect(self):
         return QRectF(-self.radius, -self.radius, 2 * self.radius, 2 * self.radius)
 
