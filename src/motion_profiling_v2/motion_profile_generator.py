@@ -49,8 +49,7 @@ def forward_backwards_smoothing(arr, max_step, depth, delta_dist):
             dif = -adjusted_max_step
 
         arr[i - 1] = arr[i] - dif
-    
-    # print("EDGES: ", arr[0], " ", arr[-1])
+
     return arr
 
 
@@ -65,7 +64,7 @@ def generate_other_lists(velocities, control_points, segments, dt):
 
     # Calculate positions
     for i in range(1, len(velocities)):
-        position = positions[-1] + velocities[i] * dt # (velocities[i] + velocities[i - 1])/2
+        position = positions[-1] + velocities[i] * dt
         positions.append(position)
 
     # Calculate accelerations
@@ -212,22 +211,23 @@ def generate_motion_profile(
     a_max,
     j_max,
     track_width,
-    dd=0.0025,
+    dd=0.025,
     dt=0.025,
     K=15.0,
-):  # dt=0.025
+):
     velocities = []
 
     totalDist = 0
     for segmentList in segments:
         totalDist += segmentList[-1]
     curpos = 0
-    while curpos <= totalDist:
+    while curpos < totalDist - 1e-5:
         velocities.append(0)
 
         curpos += dd
 
-    print("THINGY: ", curpos)
+    velocities.append(0)
+
     current_dist = 0
     current_segment = 0
     for i in range(0, len(velocities)):
@@ -258,8 +258,6 @@ def generate_motion_profile(
         velocities[i] = adjusted_vmax
         current_dist += dd
 
-    print("THINGY2: ", current_dist)
-
     velocities[0] = 0
     velocities[-1] = 0
 
@@ -272,10 +270,8 @@ def generate_motion_profile(
 
     new_velocities = []
     for i in range(time_steps):
-        print(time_stamps[-1], i*dt)
         new_velo = interpolate_velocity(velocities, time_stamps, i * dt)
         new_velocities.append(new_velo)
     new_velocities.append(0)
-    # print("START VAL: ", new_velocities[0])
 
     return generate_other_lists(new_velocities, control_points, segments, dt)
