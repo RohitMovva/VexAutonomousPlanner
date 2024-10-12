@@ -18,7 +18,7 @@ from motion_profiling_v2 import motion_profile_generator
 
 
 def create_curve_segments(start, end, control1, control2=None):
-    numsegments = 100
+    numsegments = 250
     segments = [0]
     ox, oy = None, None
     if control2:
@@ -270,6 +270,7 @@ class PathWidget(QGraphicsView):
         current_position = 0
         segment_data = [[], []]
         segment_length = 0
+        
         for i in range(0, len(self.line_data)):
             line = self.line_data[i][:]
 
@@ -320,9 +321,9 @@ class PathWidget(QGraphicsView):
             segment_length = 0
 
 
-        # print("Accumulated value", self.all_positions[-1])
-        # print("Goal value:", current_position)
-        # print("Error:", current_position-self.all_positions[-1])
+        print("Accumulated value", self.all_positions[-1])
+        print("Goal value:", current_position)
+        print("Error:", current_position-self.all_positions[-1])
         self.all_nodes_map.append(len(self.all_time_intervals))
 
         return (
