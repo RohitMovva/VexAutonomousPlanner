@@ -319,6 +319,10 @@ class PathWidget(QGraphicsView):
             segment_data = [[], []]
             segment_length = 0
 
+
+        # print("Accumulated value", self.all_positions[-1])
+        # print("Goal value:", current_position)
+        # print("Error:", current_position-self.all_positions[-1])
         self.all_nodes_map.append(len(self.all_time_intervals))
 
         return (
