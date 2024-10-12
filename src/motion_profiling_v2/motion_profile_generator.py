@@ -211,7 +211,7 @@ def generate_motion_profile(
     a_max,
     j_max,
     track_width,
-    dd=0.025,
+    dd=0.005,
     dt=0.025,
     K=15.0,
 ):
@@ -230,8 +230,12 @@ def generate_motion_profile(
 
     current_dist = 0
     current_segment = 0
+    # print(segments)
     for i in range(0, len(velocities)):
-        if current_dist > segments[current_segment][-1]:
+        if (
+            current_dist >= segments[current_segment][-1]
+            and current_segment < len(segments) - 1
+        ):
             current_dist = dd
             current_segment += 1
 
