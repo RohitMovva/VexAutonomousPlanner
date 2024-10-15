@@ -83,14 +83,14 @@ class SettingsDockWidget(QDockWidget):
     def on_velocity_changed(self):
         max_velocity = self.velocity_input.value()
         print(f"Max Velocity changed: {max_velocity} ft/s")
-        self.parent.setVelocity(max_velocity)
+        self.parent.set_velocity(max_velocity)
 
     def on_acceleration_changed(self):
         max_acceleration = self.acceleration_input.value()
         print(f"Max Acceleration changed: {max_acceleration} ft/s^2")
-        self.parent.setAcceleration(max_acceleration)
+        self.parent.set_acceleration(max_acceleration)
 
     def on_jerk_changed(self):
         max_jerk = self.jerk_input.value()
         print(f"Max Jerk changed: {max_jerk} ft/s^3")
-        self.parent.setJerk(max_jerk)
+        self.parent.set_jerk(max_jerk)

@@ -23,7 +23,7 @@ def distance_to_time(distance, segments):
         else:
             break
 
-    return mid / 1000.0
+    return mid / len(segments)
 
 
 def forward_backwards_smoothing(arr, max_step, depth, delta_dist):
@@ -127,9 +127,11 @@ def generate_other_lists(velocities, control_points, segments, dt):
         coords.append(
             (
                 ((x / 2000) - 0.5) * 12.3266567842 * 12,
-                ((y / 2000) - 0.5) * 12.3266567842 * 12,
+                ((y / 2000) - 0.5) * 12.3266567842 * 12 * -1,
             )
         )
+
+        # print(t_along_curve, current_dist, segments[current_segment][-1], coords[-1])
 
         if i > 0:
             current_dist += positions[i] - positions[i - 1]
