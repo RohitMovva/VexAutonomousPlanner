@@ -246,9 +246,9 @@ class Node(QGraphicsItem):
         dialog = QInputDialog(self.scene().views()[0])
         dialog.setWindowTitle("Set Wait Time")
         dialog.setLabelText("Enter time (seconds):")
-        dialog.setInputMode(QInputDialog.InputMode.IntInput)
-        dialog.setIntValue(self.wait_time)
-        dialog.setIntMinimum(0)
+        dialog.setInputMode(QInputDialog.InputMode.DoubleInput)
+        dialog.setDoubleValue(self.wait_time)
+        dialog.setDoubleMinimum(0)
 
         # Set the position of the dialog
         dialog.move(
@@ -257,7 +257,7 @@ class Node(QGraphicsItem):
 
         # Show the dialog and get the result
         if dialog.exec() == QInputDialog.DialogCode.Accepted:
-            self.wait_time = dialog.intValue()
+            self.wait_time = dialog.doubleValue()
             print(f"Wait time set to: {self.wait_time}")
 
     def delete_node(self):

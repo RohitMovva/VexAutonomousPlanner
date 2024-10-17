@@ -5,7 +5,7 @@ from PyQt6.QtWidgets import (
     QLabel,
     QSizePolicy,
     QSpacerItem,
-    QSpinBox,
+    QDoubleSpinBox,
     QVBoxLayout,
     QWidget,
 )
@@ -29,19 +29,19 @@ class SettingsDockWidget(QDockWidget):
         self.field_type_combo.currentIndexChanged.connect(self.on_field_type_changed)
 
         # Add max jerk, acceleration, and velocity inputs
-        self.velocity_input = QSpinBox()
-        self.velocity_input.setRange(0, 100)  # Adjust range as needed
+        self.velocity_input = QDoubleSpinBox()
+        self.velocity_input.setRange(0.0, 100.0)  # Adjust range as needed
         self.velocity_input.setValue(max_velocity)
         settings_layout.addRow("Max Velocity (ft/s):", self.velocity_input)
         self.velocity_input.valueChanged.connect(self.on_velocity_changed)
 
-        self.acceleration_input = QSpinBox()
+        self.acceleration_input = QDoubleSpinBox()
         self.acceleration_input.setRange(0, 100)  # Adjust range as needed
         self.acceleration_input.setValue(max_acceleration)
         settings_layout.addRow("Max Acceleration (ft/s²):", self.acceleration_input)
         self.acceleration_input.valueChanged.connect(self.on_acceleration_changed)
 
-        self.jerk_input = QSpinBox()
+        self.jerk_input = QDoubleSpinBox()
         self.jerk_input.setRange(0, 100)  # Adjust range as needed
         self.jerk_input.setValue(max_jerk)
         settings_layout.addRow("Max Jerk (ft/s³):", self.jerk_input)
