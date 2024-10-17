@@ -373,7 +373,7 @@ class PathWidget(QGraphicsView):
             target = QLineF(current, points[p + 1])
 
             targetAngle = target.angleTo(source)
-            turnVal = self.nodes[p].turn
+            turnVal = (self.nodes[p].turn)
             if self.nodes[p].turn:
                 angle = source.angle()
             elif self.nodes[p].is_reverse_node:
