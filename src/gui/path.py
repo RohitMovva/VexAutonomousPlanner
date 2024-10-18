@@ -285,7 +285,7 @@ class PathWidget(QGraphicsView):
             segment_length += segments[-1]
 
             if (not self.nodes[i + 1].is_end_node) and (
-                not self.nodes[i + 1].has_action()
+                not self.nodes[i + 1].is_stop_node()
             ):
                 continue
             (
@@ -531,8 +531,9 @@ class PathWidget(QGraphicsView):
                 node.spin_intake = bool(node_data[4])
                 node.clamp_goal = bool(node_data[5])
                 node.is_reverse_node = bool(node_data[6])
-                node.turn = node_data[7]
-                node.wait_time = node_data[8]
+                node.stop = bool(node_data[7])
+                node.turn = node_data[8]
+                node.wait_time = node_data[9]
 
                 node.show()
 

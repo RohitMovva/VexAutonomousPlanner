@@ -20,6 +20,7 @@ class Node(QGraphicsItem):
         self.dragging = False
         self.offset = QPoint(0, 0)
         self.radius = radius
+        self.stop = False
         self.setPos(x, y)
         self.setAcceptHoverEvents(True)
         self.image_rect = QRectF(0, 0, 2000, 2000)
@@ -134,6 +135,11 @@ class Node(QGraphicsItem):
         clamp_action.triggered.connect(self.toggle_clamp_goal)
         attributes_menu.addAction(clamp_action)
 
+        stop_action = QAction("Stop at Node", checkable=True)
+        stop_action.setChecked(self.stop)
+        stop_action.triggered.connect(self.toggle_stop)
+        attributes_menu.addAction(stop_action)
+
         reverse_action = QAction("Reverse", checkable=True)
         reverse_action.setChecked(self.is_reverse_node)
         reverse_action.triggered.connect(self.toggle_reverse)
@@ -195,9 +201,13 @@ class Node(QGraphicsItem):
             self.spin_intake
             or self.clamp_goal
             or self.is_reverse_node
+            or self.stop
             or self.turn != 0
             or self.wait_time != 0
         )
+    
+    def is_stop_node(self):
+        return self.stop
 
     def toggle_spin_intake(self):
         self.spin_intake = not self.spin_intake
@@ -264,6 +274,10 @@ class Node(QGraphicsItem):
         self.parent.remove_node(self)
         self.scene().removeItem(self)
         print(f"Node at ({self.x()}, {self.y()}) deleted")
+
+    def toggle_stop(self):
+        self.stop = not self.stop
+        print(f"Stop at Node: {self.stop}")
 
     def insert_node_before(self):
         new_point = QPointF(self.pos().x() + 5, self.pos().y() + 5)
