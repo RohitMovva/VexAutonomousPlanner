@@ -528,7 +528,7 @@ class PathWidget(QGraphicsView):
                 node.is_start_node = bool(node_data[2])
                 self.end_node = node if bool(node_data[3]) else self.end_node
                 node.is_end_node = bool(node_data[3])
-                node.spin_intake = bool(node_data[4])
+                node.spin_intake = (node_data[4])
                 node.clamp_goal = bool(node_data[5])
                 node.is_reverse_node = bool(node_data[6])
                 node.stop = bool(node_data[7])

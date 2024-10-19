@@ -1,5 +1,5 @@
 from PyQt6.QtCore import QPoint, QPointF, QRectF, Qt
-from PyQt6.QtGui import QAction, QColor, QPainter
+from PyQt6.QtGui import QAction, QColor, QPainter, QActionGroup
 from PyQt6.QtWidgets import QGraphicsItem, QInputDialog, QMenu, QWidget
 
 
@@ -125,11 +125,27 @@ class Node(QGraphicsItem):
         end_action.triggered.connect(self.toggle_end_node)
         attributes_menu.addAction(end_action)
 
-        spin_action = QAction("Spin Intake", checkable=True)
-        spin_action.setChecked(self.spin_intake)
-        spin_action.triggered.connect(self.toggle_spin_intake)
-        attributes_menu.addAction(spin_action)
+        spin_menu = QMenu("Spin Intake")
+        attributes_menu.addMenu(spin_menu)
 
+        spin_options = {
+            "Don't spin intake": 0,
+            "Spin intake": 1,
+            "Spin intake in reverse": -1
+        }
+
+        spin_action_group = QActionGroup(spin_menu)
+        spin_action_group.setExclusive(True)
+
+        for option, value in spin_options.items():
+            action = QAction(option, spin_menu, checkable=True)
+            action.setChecked(self.spin_intake == value)
+            action.setData(value)
+            spin_action_group.addAction(action)
+            spin_menu.addAction(action)
+
+        spin_action_group.triggered.connect(self.set_spin_intake)
+        
         clamp_action = QAction("Clamp Goal", checkable=True)
         clamp_action.setChecked(self.clamp_goal)
         clamp_action.triggered.connect(self.toggle_clamp_goal)
@@ -209,8 +225,8 @@ class Node(QGraphicsItem):
     def is_stop_node(self):
         return self.stop
 
-    def toggle_spin_intake(self):
-        self.spin_intake = not self.spin_intake
+    def set_spin_intake(self, action):
+        self.spin_intake = action.data()
         print(f"Spin Intake: {self.spin_intake}")
 
     def toggle_clamp_goal(self):
