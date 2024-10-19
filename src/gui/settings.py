@@ -8,8 +8,8 @@ from PyQt6.QtWidgets import (
     QDoubleSpinBox,
     QVBoxLayout,
     QWidget,
+    QPushButton,  # Added for the Mirror button
 )
-
 
 class SettingsDockWidget(QDockWidget):
     def __init__(self, max_velocity, max_acceleration, max_jerk, parent=None):
@@ -20,7 +20,7 @@ class SettingsDockWidget(QDockWidget):
         settings_widget = QWidget()
         main_layout = QVBoxLayout()
         settings_layout = QFormLayout()
-
+        
         # Add Field Type drop-down menu
         self.field_type_combo = QComboBox()
         self.field_type_combo.addItems(["High Stakes Match", "High Stakes Skills"])
@@ -46,6 +46,11 @@ class SettingsDockWidget(QDockWidget):
         self.jerk_input.setValue(max_jerk)
         settings_layout.addRow("Max Jerk (ft/s³):", self.jerk_input)
         self.jerk_input.valueChanged.connect(self.on_jerk_changed)
+
+        # Add the Mirror button
+        self.mirror_button = QPushButton("Mirror")
+        self.mirror_button.clicked.connect(self.on_mirror_clicked)
+        settings_layout.addRow(self.mirror_button)
 
         # Add the form layout to the main layout
         main_layout.addLayout(settings_layout)
@@ -94,3 +99,8 @@ class SettingsDockWidget(QDockWidget):
         max_jerk = self.jerk_input.value()
         print(f"Max Jerk changed: {max_jerk} ft/s^3")
         self.parent.set_jerk(max_jerk)
+
+    def on_mirror_clicked(self):
+        print("Mirror button clicked")
+        self.parent.mirror_nodes()
+        # You can implement the functionality here later
