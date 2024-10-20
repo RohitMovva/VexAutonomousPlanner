@@ -515,6 +515,12 @@ class PathWidget(QGraphicsView):
         point.setY((point.y() / (12.3266567842 * 12) + 0.5) * 2000)
 
         return point
+    
+    def mirror_nodes(self):
+        for n in self.nodes:
+            n.setPos(QPointF(2000 - n.x(), n.y()))
+            n.turn = -n.turn
+        self.update_path()
 
     def load_nodes(self, node_str):
         nodes_data = json.loads(node_str)

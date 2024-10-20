@@ -205,6 +205,9 @@ class AutonomousPlannerGUIManager(QMainWindow):
         if ok and nodes_string:
             self.central_widget.load_nodes(nodes_string)
 
+    def mirror_nodes(self):
+        self.central_widget.mirror_nodes()
+
     # def recalculate_nodes_map(self):
     #     current_dist = 0
     #     current_segment = 0
