@@ -285,7 +285,7 @@ class PathWidget(QGraphicsView):
             segment_length += segments[-1]
 
             if (not self.nodes[i + 1].is_end_node) and (
-                not self.nodes[i + 1].has_action()
+                not self.nodes[i + 1].is_stop_node()
             ):
                 continue
             (
@@ -515,6 +515,12 @@ class PathWidget(QGraphicsView):
         point.setY((point.y() / (12.3266567842 * 12) + 0.5) * 2000)
 
         return point
+    
+    def mirror_nodes(self):
+        for n in self.nodes:
+            n.setPos(QPointF(2000 - n.x(), n.y()))
+            n.turn = -n.turn
+        self.update_path()
 
     def load_nodes(self, node_str):
         nodes_data = json.loads(node_str)
@@ -528,11 +534,12 @@ class PathWidget(QGraphicsView):
                 node.is_start_node = bool(node_data[2])
                 self.end_node = node if bool(node_data[3]) else self.end_node
                 node.is_end_node = bool(node_data[3])
-                node.spin_intake = bool(node_data[4])
+                node.spin_intake = (node_data[4])
                 node.clamp_goal = bool(node_data[5])
                 node.is_reverse_node = bool(node_data[6])
-                node.turn = node_data[7]
-                node.wait_time = node_data[8]
+                node.stop = bool(node_data[7])
+                node.turn = node_data[8]
+                node.wait_time = node_data[9]
 
                 node.show()
 

@@ -1,5 +1,5 @@
 from PyQt6.QtCore import QPoint, QPointF, QRectF, Qt
-from PyQt6.QtGui import QAction, QColor, QPainter
+from PyQt6.QtGui import QAction, QColor, QPainter, QActionGroup
 from PyQt6.QtWidgets import QGraphicsItem, QInputDialog, QMenu, QWidget
 
 
@@ -20,6 +20,7 @@ class Node(QGraphicsItem):
         self.dragging = False
         self.offset = QPoint(0, 0)
         self.radius = radius
+        self.stop = False
         self.setPos(x, y)
         self.setAcceptHoverEvents(True)
         self.image_rect = QRectF(0, 0, 2000, 2000)
@@ -124,15 +125,36 @@ class Node(QGraphicsItem):
         end_action.triggered.connect(self.toggle_end_node)
         attributes_menu.addAction(end_action)
 
-        spin_action = QAction("Spin Intake", checkable=True)
-        spin_action.setChecked(self.spin_intake)
-        spin_action.triggered.connect(self.toggle_spin_intake)
-        attributes_menu.addAction(spin_action)
+        spin_menu = QMenu("Spin Intake")
+        attributes_menu.addMenu(spin_menu)
 
+        spin_options = {
+            "Don't spin intake": 0,
+            "Spin intake": 1,
+            "Spin intake in reverse": -1
+        }
+
+        spin_action_group = QActionGroup(spin_menu)
+        spin_action_group.setExclusive(True)
+
+        for option, value in spin_options.items():
+            action = QAction(option, spin_menu, checkable=True)
+            action.setChecked(self.spin_intake == value)
+            action.setData(value)
+            spin_action_group.addAction(action)
+            spin_menu.addAction(action)
+
+        spin_action_group.triggered.connect(self.set_spin_intake)
+        
         clamp_action = QAction("Clamp Goal", checkable=True)
         clamp_action.setChecked(self.clamp_goal)
         clamp_action.triggered.connect(self.toggle_clamp_goal)
         attributes_menu.addAction(clamp_action)
+
+        stop_action = QAction("Stop at Node", checkable=True)
+        stop_action.setChecked(self.stop)
+        stop_action.triggered.connect(self.toggle_stop)
+        attributes_menu.addAction(stop_action)
 
         reverse_action = QAction("Reverse", checkable=True)
         reverse_action.setChecked(self.is_reverse_node)
@@ -195,12 +217,16 @@ class Node(QGraphicsItem):
             self.spin_intake
             or self.clamp_goal
             or self.is_reverse_node
+            or self.stop
             or self.turn != 0
             or self.wait_time != 0
         )
+    
+    def is_stop_node(self):
+        return self.stop
 
-    def toggle_spin_intake(self):
-        self.spin_intake = not self.spin_intake
+    def set_spin_intake(self, action):
+        self.spin_intake = action.data()
         print(f"Spin Intake: {self.spin_intake}")
 
     def toggle_clamp_goal(self):
@@ -264,6 +290,10 @@ class Node(QGraphicsItem):
         self.parent.remove_node(self)
         self.scene().removeItem(self)
         print(f"Node at ({self.x()}, {self.y()}) deleted")
+
+    def toggle_stop(self):
+        self.stop = not self.stop
+        print(f"Stop at Node: {self.stop}")
 
     def insert_node_before(self):
         new_point = QPointF(self.pos().x() + 5, self.pos().y() + 5)
