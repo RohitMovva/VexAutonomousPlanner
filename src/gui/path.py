@@ -137,7 +137,7 @@ class PathWidget(QGraphicsView):
         if event.modifiers() & Qt.KeyboardModifier.ShiftModifier:
             return
         # Zoom factor
-        zoom_factor = 1.2
+        zoom_factor = 1.3
 
         # Get the current transformation
         old_pos = self.mapToScene(event.position().toPoint())
