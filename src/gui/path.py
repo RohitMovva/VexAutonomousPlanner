@@ -141,7 +141,7 @@ class PathWidget(QGraphicsView):
 
         # Get the current transformation
         old_pos = self.mapToScene(event.position().toPoint())
-        # old_pos = self.
+        self.centerOn(old_pos)
 
         # Current scale factor
         current_scale = self.transform().m11()
@@ -162,11 +162,12 @@ class PathWidget(QGraphicsView):
         self.scale(factor, factor)
 
         # Get the new position
-        new_pos = self.mapToScene(event.position().toPoint())
-
+        # new_pos = self.mapToScene(event.position().toPoint())
+        new_pos = self.mapToScene(self.viewport().rect().center())
         # Move scene to old position
-        delta = new_pos - old_pos
-        self.translate(delta.x(), delta.y())
+        delta = self.mapToScene(event.position().toPoint()) - new_pos
+
+        self.centerOn(old_pos - delta)
 
         self.initial_fit = False
 
