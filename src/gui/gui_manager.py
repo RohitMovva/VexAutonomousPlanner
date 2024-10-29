@@ -173,6 +173,10 @@ class AutonomousPlannerGUIManager(QMainWindow):
         show_heading_graph.triggered.connect(self.heading_graph)
         tools_menu.addAction(show_heading_graph)
 
+        show_angular_velocity_graph = QAction("Show Angular Velocity Graph", self)
+        show_angular_velocity_graph.triggered.connect(self.angular_velocity_graph)
+        tools_menu.addAction(show_angular_velocity_graph)
+
         show_coords_graph = QAction("Show Coords Graph", self)
         show_coords_graph.triggered.connect(self.coords_graph)
         tools_menu.addAction(show_coords_graph)
@@ -274,6 +278,7 @@ class AutonomousPlannerGUIManager(QMainWindow):
                 velocities,
                 accelerations,
                 headings,
+                angular_velocities,
                 nodes_map,
                 coords,
             ) = self.central_widget.generate_motion_profile_lists(
@@ -552,6 +557,21 @@ class AutonomousPlannerGUIManager(QMainWindow):
             "Time (s)",
             "Heading (degrees)",
         )
+
+    def angular_velocity_graph(self):
+        self.central_widget.generate_motion_profile_lists(
+            self.max_velocity, self.max_acceleration, self.max_jerk, self.track_width
+        )
+
+        utilities.create_mpl_plot(
+            self.central_widget.all_time_intervals,
+            self.central_widget.all_angular_velocities,
+            12,
+            8,
+            "Angular Velocity Profile",
+            "Time (s)",
+            "Angular Velocity (radians/s)",
+        ) 
 
     def coords_graph(self):
         self.central_widget.generate_motion_profile_lists(

@@ -59,6 +59,7 @@ def generate_other_lists(velocities, control_points, segments, dt):
     accelerations = []
     time_intervals = [i * dt for i in range(0, len(velocities))]
     headings = []
+    angular_velocities = []  # New list for angular velocities
     nodes_map = [0]
     coords = []
 
@@ -71,14 +72,12 @@ def generate_other_lists(velocities, control_points, segments, dt):
     for i in range(len(velocities) - 1):
         acceleration = (velocities[i + 1] - velocities[i]) / dt
         accelerations.append(acceleration)
-
     # Add the last acceleration (assuming constant acceleration for the last interval)
     accelerations.append(accelerations[-1])
 
     # Calculate headings
     current_dist = 0
     current_segment = 0
-
     for i in range(len(velocities)):
         if (
             current_dist >= segments[current_segment][-1]
@@ -91,6 +90,7 @@ def generate_other_lists(velocities, control_points, segments, dt):
         t_along_curve = distance_to_time(current_dist, segments[current_segment])
         x = None
         y = None
+        
         if len(control_points[current_segment]) == 3:  # Quadratic Bezier curve
             headings.append(
                 quadratic_bezier.quad_bezier_angle(
@@ -131,12 +131,26 @@ def generate_other_lists(velocities, control_points, segments, dt):
             )
         )
 
-        # print(t_along_curve, current_dist, segments[current_segment][-1], coords[-1])
-
         if i > 0:
             current_dist += positions[i] - positions[i - 1]
         else:
             current_dist = positions[i]
+
+        # Calculate angular velocity
+        if i > 0:
+            # Calculate the change in heading angle
+            delta_heading = headings[i] - headings[i-1]
+            # Normalize the angle difference to be between -180 and 180 degrees
+            if delta_heading > 180:
+                delta_heading -= 360
+            elif delta_heading < -180:
+                delta_heading += 360
+            # Convert to radians per second
+            angular_velocity = (delta_heading * (math.pi / 180)) / dt
+            angular_velocities.append(angular_velocity)
+        else:
+            # For the first point, assume zero angular velocity
+            angular_velocities.append(0.0)
 
     return (
         time_intervals,
@@ -144,10 +158,10 @@ def generate_other_lists(velocities, control_points, segments, dt):
         velocities,
         accelerations,
         headings,
+        angular_velocities,  # Added to return tuple
         nodes_map,
         coords,
     )
-
 
 def get_times(velocities, dd):
     res = [0]
@@ -185,7 +199,7 @@ def interpolate_velocity(velocities, times, tt):
 
 
 def get_wheel_velocities(velocity, curvature, track_width):
-    # Credit to robotsquiggles for this math even though it's pretty simple lol
+    # Credit to robotsquiggles for this math even though it's pretty simple ¯\_(ツ)_/¯
     omega = velocity * curvature
 
     return (velocity - (track_width / 2) * omega, velocity + (track_width / 2) * omega)
@@ -213,6 +227,7 @@ def generate_motion_profile(
     a_max,
     j_max,
     track_width,
+    turn_values,
     dd=0.005,
     dt=0.025,
     K=15.0,
@@ -232,7 +247,6 @@ def generate_motion_profile(
 
     current_dist = 0
     current_segment = 0
-    # print(segments)
     for i in range(0, len(velocities)):
         if (
             current_dist >= segments[current_segment][-1]
@@ -280,4 +294,6 @@ def generate_motion_profile(
         new_velocities.append(new_velo)
     new_velocities.append(0)
 
-    return generate_other_lists(new_velocities, control_points, segments, dt)
+    res = generate_other_lists(new_velocities, control_points, segments, dt)
+    # for node in node
+    return res
