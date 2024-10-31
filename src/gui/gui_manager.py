@@ -449,7 +449,6 @@ class AutonomousPlannerGUIManager(QMainWindow):
                     f"std::vector<std::vector<float>> {self.current_working_file} ="
                 ):
                     content[i] = insertion
-                    # print("INSERTED: ", content[i])
                     inserted = True
                     break
             if not inserted:
@@ -471,8 +470,22 @@ class AutonomousPlannerGUIManager(QMainWindow):
                 "#endif\n",
             ]
 
+        if not os.path.exists(self.routes_header_path) or os.stat(self.routes_header_path).st_size == 0:
+            # If the file is empty, write the content
+            content = [
+                "#ifndef ROUTES_H\n",
+                "#define ROUTES_H\n",
+                "#include <vector>\n",
+                "\n",
+                insertion,
+                "\n",
+                "#endif\n",
+            ]
+
+        print("Saving motion profile to " + self.routes_header_path)
         with open(self.routes_header_path, "w") as routes_file:
             routes_file.writelines(content)
+
 
     def switch_field(self, fieldType: str):
         if fieldType == "High Stakes Match":

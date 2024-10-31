@@ -53,7 +53,7 @@ def forward_backwards_smoothing(arr, max_step, depth, delta_dist):
     return arr
 
 
-def generate_other_lists(velocities, control_points, segments, dt):
+def generate_other_lists(velocities, control_points, segments, dt, turn_insertions):
     # Initialize lists to store positions and accelerations
     positions = [0]  # Assuming initial position is 0
     accelerations = []
@@ -90,7 +90,7 @@ def generate_other_lists(velocities, control_points, segments, dt):
         t_along_curve = distance_to_time(current_dist, segments[current_segment])
         x = None
         y = None
-        
+
         if len(control_points[current_segment]) == 3:  # Quadratic Bezier curve
             headings.append(
                 quadratic_bezier.quad_bezier_angle(
@@ -139,7 +139,7 @@ def generate_other_lists(velocities, control_points, segments, dt):
         # Calculate angular velocity
         if i > 0:
             # Calculate the change in heading angle
-            delta_heading = headings[i] - headings[i-1]
+            delta_heading = headings[i] - headings[i - 1]
             # Normalize the angle difference to be between -180 and 180 degrees
             if delta_heading > 180:
                 delta_heading -= 360
@@ -152,6 +152,43 @@ def generate_other_lists(velocities, control_points, segments, dt):
             # For the first point, assume zero angular velocity
             angular_velocities.append(0.0)
 
+        # Insert the turn on point trapezoidal velocity profiles into the motion profile
+        # x, y, linear velocity will stay the same, just insert a bunch of the same values
+        # update the heading and angular velocity
+        if i in nodes_map:
+            temp_headings = []
+            temp_angular_velocities = []
+            temp_coords = []
+            temp_positions = []
+            temp_velocities = []
+            temp_accelerations = []
+            temp_time_intervals = []
+
+            for j in range(len(turn_insertions[nodes_map.index(i)])):
+                print("Accessing at: ", i+j-1)
+                print("Length of headings: ", len(headings))
+                temp_headings.append(turn_insertions[nodes_map.index(i)][j] * dt + headings[i + j - 1])
+                temp_angular_velocities.append(turn_insertions[nodes_map.index(i)][j])
+                temp_coords.append(coords[i + j - 1])
+                temp_positions.append(positions[i + j - 1])
+                temp_velocities.append(velocities[i + j - 1])
+                temp_accelerations.append(accelerations[i + j - 1])
+                temp_time_intervals.append(time_intervals[i + j - 1] + dt)
+
+            # Insert the temporary lists into the main lists
+            headings[i:i] = temp_headings
+            angular_velocities[i:i] = temp_angular_velocities
+            coords[i:i] = temp_coords
+            positions[i:i] = temp_positions
+            velocities[i:i] = temp_velocities
+            accelerations[i:i] = temp_accelerations
+            time_intervals[i:i] = temp_time_intervals
+
+            # Update the time intervals after the insertion
+            offset = dt * len(temp_time_intervals)
+            for j in range(i + len(temp_time_intervals), len(time_intervals)):
+                time_intervals[j] += offset
+
     return (
         time_intervals,
         positions,
@@ -162,6 +199,7 @@ def generate_other_lists(velocities, control_points, segments, dt):
         nodes_map,
         coords,
     )
+
 
 def get_times(velocities, dd):
     res = [0]
@@ -217,6 +255,57 @@ def limit_velocity(velocity, v_max, curvature, track_width):
         right_velocity = (right_velocity / max_velocity) * v_max
 
     return (left_velocity + right_velocity) / 2  # average of both velocities
+
+
+def calculate_turn_velocities(turn_angle, track_width, v_max, a_max, j_max, dt):
+    # Figure out how far each side of the drivetrain needs to travel to make the turn
+    radius = track_width / 2
+    # Find arc length based on radius and angle
+    arc_length = (turn_angle / 360) * 2 * math.pi * radius
+
+    # Find time needed for each phase, this is acceleration, constant velocity, and deceleration
+    acceleration_time = v_max / a_max
+    deceleration_time = v_max / a_max
+    # constant velocity time will be equal to distance left over by acceleration and deceleration over v_max
+    constant_velocity_time = (
+        arc_length - (v_max * acceleration_time) - (v_max * deceleration_time)
+    ) / v_max
+
+    # If we can't reach v_max in the acceleration phase, we need to adjust the acceleration time
+    if constant_velocity_time < 0:
+        # We need to figure out how long we can accelerate for before reaching half of our turn_angle
+        acceleration_time = math.sqrt((turn_angle / 2) / a_max)
+        deceleration_time = acceleration_time
+        constant_velocity_time = 0
+
+    # Find the angular velocity every dt along the turn
+    angular_velocities = []
+    for i in range(0, int(acceleration_time / dt)):
+        # Figure out our angular velocity based on how quickly we are turning at this point in time. Result should be in radians per second
+        # Find speed at this point
+        speed = i * a_max * dt
+        # Find the radius of the circle we are turning on
+        radius = track_width / 2
+        # Find the angular velocity
+        angular_velocity = speed / radius
+        angular_velocities.append(angular_velocity)
+
+    for i in range(0, int(constant_velocity_time / dt)):
+        angular_velocities.append(angular_velocity)
+
+    for i in range(0, int(deceleration_time / dt)):
+        # Figure out our angular velocity based on how quickly we are turning at this point in time. Result should be in radians per second
+        # Find speed at this point
+        # Find speed that we reached after the acceleration phase and subtract how much we've decelerated from that
+        max_reached_speed = acceleration_time * a_max
+        speed = max_reached_speed - (i * a_max * dt)
+        # Find the radius of the circle we are turning on
+        radius = track_width / 2
+        # Find the angular velocity
+        angular_velocity = speed / radius
+        angular_velocities.append(angular_velocity)
+
+    return angular_velocities
 
 
 def generate_motion_profile(
@@ -294,6 +383,16 @@ def generate_motion_profile(
         new_velocities.append(new_velo)
     new_velocities.append(0)
 
-    res = generate_other_lists(new_velocities, control_points, segments, dt)
-    # for node in node
+    turn_insertions = []
+    for turn in turn_values:
+        # Calculate a trapezoidal velocity profile for the turn
+        angular_velocities = calculate_turn_velocities(
+            turn, track_width, v_max, a_max, j_max, dt
+        )
+        turn_insertions.append(angular_velocities)
+    print(turn_insertions)
+
+    res = generate_other_lists(new_velocities, control_points, segments, dt, turn_insertions)
+    
+
     return res
