@@ -10,8 +10,9 @@ import utilities
 from gui import gui_manager
 
 if __name__ == "__main__":
-    myappid = 'Flip.PathPlanner.0.2.0' # arbitrary string
-    ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
+    if sys.platform.startswith('win'):
+        myappid = 'Flip.PathPlanner.0.2.0'
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
     app = QApplication(sys.argv)
 
     qdarktheme.setup_theme()

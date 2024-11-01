@@ -265,12 +265,14 @@ class PathWidget(QGraphicsView):
         self.all_velocities = []
         self.all_accelerations = []
         self.all_headings = []
+        self.all_angular_velocities = []
         self.all_nodes_map = []
         self.all_coords = []
 
         current_position = 0
         segment_data = [[], []]
         segment_length = 0
+        turn_values = []
         
         for i in range(0, len(self.line_data)):
             line = self.line_data[i][:]
@@ -285,6 +287,8 @@ class PathWidget(QGraphicsView):
             segment_data[1].append(segments)
             segment_length += segments[-1]
 
+            turn_values.append(self.nodes[i].turn)
+
             if (not self.nodes[i + 1].is_end_node) and (
                 not self.nodes[i + 1].is_stop_node()
             ):
@@ -295,10 +299,11 @@ class PathWidget(QGraphicsView):
                 velocities,
                 accelerations,
                 headings,
+                angular_velocities,
                 nodes_map,
                 coords,
             ) = motion_profile_generator.generate_motion_profile(
-                [], segment_data[0], segment_data[1], v_max, a_max, j_max, track_width
+                [], segment_data[0], segment_data[1], v_max, a_max, j_max, track_width, turn_values
             )
 
             if self.all_time_intervals != []:
@@ -311,6 +316,7 @@ class PathWidget(QGraphicsView):
             self.all_velocities.extend(velocities)
             self.all_accelerations.extend(accelerations)
             self.all_headings.extend(headings)
+            self.all_angular_velocities.extend(angular_velocities)
             self.all_nodes_map.extend(
                 (mapping + len(self.all_time_intervals) - len(time_intervals))
                 for mapping in nodes_map
@@ -319,6 +325,7 @@ class PathWidget(QGraphicsView):
 
             current_position += segment_length
             segment_data = [[], []]
+            turn_values = []
             segment_length = 0
 
 
@@ -333,6 +340,7 @@ class PathWidget(QGraphicsView):
             self.all_velocities,
             self.all_accelerations,
             self.all_headings,
+            self.all_angular_velocities,
             self.all_nodes_map,
             self.all_coords,
         )
