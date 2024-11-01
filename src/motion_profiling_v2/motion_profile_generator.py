@@ -152,43 +152,54 @@ def generate_other_lists(velocities, control_points, segments, dt, turn_insertio
             # For the first point, assume zero angular velocity
             angular_velocities.append(0.0)
 
-        # Insert the turn on point trapezoidal velocity profiles into the motion profile
-        # x, y, linear velocity will stay the same, just insert a bunch of the same values
-        # update the heading and angular velocity
-        if i in nodes_map:
-            temp_headings = []
-            temp_angular_velocities = []
-            temp_coords = []
-            temp_positions = []
-            temp_velocities = []
-            temp_accelerations = []
-            temp_time_intervals = []
+    # Insert the turn on point trapezoidal velocity profiles into the motion profile
+    # x, y, linear velocity will stay the same, just insert a bunch of the same values
+    # update the heading and angular velocity
+    print("nodes_map: ", nodes_map)
+    # print("turn_insertions", turn_insertions)
+    coffset = 0
+    for k in range(len(nodes_map)):
+        print("nm k: ", nodes_map[k])
+        # nodes_map[k] += offset
+        i = nodes_map[k] + coffset
+        temp_headings = [headings[i] - 1]
+        temp_angular_velocities = []
+        temp_coords = []
+        temp_positions = []
+        temp_velocities = []
+        temp_accelerations = []
+        temp_time_intervals = []
 
-            for j in range(len(turn_insertions[nodes_map.index(i)])):
-                print("Accessing at: ", i+j-1)
-                print("Length of headings: ", len(headings))
-                temp_headings.append(turn_insertions[nodes_map.index(i)][j] * dt + headings[i + j - 1])
-                temp_angular_velocities.append(turn_insertions[nodes_map.index(i)][j])
-                temp_coords.append(coords[i + j - 1])
-                temp_positions.append(positions[i + j - 1])
-                temp_velocities.append(velocities[i + j - 1])
-                temp_accelerations.append(accelerations[i + j - 1])
-                temp_time_intervals.append(time_intervals[i + j - 1] + dt)
+        for j in range(len(turn_insertions[k])):
+            temp_headings.append(turn_insertions[k][j] * dt + temp_headings[-1])
+            temp_angular_velocities.append(turn_insertions[k][j])
+            temp_coords.append(coords[i - 1])
+            temp_positions.append(positions[i - 1])
+            temp_velocities.append(velocities[i - 1])
+            temp_accelerations.append(accelerations[i - 1])
+            temp_time_intervals.append(time_intervals[i - 1] + j * dt)
 
-            # Insert the temporary lists into the main lists
-            headings[i:i] = temp_headings
-            angular_velocities[i:i] = temp_angular_velocities
-            coords[i:i] = temp_coords
-            positions[i:i] = temp_positions
-            velocities[i:i] = temp_velocities
-            accelerations[i:i] = temp_accelerations
-            time_intervals[i:i] = temp_time_intervals
+        coffset += len(temp_time_intervals)
+        print("Offset: ", coffset)
+        # Insert the temporary lists into the main lists
+        headings[i:i] = temp_headings[1:]
+        angular_velocities[i:i] = temp_angular_velocities
+        coords[i:i] = temp_coords
+        positions[i:i] = temp_positions
+        velocities[i:i] = temp_velocities
+        accelerations[i:i] = temp_accelerations
+        time_intervals[i:i] = temp_time_intervals
 
-            # Update the time intervals after the insertion
-            offset = dt * len(temp_time_intervals)
-            for j in range(i + len(temp_time_intervals), len(time_intervals)):
-                time_intervals[j] += offset
+        print("Before: ", time_intervals)
+        # Update the time intervals after the insertion
+        offset = dt * len(temp_time_intervals)
+        for j in range(i + len(temp_time_intervals), len(time_intervals)):
+            time_intervals[j] += offset
+        print("After: ", time_intervals)
 
+        nodes_map[k] += coffset
+        
+    print("Times: ", time_intervals)
     return (
         time_intervals,
         positions,
@@ -261,7 +272,8 @@ def calculate_turn_velocities(turn_angle, track_width, v_max, a_max, j_max, dt):
     # Figure out how far each side of the drivetrain needs to travel to make the turn
     radius = track_width / 2
     # Find arc length based on radius and angle
-    arc_length = (turn_angle / 360) * 2 * math.pi * radius
+    # arc_length = (turn_angle / 360) * 2 * math.pi * radius
+    arc_length = (math.pi/180 * turn_angle) * radius
 
     # Find time needed for each phase, this is acceleration, constant velocity, and deceleration
     acceleration_time = v_max / a_max
@@ -274,35 +286,55 @@ def calculate_turn_velocities(turn_angle, track_width, v_max, a_max, j_max, dt):
     # If we can't reach v_max in the acceleration phase, we need to adjust the acceleration time
     if constant_velocity_time < 0:
         # We need to figure out how long we can accelerate for before reaching half of our turn_angle
-        acceleration_time = math.sqrt((turn_angle / 2) / a_max)
+        acceleration_time = math.sqrt(arc_length / a_max)
         deceleration_time = acceleration_time
         constant_velocity_time = 0
 
     # Find the angular velocity every dt along the turn
     angular_velocities = []
-    for i in range(0, int(acceleration_time / dt)):
+    acc_val = 0
+    acc_pos = 0
+    for i in range(0, math.ceil(acceleration_time / dt)):
         # Figure out our angular velocity based on how quickly we are turning at this point in time. Result should be in radians per second
         # Find speed at this point
-        speed = i * a_max * dt
+        new_dt = dt
+        new_acc = a_max
+        if (i == int(acceleration_time / dt)):
+            new_dt = acceleration_time - (i)*dt
+            new_acc = (new_dt/dt) * a_max
+
+        speed = (((i-1) * dt + dt) * new_acc)
+        acc_pos += speed * dt + 0.5 * new_acc * (dt ** 2)
         # Find the radius of the circle we are turning on
         radius = track_width / 2
         # Find the angular velocity
         angular_velocity = speed / radius
+        acc_val += angular_velocity * dt
         angular_velocities.append(angular_velocity)
 
     for i in range(0, int(constant_velocity_time / dt)):
         angular_velocities.append(angular_velocity)
 
-    for i in range(0, int(deceleration_time / dt)):
+    acc_val = 0
+    acc_pos = 0
+    for i in range(0, math.ceil(deceleration_time / dt)):
         # Figure out our angular velocity based on how quickly we are turning at this point in time. Result should be in radians per second
         # Find speed at this point
         # Find speed that we reached after the acceleration phase and subtract how much we've decelerated from that
-        max_reached_speed = acceleration_time * a_max
-        speed = max_reached_speed - (i * a_max * dt)
+        new_dt = dt
+        new_acc = a_max
+        if (i == int(deceleration_time / dt)):
+            new_dt = deceleration_time - (i)*dt
+            new_acc = (new_dt/dt) * a_max
+
+        max_reached_speed = acceleration_time * new_acc
+        speed = max_reached_speed - (((i-1) * dt + dt) * new_acc)
+        acc_pos += speed * dt - 0.5 * new_acc * (dt ** 2)
         # Find the radius of the circle we are turning on
         radius = track_width / 2
         # Find the angular velocity
         angular_velocity = speed / radius
+        acc_val += angular_velocity * dt
         angular_velocities.append(angular_velocity)
 
     return angular_velocities
@@ -389,6 +421,14 @@ def generate_motion_profile(
         angular_velocities = calculate_turn_velocities(
             turn, track_width, v_max, a_max, j_max, dt
         )
+
+        acc_val = 0
+        for velo in angular_velocities:
+            acc_val += velo * dt
+
+
+        print("Accumulated value: ", acc_val * 180 / math.pi)
+        
         turn_insertions.append(angular_velocities)
     print(turn_insertions)
 
