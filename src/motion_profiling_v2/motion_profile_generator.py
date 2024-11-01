@@ -53,7 +53,7 @@ def forward_backwards_smoothing(arr, max_step, depth, delta_dist):
     return arr
 
 
-def generate_other_lists(velocities, control_points, segments, dt, turn_insertions, turn_vals):
+def generate_other_lists(velocities, control_points, segments, dt, turn_insertions, turn_vals, wait_times):
     # Initialize lists to store positions and accelerations
     positions = [0]  # Assuming initial position is 0
     accelerations = []
@@ -155,8 +155,6 @@ def generate_other_lists(velocities, control_points, segments, dt, turn_insertio
     # Insert the turn on point trapezoidal velocity profiles into the motion profile
     # x, y, linear velocity will stay the same, just insert a bunch of the same values
     # update the heading and angular velocity
-    print("nodes_map: ", nodes_map)
-    # print("turn_insertions", turn_insertions)
     coffset = 0
     for k in range(len(nodes_map)):
         
@@ -170,10 +168,8 @@ def generate_other_lists(velocities, control_points, segments, dt, turn_insertio
         temp_accelerations = []
         temp_time_intervals = []
 
-        accum = 0
         for j in range(len(turn_insertions[k])):
             temp_headings.append((turn_insertions[k][j] * dt) * (180/math.pi) + temp_headings[-1])
-            accum += (turn_insertions[k][j] * dt) * (180/math.pi)
             temp_angular_velocities.append(turn_insertions[k][j])
             temp_coords.append(coords[i])
             temp_positions.append(positions[i])
@@ -197,6 +193,45 @@ def generate_other_lists(velocities, control_points, segments, dt, turn_insertio
             time_intervals[j] += offset
 
         nodes_map[k] += coffset
+
+    coffset = 0
+    for k in range(len(nodes_map)):
+        
+        # nodes_map[k] += offset
+        i = nodes_map[k] + coffset
+        temp_headings = []
+        temp_angular_velocities = []
+        temp_coords = []
+        temp_positions = []
+        temp_velocities = []
+        temp_accelerations = []
+        temp_time_intervals = []
+
+        for j in range(int(wait_times[k]/dt)):
+            temp_headings.append(headings[i])
+            temp_angular_velocities.append(0)
+            temp_coords.append(coords[i])
+            temp_positions.append(positions[i])
+            temp_velocities.append(0)
+            temp_accelerations.append(0)
+            temp_time_intervals.append(time_intervals[i] + j * dt)
+
+        coffset += len(temp_time_intervals)
+        # Insert the temporary lists into the main lists
+        headings[i:i] = temp_headings
+        angular_velocities[i:i] = temp_angular_velocities
+        coords[i:i] = temp_coords
+        positions[i:i] = temp_positions
+        velocities[i:i] = temp_velocities
+        accelerations[i:i] = temp_accelerations
+        time_intervals[i:i] = temp_time_intervals
+
+        # Update the time intervals after the insertion
+        offset = dt * len(temp_time_intervals)
+        for j in range(i + len(temp_time_intervals), len(time_intervals)):
+            time_intervals[j] += offset
+
+        # nodes_map[k] += coffset
         
     return (
         time_intervals,
@@ -347,6 +382,7 @@ def generate_motion_profile(
     j_max,
     track_width,
     turn_values,
+    wait_times,
     dd=0.005,
     dt=0.025,
     K=15.0,
@@ -426,9 +462,7 @@ def generate_motion_profile(
 
         
         turn_insertions.append(angular_velocities)
-    print(turn_insertions)
-
-    res = generate_other_lists(new_velocities, control_points, segments, dt, turn_insertions, turn_values)
+    res = generate_other_lists(new_velocities, control_points, segments, dt, turn_insertions, turn_values, wait_times)
     
 
     return res
