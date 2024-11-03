@@ -18,7 +18,7 @@ The project can be accessed either by cloning or by downloading the latest excec
 On the first run of the application you will be prompted to select a "routes" folder, this is just a folder where paths you generate will be stored. You will also be prompted to select another folder to save the 2d motion profile generated based on the path, which can be used in combination with a controller of your choice whether that be PID, Pure Pursuit, Ramsete, or something else.
 
 ## Contribution and Collaboration
-Currently the project is currently solely maintained and written by team 77717F. If interested in contributing or have any other questions about the project feel free to reach out to me on Discord (communistpoultry).
+Currently the project is currently solely maintained and written by team 77717F. If interested in contributing or if you have any other questions or suggestions feel free to reach out to me on Discord (communistpoultry).
 
 ## Credits
 This project was made possible by:
