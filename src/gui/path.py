@@ -383,7 +383,9 @@ class PathWidget(QGraphicsView):
 
             targetAngle = target.angleTo(source)
             turnVal = (self.nodes[p].turn)
-            if self.nodes[p].turn:
+            if (self.nodes[p].turn and self.nodes[p].is_reverse_node):
+                angle = source.angle() + 180
+            elif self.nodes[p].turn:
                 angle = source.angle()
             elif self.nodes[p].is_reverse_node:
                 if targetAngle > 180:
