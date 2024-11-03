@@ -5,9 +5,9 @@ An application for easy, action oriented, generation of paths for VEX robotics.
 Created by team 77717F Flip
 
 ## Installation
-The project can be accessed either by cloning or by downloading the latest excecutable from the Releases tab on the side.
+The project can be accessed either by cloning or by downloading the latest excecutable from the Releases tab on the side. (Project is still in heavy development)
 
-On the first run of the application you will be prompted to select a "routes" folder, this is just a folder where paths you generate will be stored. You will also be prompted to select another folder to save the path in vector form ({x, y, heading}), which can be used in combination with a feedback loop (like PID) to control the robot itself.
+On the first run of the application you will be prompted to select a "routes" folder, this is just a folder where paths you generate will be stored. You will also be prompted to select another folder to save the 2d motion profile generated based on the path, which can be used in combination with a controller of your choice whether that be PID, Pure Pursuit, Ramsete, or something else.
 
 ## Credits
 This project was made possible by:
