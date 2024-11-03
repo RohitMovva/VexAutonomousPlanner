@@ -80,6 +80,8 @@ class Node(QGraphicsItem):
     def mouseReleaseEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
             self.drag_start_position = None
+            self.abs_x = ((self.x() / (self.image_size)) - 0.5) * 12.3266567842 * 12
+            self.abs_y = ((self.y() / (self.image_size)) - 0.5) * 12.3266567842 * 12
             self.parent.update_path()
             self.parent.save()
         super().mouseReleaseEvent(event)
@@ -289,7 +291,7 @@ class Node(QGraphicsItem):
     def delete_node(self):
         self.parent.remove_node(self)
         self.scene().removeItem(self)
-        print(f"Node at ({self.x()}, {self.y()}) deleted")
+        print(f"Node at ({self.abs_x}, {self.abs_y}) deleted")
 
     def toggle_stop(self):
         self.stop = not self.stop

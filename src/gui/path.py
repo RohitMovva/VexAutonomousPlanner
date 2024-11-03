@@ -178,12 +178,9 @@ class PathWidget(QGraphicsView):
             and event.modifiers() & Qt.KeyboardModifier.ShiftModifier
         ):
             scene_pos = self.mapToScene(event.position().toPoint())
-            node = self.add_node(scene_pos)
+            self.add_node(scene_pos)
 
             print(f"Mouse clicked at ({scene_pos.x()}, {scene_pos.y()})")
-
-            # Create a new Node instance
-            self.scene.addItem(node)
 
         # Call the parent class mousePressEvent to maintain drag functionality
         else:
