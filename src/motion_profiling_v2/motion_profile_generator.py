@@ -161,6 +161,8 @@ def generate_other_lists(velocities, control_points, segments, dt, turn_insertio
         # nodes_map[k] += offset
         i = nodes_map[k] + coffset
         temp_headings = [headings[i]-turn_vals[k]]
+        if (temp_headings[0] < -180):
+            temp_headings[0] += 360
         temp_angular_velocities = []
         temp_coords = []
         temp_positions = []
@@ -170,6 +172,10 @@ def generate_other_lists(velocities, control_points, segments, dt, turn_insertio
 
         for j in range(len(turn_insertions[k])):
             temp_headings.append((turn_insertions[k][j] * dt) * (180/math.pi) + temp_headings[-1])
+            if (temp_headings[-1] < -180):
+                temp_headings[-1] += 360
+            elif (temp_headings[-1] > 180):
+                temp_headings[-1] -= 360
             temp_angular_velocities.append(turn_insertions[k][j])
             temp_coords.append(coords[i])
             temp_positions.append(positions[i])
@@ -179,7 +185,10 @@ def generate_other_lists(velocities, control_points, segments, dt, turn_insertio
 
         coffset += len(temp_time_intervals)
         # Insert the temporary lists into the main lists
+        print("PRINTING HEADINGS")
+        print(headings)
         headings[i:i] = temp_headings[1:]
+        print(headings)
         angular_velocities[i:i] = temp_angular_velocities
         coords[i:i] = temp_coords
         positions[i:i] = temp_positions
@@ -192,7 +201,9 @@ def generate_other_lists(velocities, control_points, segments, dt, turn_insertio
         for j in range(i + len(temp_time_intervals), len(time_intervals)):
             time_intervals[j] += offset
 
+        print("Nodes map: ", nodes_map)
         nodes_map[k] += coffset
+        print("Nodes map: ", nodes_map)
 
     coffset = 0
     for k in range(len(nodes_map)):

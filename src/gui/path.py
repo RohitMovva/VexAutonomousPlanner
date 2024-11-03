@@ -288,6 +288,10 @@ class PathWidget(QGraphicsView):
             segment_length += segments[-1]
 
             turn_values.append(self.nodes[i].turn)
+            # if (self.nodes[i].is_reverse_node):
+            #     turn_values[-1] += 180
+            #     if (turn_values[-1] > 180):
+            #         turn_values[-1] -= 360
             wait_times.append(self.nodes[i].wait_time)
 
             if (not self.nodes[i + 1].is_end_node) and (
