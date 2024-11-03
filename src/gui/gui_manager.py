@@ -230,7 +230,6 @@ class AutonomousPlannerGUIManager(QMainWindow):
     #     else: # Cubic
     #         headings.append(
     #             cubic_bezier_angle(t_along_curve, control_points[current_segment][0], control_points[current_segment][2], control_points[current_segment][3], control_points[current_segment][1]))
-    #     print(current_segment, i, headings[-1])
 
     #     if (i > 0):
     #         current_dist += positions[i]-positions[i-1]

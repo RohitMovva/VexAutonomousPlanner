@@ -38,7 +38,6 @@ def create_curve_segments(start, end, control1, control2=None):
         dx, dy = ox - cx, oy - cy
         currlen += sqrt(dx**2 + dy**2)
         segments.append(currlen * (12.3266567842 / 2000))  #
-        # print(segments[-1] - segments[-2])
 
         ox, oy = cx, cy
     return segments
@@ -273,6 +272,7 @@ class PathWidget(QGraphicsView):
         segment_data = [[], []]
         segment_length = 0
         turn_values = []
+        wait_times = []
         
         for i in range(0, len(self.line_data)):
             line = self.line_data[i][:]
@@ -288,6 +288,7 @@ class PathWidget(QGraphicsView):
             segment_length += segments[-1]
 
             turn_values.append(self.nodes[i].turn)
+            wait_times.append(self.nodes[i].wait_time)
 
             if (not self.nodes[i + 1].is_end_node) and (
                 not self.nodes[i + 1].is_stop_node()
@@ -303,7 +304,7 @@ class PathWidget(QGraphicsView):
                 nodes_map,
                 coords,
             ) = motion_profile_generator.generate_motion_profile(
-                [], segment_data[0], segment_data[1], v_max, a_max, j_max, track_width, turn_values
+                [], segment_data[0], segment_data[1], v_max, a_max, j_max, track_width, turn_values, wait_times
             )
 
             if self.all_time_intervals != []:
@@ -326,6 +327,7 @@ class PathWidget(QGraphicsView):
             current_position += segment_length
             segment_data = [[], []]
             turn_values = []
+            wait_times = []
             segment_length = 0
 
 
