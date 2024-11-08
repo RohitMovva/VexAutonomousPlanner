@@ -271,8 +271,11 @@ class PathWidget(QGraphicsView):
         turn_values = []
         reverse_values = []
         wait_times = []
+        is_reversed = False
         
         for i in range(0, len(self.line_data)):
+            if (self.nodes[i].is_reverse_node):
+                is_reversed = not is_reversed
             line = self.line_data[i][:]
 
             if len(line) == 3:
@@ -286,7 +289,7 @@ class PathWidget(QGraphicsView):
             segment_length += segments[-1]
 
             turn_values.append(self.nodes[i].turn)
-            reverse_values.append(self.nodes[i].is_reverse_node)
+            reverse_values.append(is_reversed)
             wait_times.append(self.nodes[i].wait_time)
 
             if (not self.nodes[i + 1].is_end_node) and (
