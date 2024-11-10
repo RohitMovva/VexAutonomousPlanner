@@ -53,7 +53,7 @@ def forward_backwards_smoothing(arr, max_step, depth, delta_dist):
     return arr
 
 
-def generate_other_lists(velocities, control_points, segments, dt, turn_insertions, turn_vals, wait_times):
+def generate_other_lists(velocities, control_points, segments, dt, turn_insertions, turn_vals, reverse_values, wait_times):
     # Initialize lists to store positions and accelerations
     positions = [0]  # Assuming initial position is 0
     accelerations = []
@@ -124,6 +124,12 @@ def generate_other_lists(velocities, control_points, segments, dt, turn_insertio
                 t_along_curve,
             )
 
+        if (reverse_values[current_segment]):
+            headings[-1] = (headings[-1] - 180)
+            pass
+        if (headings[-1] < -180):
+            headings[-1] += 360
+
         coords.append(
             (
                 ((x / 2000) - 0.5) * 12.3266567842 * 12,
@@ -157,10 +163,8 @@ def generate_other_lists(velocities, control_points, segments, dt, turn_insertio
     # update the heading and angular velocity
     coffset = 0
     for k in range(len(nodes_map)):
-        
-        # nodes_map[k] += offset
         i = nodes_map[k] + coffset
-        temp_headings = [headings[i]-turn_vals[k]]
+        temp_headings = [headings[i]-turn_vals[k]] # need to reach that heading so subtract value we're turning by before that point
         if (temp_headings[0] < -180):
             temp_headings[0] += 360
         temp_angular_velocities = []
@@ -185,10 +189,7 @@ def generate_other_lists(velocities, control_points, segments, dt, turn_insertio
 
         coffset += len(temp_time_intervals)
         # Insert the temporary lists into the main lists
-        print("PRINTING HEADINGS")
-        print(headings)
         headings[i:i] = temp_headings[1:]
-        print(headings)
         angular_velocities[i:i] = temp_angular_velocities
         coords[i:i] = temp_coords
         positions[i:i] = temp_positions
@@ -201,9 +202,7 @@ def generate_other_lists(velocities, control_points, segments, dt, turn_insertio
         for j in range(i + len(temp_time_intervals), len(time_intervals)):
             time_intervals[j] += offset
 
-        print("Nodes map: ", nodes_map)
         nodes_map[k] += coffset
-        print("Nodes map: ", nodes_map)
 
     coffset = 0
     for k in range(len(nodes_map)):
@@ -317,7 +316,7 @@ def calculate_turn_velocities(turn_angle, track_width, v_max, a_max, j_max, dt):
     radius = track_width / 2
     # Find arc length based on radius and angle
     # arc_length = (turn_angle / 360) * 2 * math.pi * radius
-    arc_length = (math.pi/180 * turn_angle) * radius
+    arc_length = (math.pi/180 * abs(turn_angle)) * radius
 
     # Find time needed for each phase, this is acceleration, constant velocity, and deceleration
     acceleration_time = v_max / a_max
@@ -354,10 +353,10 @@ def calculate_turn_velocities(turn_angle, track_width, v_max, a_max, j_max, dt):
         # Find the angular velocity
         angular_velocity = speed / radius
         acc_val += angular_velocity * dt
-        angular_velocities.append(angular_velocity)
+        angular_velocities.append(angular_velocity * np.sign(turn_angle))
 
     for i in range(0, int(constant_velocity_time / dt)):
-        angular_velocities.append(angular_velocity)
+        angular_velocities.append(angular_velocity * np.sign(turn_angle))
 
     acc_val = 0
     acc_pos = 0
@@ -379,7 +378,7 @@ def calculate_turn_velocities(turn_angle, track_width, v_max, a_max, j_max, dt):
         # Find the angular velocity
         angular_velocity = speed / radius
         acc_val += angular_velocity * dt
-        angular_velocities.append(angular_velocity)
+        angular_velocities.append(angular_velocity * np.sign(turn_angle))
 
     return angular_velocities
 
@@ -393,6 +392,7 @@ def generate_motion_profile(
     j_max,
     track_width,
     turn_values,
+    reverse_values,
     wait_times,
     dd=0.005,
     dt=0.025,
@@ -473,7 +473,6 @@ def generate_motion_profile(
 
         
         turn_insertions.append(angular_velocities)
-    res = generate_other_lists(new_velocities, control_points, segments, dt, turn_insertions, turn_values, wait_times)
-    
+    res = generate_other_lists(new_velocities, control_points, segments, dt, turn_insertions, turn_values, reverse_values, wait_times)
 
     return res

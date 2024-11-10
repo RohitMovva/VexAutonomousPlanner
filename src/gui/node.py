@@ -249,8 +249,8 @@ class Node(QGraphicsItem):
         # Create the dialog
         dialog = QInputDialog(self.scene().views()[0])
         dialog.setWindowTitle("Set Turn")
-        dialog.setLabelText("Enter turn (0-360):")
-        dialog.setIntRange(0, 360)
+        dialog.setLabelText("Enter turn (-180-180):")
+        dialog.setIntRange(-180, 180)
         dialog.setIntValue(self.turn)
 
         # Set the position of the dialog

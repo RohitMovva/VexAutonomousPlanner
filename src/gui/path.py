@@ -269,9 +269,13 @@ class PathWidget(QGraphicsView):
         segment_data = [[], []]
         segment_length = 0
         turn_values = []
+        reverse_values = []
         wait_times = []
+        is_reversed = False
         
         for i in range(0, len(self.line_data)):
+            if (self.nodes[i].is_reverse_node):
+                is_reversed = not is_reversed
             line = self.line_data[i][:]
 
             if len(line) == 3:
@@ -285,10 +289,7 @@ class PathWidget(QGraphicsView):
             segment_length += segments[-1]
 
             turn_values.append(self.nodes[i].turn)
-            # if (self.nodes[i].is_reverse_node):
-            #     turn_values[-1] += 180
-            #     if (turn_values[-1] > 180):
-            #         turn_values[-1] -= 360
+            reverse_values.append(is_reversed)
             wait_times.append(self.nodes[i].wait_time)
 
             if (not self.nodes[i + 1].is_end_node) and (
@@ -305,7 +306,7 @@ class PathWidget(QGraphicsView):
                 nodes_map,
                 coords,
             ) = motion_profile_generator.generate_motion_profile(
-                [], segment_data[0], segment_data[1], v_max, a_max, j_max, track_width, turn_values, wait_times
+                [], segment_data[0], segment_data[1], v_max, a_max, j_max, track_width, turn_values, reverse_values, wait_times
             )
 
             if self.all_time_intervals != []:
@@ -329,6 +330,7 @@ class PathWidget(QGraphicsView):
             segment_data = [[], []]
             turn_values = []
             wait_times = []
+            reverse_values = []
             segment_length = 0
 
 
@@ -391,10 +393,7 @@ class PathWidget(QGraphicsView):
             elif self.nodes[p].turn:
                 angle = source.angle()
             elif self.nodes[p].is_reverse_node:
-                if targetAngle > 180:
-                    angle = (source.angle() + 90 + (targetAngle - 180) / 2) % 360
-                else:
-                    angle = (target.angle() - 90 + (targetAngle) / 2) % 360
+                angle = (target.angle() - 90 + (targetAngle) / 2) % 360
             elif targetAngle > 180:
                 angle = (source.angle() + source.angleTo(target) / 2) % 360
             else:
