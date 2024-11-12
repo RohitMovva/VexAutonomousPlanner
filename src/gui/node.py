@@ -14,6 +14,7 @@ class Node(QGraphicsItem):
         self.is_end_node = False
         self.spin_intake = False
         self.clamp_goal = False
+        self.doink = False
         self.is_reverse_node = False
         self.turn = 0
         self.wait_time = 0
@@ -153,6 +154,11 @@ class Node(QGraphicsItem):
         clamp_action.triggered.connect(self.toggle_clamp_goal)
         attributes_menu.addAction(clamp_action)
 
+        doink_action = QAction("Toggle Doinker", checkable=True)
+        doink_action.setChecked(self.doink)
+        doink_action.triggered.connect(self.toggle_doinker)
+        attributes_menu.addAction(doink_action)
+
         stop_action = QAction("Stop at Node", checkable=True)
         stop_action.setChecked(self.stop)
         stop_action.triggered.connect(self.toggle_stop)
@@ -234,6 +240,10 @@ class Node(QGraphicsItem):
     def toggle_clamp_goal(self):
         self.clamp_goal = not self.clamp_goal
         print(f"Clamp Goal: {self.clamp_goal}")
+
+    def toggle_doinker(self):
+        self.doink = not self.doink
+        print(f"Doinker: {self.doink}")
 
     def toggle_reverse(self):
         self.is_reverse_node = not self.is_reverse_node

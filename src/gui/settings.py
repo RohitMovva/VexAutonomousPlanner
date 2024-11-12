@@ -47,6 +47,13 @@ class SettingsDockWidget(QDockWidget):
         settings_layout.addRow("Max Jerk (ft/s³):", self.jerk_input)
         self.jerk_input.valueChanged.connect(self.on_jerk_changed)
 
+        # Toggle for the robot visualization feature
+        self.robot_visualization_toggle = QComboBox()
+        self.robot_visualization_toggle.addItems(["On", "Off"])
+        self.robot_visualization_toggle.setCurrentIndex(1)
+        settings_layout.addRow("Robot Visualization:", self.robot_visualization_toggle)
+        self.robot_visualization_toggle.currentIndexChanged.connect(self.on_robot_visualization_change)
+
         # Add the Mirror button
         self.mirror_button = QPushButton("Mirror")
         self.mirror_button.clicked.connect(self.on_mirror_clicked)
@@ -99,6 +106,11 @@ class SettingsDockWidget(QDockWidget):
         max_jerk = self.jerk_input.value()
         print(f"Max Jerk changed: {max_jerk} ft/s^3")
         self.parent.set_jerk(max_jerk)
+
+    def on_robot_visualization_change(self):
+        visualization_state = self.robot_visualization_toggle.currentText()
+        print(f"Robot Visualization changed: {visualization_state}")
+        self.parent.toggle_robot_visualization(visualization_state == "On")
 
     def on_mirror_clicked(self):
         print("Mirror button clicked")

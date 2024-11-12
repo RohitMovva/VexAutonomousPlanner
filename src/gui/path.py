@@ -1,20 +1,42 @@
 import json
+import math
 from math import sqrt
 
-from PyQt6.QtCore import QLineF, QPointF, QSize, Qt
-from PyQt6.QtGui import QColor, QMouseEvent, QPainter, QPainterPath, QPen, QPixmap
+from PyQt6.QtCore import QLineF, QPointF, QSize, Qt, QSizeF, QRectF
+from PyQt6.QtGui import QColor, QMouseEvent, QPainter, QPainterPath, QPen, QPixmap, QVector2D, QTransform, QBrush
 from PyQt6.QtWidgets import (
     QApplication,
     QGraphicsPathItem,
     QGraphicsPixmapItem,
     QGraphicsScene,
     QGraphicsView,
+    QGraphicsRectItem
 )
 
 import utilities
 from bezier import cubic_bezier, quadratic_bezier
 from gui import node
 from motion_profiling_v2 import motion_profile_generator
+
+
+class StyledRectItem(QGraphicsRectItem):
+    def __init__(self, rect: QRectF = None, parent=None):
+        super().__init__(rect if rect else QRectF(), parent)
+        self.setAcceptHoverEvents(True)
+        # Dark blue color
+        self._color = QColor("#152238")
+        self._setup_style()
+        
+    def _setup_style(self):
+        # Set up the pen (outline)
+        pen = QPen(self._color)
+        pen.setWidth(2)
+        self.setPen(pen)
+        
+        # Set up the brush (fill)
+        fill_color = QColor(self._color)
+        fill_color.setAlpha(40)  # Very transparent fill (0-255)
+        self.setBrush(QBrush(fill_color))
 
 
 def create_curve_segments(start, end, control1, control2=None):
@@ -37,7 +59,7 @@ def create_curve_segments(start, end, control1, control2=None):
 
         dx, dy = ox - cx, oy - cy
         currlen += sqrt(dx**2 + dy**2)
-        segments.append(currlen * (12.3266567842 / 2000))  #
+        segments.append(currlen * (12.3266567842 / 2000))
 
         ox, oy = cx, cy
     return segments
@@ -98,12 +120,17 @@ class PathWidget(QGraphicsView):
         self.path_item = QGraphicsPathItem()
         self.scene.addItem(self.path_item)
 
+        self.rect_item = StyledRectItem()
+        self.scene.addItem(self.rect_item)
+
         self.setMinimumSize(size)
 
         self.zoom_factor = 1.0
         self.initial_fit = True
 
         self.mouseDown = False
+
+        self.visualize = False
 
     def fit_image_to_view(self):
         self.fitInView(self.image_item, Qt.AspectRatioMode.KeepAspectRatio)
@@ -220,6 +247,8 @@ class PathWidget(QGraphicsView):
             self.parent.update_coords(scene_pos)
         else:
             QApplication.setOverrideCursor(Qt.CursorShape.OpenHandCursor)
+            if (self.visualize):
+                self.draw_rect(scene_pos)
             self.parent.update_coords(scene_pos)
 
         super().mouseMoveEvent(event)
@@ -377,6 +406,7 @@ class PathWidget(QGraphicsView):
     def build_path(self, points: list[QPointF]):
         # print("Building path...")
         factor = 0.25
+        self.path.clear()
         self.path = QPainterPath(points[0])
         self.line_data = []
         cp1 = None
@@ -549,10 +579,11 @@ class PathWidget(QGraphicsView):
                 node.is_end_node = bool(node_data[3])
                 node.spin_intake = (node_data[4])
                 node.clamp_goal = bool(node_data[5])
-                node.is_reverse_node = bool(node_data[6])
-                node.stop = bool(node_data[7])
-                node.turn = node_data[8]
-                node.wait_time = node_data[9]
+                node.doink = bool(node_data[6])
+                node.is_reverse_node = bool(node_data[7])
+                node.stop = bool(node_data[8])
+                node.turn = node_data[9]
+                node.wait_time = node_data[10]
 
                 node.show()
 
@@ -564,3 +595,137 @@ class PathWidget(QGraphicsView):
     def auto_save(self):
         if self.parent.current_working_file is not None:
             self.parent.auto_save()
+
+    def toggle_visualization(self, state):
+        print("Visualizing:", state)
+        self.visualize = state
+        self.update()
+
+    def find_closest_point_on_path(self, path: QPainterPath, point: QPointF) -> QPointF:
+        """
+        Find the closest point on a QPainterPath to a given point.
+        
+        Args:
+            path (QPainterPath): The path to search on
+            point (QPointF): The reference point to find the closest point to
+            
+        Returns:
+            QPointF: The closest point on the path
+        """
+        if path is None:
+            return QPointF()
+        # Get the length of the path
+        path_length = path.length()
+        if path_length == 0:
+            return QPointF()
+        
+        # Binary search parameters
+        min_dist = float('inf')
+        closest_point = QPointF()
+        closest_percent = 0.0
+        
+        # First pass: coarse search with larger steps
+        num_steps = 100
+        for i in range(num_steps + 1):
+            percent = i / num_steps
+            path_point = path.pointAtPercent(percent)
+            dist = math.hypot(path_point.x() - point.x(), path_point.y() - point.y())
+            
+            if dist < min_dist:
+                min_dist = dist
+                closest_point = path_point
+                closest_percent = percent
+        
+        # Second pass: fine search around the closest point found
+        # Search within ±2% of the closest point found
+        search_range = 0.02
+        start_percent = max(0.0, closest_percent - search_range)
+        end_percent = min(1.0, closest_percent + search_range)
+        
+        fine_steps = 20
+        percent_step = (end_percent - start_percent) / fine_steps
+        
+        for i in range(fine_steps + 1):
+            percent = start_percent + (i * percent_step)
+            path_point = path.pointAtPercent(percent)
+            dist = math.hypot(path_point.x() - point.x(), path_point.y() - point.y())
+            
+            if dist < min_dist:
+                min_dist = dist
+                closest_point = path_point
+        
+        return closest_point
+
+    def find_path_angle_at_point(self, path: QPainterPath, point: QPointF, delta: float = 0.01) -> float:
+        """
+        Calculate the angle of the path at the given point by sampling nearby points.
+        
+        Args:
+            path: QPainterPath to calculate angle on
+            point: Point to find the closest position on path
+            delta: Small offset for calculating tangent
+            
+        Returns:
+            Angle in radians
+        """
+        # Find the percentage along the path for the given point
+        min_dist = float('inf')
+        closest_percent = 0.0
+        
+        for i in range(101):
+            percent = i / 100
+            path_point = path.pointAtPercent(percent)
+            dist = QVector2D(point - path_point).length()
+            if dist < min_dist:
+                min_dist = dist
+                closest_percent = percent
+        
+        # Get points slightly before and after to calculate tangent
+        p1 = path.pointAtPercent(max(0, closest_percent - delta))
+        p2 = path.pointAtPercent(min(1, closest_percent + delta))
+        
+        # Calculate angle from vector between points
+        dx = p2.x() - p1.x()
+        dy = p2.y() - p1.y()
+        return math.atan2(dy, dx)
+
+    def draw_rect(self, pt):
+        # Create the styled rect item if it doesn't exist
+        if not hasattr(self, 'rect_item'):
+            self.rect_item = StyledRectItem()
+            self.scene().addItem(self.rect_item)
+        
+        path_point = self.find_closest_point_on_path(self.path, pt)
+        if path_point is None:
+            self.rect_item.hide()
+            return
+        
+        dist = QVector2D(pt - path_point).length()
+        if dist > 100:
+            self.rect_item.hide()
+            return
+        
+        # Calculate angle at the path point
+        angle = self.find_path_angle_at_point(self.path, path_point)
+        
+        # Create rectangle centered at path point
+        rect_size = QSizeF(1.04166666667 * (2000 / 12.3266567842), 1.04166666667 * (2000 / 12.3266567842))
+        center_rect = QRectF(
+            path_point.x() - rect_size.width()/2,
+            path_point.y() - rect_size.height()/2,
+            rect_size.width(),
+            rect_size.height()
+        )
+        
+        # Create transform for rotation around rectangle center
+        transform = QTransform()
+        transform.translate(path_point.x(), path_point.y())
+        transform.rotate(math.degrees(angle))
+        transform.translate(-path_point.x(), -path_point.y())
+        
+        # Apply transform to rectangle
+        self.rect_item.setTransform(transform)
+        self.rect_item.setRect(center_rect)
+        self.rect_item.show()
+        
+        self.viewport().update()
