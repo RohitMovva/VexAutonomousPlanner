@@ -1,6 +1,7 @@
 import json
 import os
 from pathlib import Path
+import math
 
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QAction, QIcon
@@ -288,6 +289,7 @@ class AutonomousPlannerGUIManager(QMainWindow):
             )
             for i in range(0, len(time_intervals), 1):  # Every 25ms save data
                 nodes_data.append([coords[i][0], coords[i][1], headings[i]])
+                # nodes_data.append([time_intervals[i], coords[i][0], coords[i][1], headings[i] * (math.pi / 180), velocities[i], angular_velocities[i]])
                 # nodes_data.append([velocities[i], headings[i]])
 
         nodes_actions = [
