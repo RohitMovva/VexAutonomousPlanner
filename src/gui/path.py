@@ -709,7 +709,7 @@ class PathWidget(QGraphicsView):
         angle = self.find_path_angle_at_point(self.path, path_point)
         
         # Create rectangle centered at path point
-        rect_size = QSizeF(1.04166666667 * (2000 / 12.3266567842), 1.04166666667 * (2000 / 12.3266567842))
+        rect_size = QSizeF(1.47916666667 * (2000 / 12.3266567842), 1.33333333333 * (2000 / 12.3266567842))
         center_rect = QRectF(
             path_point.x() - rect_size.width()/2,
             path_point.y() - rect_size.height()/2,
