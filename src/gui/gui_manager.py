@@ -288,8 +288,8 @@ class AutonomousPlannerGUIManager(QMainWindow):
                 self.track_width,
             )
             for i in range(0, len(time_intervals), 1):  # Every 25ms save data
-                nodes_data.append([coords[i][0], coords[i][1], headings[i]])
-                # nodes_data.append([time_intervals[i], coords[i][0], coords[i][1], headings[i] * (math.pi / 180), velocities[i], angular_velocities[i]])
+                # nodes_data.append([coords[i][0], coords[i][1], headings[i]])
+                nodes_data.append([time_intervals[i], coords[i][0]/12, coords[i][1]/12, headings[i] * (math.pi / 180), velocities[i], angular_velocities[i]])
                 # nodes_data.append([velocities[i], headings[i]])
 
         nodes_actions = [

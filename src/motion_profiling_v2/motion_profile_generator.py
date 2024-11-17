@@ -388,113 +388,6 @@ def calculate_turn_velocities(turn_angle, track_width, v_max, a_max, j_max, dt):
     return angular_velocities
 
 
-def calculate_accelerations(velocities, delta_s=1.0, debug=False):
-    """
-    Calculate distance-parameterized accelerations from a list of velocities.
-    Handles zero and near-zero velocities.
-    """
-    n = len(velocities)
-    accelerations = [0.0] * n
-    
-    if debug:
-        print("\nCalculating accelerations:")
-    
-    # For zero initial velocity, use only forward difference
-    # For zero final velocity, use only backward difference
-    # Otherwise use central difference
-    
-    for i in range(n):
-        if i == 0:
-            # First point - forward difference
-            if abs(velocities[0]) < 1e-10:  # If starting from zero
-                accelerations[0] = 0.0  # Initial acceleration is zero
-            else:
-                dv_ds = (velocities[1] - velocities[0]) / delta_s
-                accelerations[0] = velocities[0] * dv_ds
-        elif i == n-1:
-            # Last point - backward difference
-            if abs(velocities[-1]) < 1e-10:  # If ending at zero
-                accelerations[-1] = 0.0  # Final acceleration is zero
-            else:
-                dv_ds = (velocities[-1] - velocities[-2]) / delta_s
-                accelerations[-1] = velocities[-1] * dv_ds
-        else:
-            # Interior points - central difference
-            if abs(velocities[i]) < 1e-10:  # Near zero velocity
-                # Use average of forward and backward differences
-                dv_forward = (velocities[i+1] - velocities[i]) / delta_s
-                dv_backward = (velocities[i] - velocities[i-1]) / delta_s
-                accelerations[i] = velocities[i] * (dv_forward + dv_backward) / 2
-            else:
-                dv_ds = (velocities[i+1] - velocities[i-1]) / (2 * delta_s)
-                accelerations[i] = velocities[i] * dv_ds
-        
-        if debug:
-            print(f"Point {i}: v={velocities[i]}, a={accelerations[i]}")
-    
-    return accelerations
-
-def calculate_velocities(accelerations, initial_velocity, delta_s=1.0, debug=False):
-    """
-    Calculate distance-parameterized velocities from a list of accelerations.
-    Uses numerical integration with special handling for near-zero velocities.
-    """
-    n = len(accelerations)
-    velocities = [0.0] * n
-    velocities[0] = initial_velocity
-    
-    if debug:
-        print("\nCalculating velocities:")
-        print(f"Initial velocity: {initial_velocity}")
-    
-    for i in range(1, n):
-        v = velocities[i-1]
-        a = accelerations[i-1]
-        
-        if abs(v) < 1e-10:  # Near zero velocity
-            # Use small positive value to avoid division by zero
-            v = 1e-10 if a >= 0 else -1e-10
-        
-        # Using the relationship: dv/ds = a/v
-        dv = (a / v) * delta_s
-        velocities[i] = v + dv
-        
-        if debug:
-            print(f"Point {i}:")
-            print(f"  Previous v={v}")
-            print(f"  Current a={a}")
-            print(f"  dv={dv}")
-            print(f"  New v={velocities[i]}")
-    
-    return velocities
-
-def verify_conversions(initial_velocities, delta_s=1.0, debug=False):
-    """
-    Verify the conversion functions with detailed debugging output.
-    """
-    print("\nStarting verification:")
-    print(f"Initial velocities: {initial_velocities}")
-    print(f"Delta s: {delta_s}")
-    
-    # Convert velocities to accelerations
-    accelerations = calculate_accelerations(initial_velocities, delta_s, debug)
-    print(f"\nComputed accelerations: {accelerations}")
-    
-    # Convert accelerations back to velocities
-    recovered_velocities = calculate_velocities(accelerations, initial_velocities[0], delta_s, debug)
-    print(f"\nRecovered velocities: {recovered_velocities}")
-    
-    # Calculate errors at each point
-    errors = [abs(v1 - v2) for v1, v2 in zip(initial_velocities, recovered_velocities)]
-    print("\nErrors at each point:")
-    for i, error in enumerate(errors):
-        print(f"Point {i}: {error}")
-    
-    max_error = max(errors)
-    return initial_velocities, recovered_velocities, max_error
-
-
-
 def generate_motion_profile(
     setpoint_velocities,
     control_points,
@@ -560,12 +453,12 @@ def generate_motion_profile(
     velocities[-1] = 0
 
     velocities = forward_backwards_smoothing(velocities, a_max, 0, dd)
-    print("Initial velocities:", velocities)
-    accelerations = calculate_accelerations(velocities, dd)
-    print("Accelerations:", accelerations)
+    # print("Initial velocities:", velocities)
+    # accelerations = calculate_accelerations(velocities, dd)
+    # print("Accelerations:", accelerations)
     # forward_backwards_smoothing(accelerations, j_max, 0, dd)
-    velocities = calculate_velocities(accelerations, 0, dd)
-    print("Recovered velocities:", velocities)
+    # velocities = calculate_velocities(accelerations, 0, dd)
+    # print("Recovered velocities:", velocities)
     time_stamps = get_times(velocities, dd)
 
     path_time = time_stamps[-1]
