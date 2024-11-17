@@ -453,12 +453,7 @@ def generate_motion_profile(
     velocities[-1] = 0
 
     velocities = forward_backwards_smoothing(velocities, a_max, 0, dd)
-    # print("Initial velocities:", velocities)
-    # accelerations = calculate_accelerations(velocities, dd)
-    # print("Accelerations:", accelerations)
-    # forward_backwards_smoothing(accelerations, j_max, 0, dd)
-    # velocities = calculate_velocities(accelerations, 0, dd)
-    # print("Recovered velocities:", velocities)
+
     time_stamps = get_times(velocities, dd)
 
     path_time = time_stamps[-1]
