@@ -160,8 +160,10 @@ def generate_other_lists(velocities, control_points, segments, dt, turn_insertio
             # For the first point, assume zero angular velocity
             angular_velocities.append(0.0)
 
-        if (reverse_values[current_segment]):
-            angular_velocities[-1] = -angular_velocities[-1]
+        # if (reverse_values[current_segment]):
+        #     angular_velocities[-1] = -angular_velocities[-1]
+
+
 
     # Insert the turn on point trapezoidal velocity profiles into the motion profile
     # x, y, linear velocity will stay the same, just insert a bunch of the same values
