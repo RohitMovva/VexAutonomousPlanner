@@ -299,7 +299,7 @@ class AutonomousPlannerGUIManager(QMainWindow):
                 int(cur_node.doink),
                 int(cur_node.is_reverse_node),
                 cur_node.turn,
-                cur_node.wait_time,
+                # cur_node.wait_time,
             ]
             for cur_node in nodes
         ]
@@ -440,7 +440,7 @@ class AutonomousPlannerGUIManager(QMainWindow):
                 stringified.append(f"{{{nodes_data[i][0]}, {nodes_data[i][1]}}}")
         # print(stringified)
         # pairs = [f"{{{v}, {h}}}" for v, h in nodes_data]
-        insertion = f"std::vector<std::vector<float>> {self.current_working_file} = {{{', '.join(stringified)}}};\n"
+        insertion = f"std::vector<std::vector<double>> {self.current_working_file} = {{{', '.join(stringified)}}};\n"
 
         try:
             # Read the content of routes.h
@@ -451,7 +451,7 @@ class AutonomousPlannerGUIManager(QMainWindow):
             inserted = False
             for i, line in enumerate(content):
                 if line.strip().startswith(
-                    f"std::vector<std::vector<float>> {self.current_working_file} ="
+                    f"std::vector<std::vector<double>> {self.current_working_file} ="
                 ):
                     content[i] = insertion
                     inserted = True
