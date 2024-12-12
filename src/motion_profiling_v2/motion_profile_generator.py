@@ -27,6 +27,32 @@ def distance_to_time(distance, segments):
 
 
 def forward_backwards_smoothing(velocities, max_accel, delta_dist, track_width, curvatures):
+    for i in range(0, len(velocities) - 2):  # forward pass
+        # TODO Figure out what this equation will look like for acceleration with jerk applied (derivative)
+        adjusted_max_step = math.sqrt(velocities[i] ** 2 + 2 * max_accel * delta_dist) - abs(velocities[i])
+          # only works for trap
+        dif = abs(velocities[i + 1]) - abs(velocities[i])
+
+        if dif > adjusted_max_step:
+            dif = adjusted_max_step
+
+        dif = np.sign(velocities[i + 1] - velocities[i]) * abs(dif)
+
+        if dif > adjusted_max_step:  # If negative then we gotta go down anyways
+            dif = adjusted_max_step
+
+        velocities[i + 1] = velocities[i] + dif
+
+    for i in range(len(velocities) - 1, 1, -1):  # backward pass nyoom
+        adjusted_max_step = math.sqrt(velocities[i] ** 2 + 2 * max_accel * delta_dist) - abs(velocities[i])
+        dif = abs(velocities[i]) - abs(velocities[i - 1])
+        if dif < adjusted_max_step:
+            dif = adjusted_max_step
+
+        dif = np.sign(velocities[i] - velocities[i - 1]) * abs(dif)
+
+        velocities[i - 1] = velocities[i] - dif
+
     # Forward pass
     all_wheel_velocities = [[0, 0]]
     old_wheel_velocities = list(get_wheel_velocities(velocities[0], curvatures[0], track_width))
@@ -43,7 +69,7 @@ def forward_backwards_smoothing(velocities, max_accel, delta_dist, track_width, 
         # dif = np.copysign(dif, velocities[i + 1] - velocities[i])
 
         # old_wheel_velocities = list(get_wheel_velocities(velocities[i], curvatures[i], track_width))
-        new_wheel_velocities = list(get_wheel_velocities(velocities[i] + dif, curvatures[i+1], track_width))
+        new_wheel_velocities = list(get_wheel_velocities(velocities[i+1], curvatures[i+1], track_width))
 
         left_arc_length = delta_dist * (1 - curvatures[i] * track_width / 2)
         right_arc_length = delta_dist * (1 + curvatures[i] * track_width / 2)
@@ -56,7 +82,7 @@ def forward_backwards_smoothing(velocities, max_accel, delta_dist, track_width, 
 
         # Debug prints
         print(f"Forward i={i}")
-        print(f" Left max step calculation breakdown:")
+        # print(f" Left max step calculation breakdown:")
         print(f"  curvatures[i+1]: {curvatures[i+1]}, track_width: {track_width}, velocities[i]+dif: {velocities[i]+dif}")
         print(f" velocities[i]: {velocities[i]} vel[i+1]: {velocities[i+1]} dif: {dif} adjusted_max_step: {adjusted_max_step}")
         print(f"  old_wheel_velocities: {old_wheel_velocities}")
@@ -94,83 +120,83 @@ def forward_backwards_smoothing(velocities, max_accel, delta_dist, track_width, 
     # Or store forward pass results first
     # For diagnosing, let's just print what we got:
     print("=== FORWARD PASS COMPLETE ===")
-    print("all_wheel_velocities after forward pass:", all_wheel_velocities)
-    print("velocities after forward pass:", velocities)
-    print()
+    # print("all_wheel_velocities after forward pass:", all_wheel_velocities)
+    # print("velocities after forward pass:", velocities)
+    # print()
 
     # Backward pass
     # Set the final wheel velocities to zero (end condition)
     # Just overwrite the last entry in all_wheel_velocities
     # or if you must reinit, store forward results first.
     # For now, let's try:
-    # end_index = len(velocities) - 1
-    # # Set final velocity to 0
-    # velocities[end_index] = 0
-    # last_wheel_vel = get_wheel_velocities(velocities[end_index], curvatures[end_index], track_width)
-    # all_wheel_velocities = [[last_wheel_vel[0], last_wheel_vel[1]]]  # Should be [0,0]
-    # old_wheel_velocities = all_wheel_velocities[-1]
+    end_index = len(velocities) - 1
+    # Set final velocity to 0
+    velocities[end_index] = 0
+    last_wheel_vel = get_wheel_velocities(velocities[end_index], curvatures[end_index], track_width)
+    all_wheel_velocities = [[last_wheel_vel[0], last_wheel_vel[1]]]  # Should be [0,0]
+    old_wheel_velocities = all_wheel_velocities[-1]
     
-    # print("=== BACKWARD PASS START ===")
-    # for i in range(len(velocities) - 1, 1, -1):
-    #     adjusted_max_step = math.sqrt(velocities[i] ** 2 + 2 * max_accel * delta_dist) - abs(velocities[i])
-    #     dif = abs(velocities[i]) - abs(velocities[i - 1])
-    #     if dif < adjusted_max_step:
-    #         dif = adjusted_max_step
+    print("=== BACKWARD PASS START ===")
+    for i in range(len(velocities) - 1, 1, -1):
+        adjusted_max_step = math.sqrt(velocities[i] ** 2 + 2 * max_accel * delta_dist) - abs(velocities[i])
+        dif = abs(velocities[i]) - abs(velocities[i - 1])
+        if dif < adjusted_max_step:
+            dif = adjusted_max_step
 
-    #     dif = np.sign(velocities[i] - velocities[i - 1]) * abs(dif)
+        dif = np.sign(velocities[i] - velocities[i - 1]) * abs(dif)
 
-    #     # old_wheel_velocities = list(get_wheel_velocities(velocities[i], curvatures[i], track_width))
-    #     new_wheel_velocities = list(get_wheel_velocities(velocities[i] - dif, curvatures[i-1], track_width))
+        # old_wheel_velocities = list(get_wheel_velocities(velocities[i], curvatures[i], track_width))
+        new_wheel_velocities = list(get_wheel_velocities(velocities[i-1], curvatures[i-1], track_width))
 
-    #     left_arc_length = delta_dist * (1 - curvatures[i] * track_width / 2)
-    #     right_arc_length = delta_dist * (1 + curvatures[i] * track_width / 2)
+        left_arc_length = delta_dist * (1 - curvatures[i] * track_width / 2)
+        right_arc_length = delta_dist * (1 + curvatures[i] * track_width / 2)
 
-    #     left_max_step = math.sqrt(old_wheel_velocities[0] ** 2 + 2 * max_accel * abs(left_arc_length)) - abs(all_wheel_velocities[-1][0])
-    #     right_max_step = math.sqrt(old_wheel_velocities[1] ** 2 + 2 * max_accel * abs(right_arc_length)) - abs(all_wheel_velocities[-1][1])
+        left_max_step = math.sqrt(old_wheel_velocities[0] ** 2 + 2 * max_accel * abs(left_arc_length)) - abs(all_wheel_velocities[-1][0])
+        right_max_step = math.sqrt(old_wheel_velocities[1] ** 2 + 2 * max_accel * abs(right_arc_length)) - abs(all_wheel_velocities[-1][1])
 
-    #     left_wheel_dif = abs(old_wheel_velocities[0]) - abs(new_wheel_velocities[0])
-    #     right_wheel_dif = abs(old_wheel_velocities[1]) - abs(new_wheel_velocities[1])
+        left_wheel_dif = abs(old_wheel_velocities[0]) - abs(new_wheel_velocities[0])
+        right_wheel_dif = abs(old_wheel_velocities[1]) - abs(new_wheel_velocities[1])
 
-    #     # Debug prints for backward pass
-    #     print(f"Backward i={i}")
-    #     print(f" Left max step calculation breakdown:")
-    #     print(f" velocities[i]: {velocities[i]} vel[i+1]: {velocities[i-1]} dif: {dif} adjusted_max_step: {adjusted_max_step}")
-    #     print(f"  old_wheel_velocities: {old_wheel_velocities}")
-    #     print(f" new_wheel_velocities: {new_wheel_velocities}")
-    #     # print(f"  left_arc_length: {left_arc_length}, right_arc_length: {right_arc_length}")
-    #     # print(f" left_step_info arc_length: {math.sqrt(old_wheel_velocities[0] ** 2 + 2 * max_accel * abs(left_arc_length))}, other thing: {abs(all_wheel_velocities[-1][0])}")
-    #     print(f" left_max_step: {left_max_step}, right_max_step: {right_max_step}")
-    #     # print(f"  Initial Vel: {velocities[i]}")
-    #     # print(f"  adjusted_max_step: {adjusted_max_step}, dif: {dif}")
-    #     # print(f"  old_wheel_velocities: {old_wheel_velocities}, new_wheel_velocities: {new_wheel_velocities}")
-    #     # print(f"  left_max_step: {left_max_step}, right_max_step: {right_max_step}")
-    #     print(f"  left_wheel_dif: {left_wheel_dif}, right_wheel_dif: {right_wheel_dif}")
+        # Debug prints for backward pass
+        # print(f"Backward i={i}")
+        # # print(f" Left max step calculation breakdown:")
+        # print(f" velocities[i]: {velocities[i]} vel[i+1]: {velocities[i-1]} dif: {dif} adjusted_max_step: {adjusted_max_step}")
+        # print(f"  old_wheel_velocities: {old_wheel_velocities}")
+        # print(f" new_wheel_velocities: {new_wheel_velocities}")
+        # # print(f"  left_arc_length: {left_arc_length}, right_arc_length: {right_arc_length}")
+        # # print(f" left_step_info arc_length: {math.sqrt(old_wheel_velocities[0] ** 2 + 2 * max_accel * abs(left_arc_length))}, other thing: {abs(all_wheel_velocities[-1][0])}")
+        # print(f" left_max_step: {left_max_step}, right_max_step: {right_max_step}")
+        # # print(f"  Initial Vel: {velocities[i]}")
+        # # print(f"  adjusted_max_step: {adjusted_max_step}, dif: {dif}")
+        # # print(f"  old_wheel_velocities: {old_wheel_velocities}, new_wheel_velocities: {new_wheel_velocities}")
+        # # print(f"  left_max_step: {left_max_step}, right_max_step: {right_max_step}")
+        # print(f"  left_wheel_dif: {left_wheel_dif}, right_wheel_dif: {right_wheel_dif}")
 
-    #     if left_wheel_dif < -left_max_step:
-    #         left_wheel_dif = left_max_step
-    #     if right_wheel_dif < -right_max_step:
-    #         right_wheel_dif = right_max_step
+        if left_wheel_dif < -left_max_step:
+            left_wheel_dif = left_max_step
+        if right_wheel_dif < -right_max_step:
+            right_wheel_dif = right_max_step
 
-    #     left_wheel_dif = abs(left_wheel_dif)*np.sign(old_wheel_velocities[0] - new_wheel_velocities[0])
-    #     right_wheel_dif = abs(right_wheel_dif)*np.sign(old_wheel_velocities[1] - new_wheel_velocities[1])
+        left_wheel_dif = abs(left_wheel_dif)*np.sign(old_wheel_velocities[0] - new_wheel_velocities[0])
+        right_wheel_dif = abs(right_wheel_dif)*np.sign(old_wheel_velocities[1] - new_wheel_velocities[1])
 
-    #     old_wheel_velocities[0] -= left_wheel_dif
-    #     old_wheel_velocities[1] -= right_wheel_dif
+        old_wheel_velocities[0] -= left_wheel_dif
+        old_wheel_velocities[1] -= right_wheel_dif
 
-    #     # Debug after clamping
-    #     print(f" left wheel dif: {left_wheel_dif}, right wheel dif: {right_wheel_dif}")
-    #     print(f"  After clamp wheel velocities: {old_wheel_velocities}")
+        # Debug after clamping
+        # print(f" left wheel dif: {left_wheel_dif}, right wheel dif: {right_wheel_dif}")
+        # print(f"  After clamp wheel velocities: {old_wheel_velocities}")
 
-    #     all_wheel_velocities.append(old_wheel_velocities[:])
-    #     velocities[i - 1] = (old_wheel_velocities[0] + old_wheel_velocities[1]) / 2
+        all_wheel_velocities.append(old_wheel_velocities[:])
+        velocities[i - 1] = (old_wheel_velocities[0] + old_wheel_velocities[1]) / 2
 
-    #     # print(f"  curvatures[i+1]: {curvatures[i-1]}, track_width: {track_width}, velocities[i+1]: {velocities[i-1]}")
-    #     # print(f"  new old velocities[i+1]: {old_wheel_velocities}")
-    #     print()
+        # print(f"  curvatures[i+1]: {curvatures[i-1]}, track_width: {track_width}, velocities[i+1]: {velocities[i-1]}")
+        # # print(f"  new old velocities[i+1]: {old_wheel_velocities}")
+        # print()
 
-    # print("=== BACKWARD PASS COMPLETE ===")
-    # # print("all_wheel_velocities after backward pass:", all_wheel_velocities)
-    # # print("velocities after backward pass:", velocities)
+    print("=== BACKWARD PASS COMPLETE ===")
+    # print("all_wheel_velocities after backward pass:", all_wheel_velocities)
+    # print("velocities after backward pass:", velocities)
     for velpair in all_wheel_velocities:
         print(velpair[0], velpair[1])
 
@@ -549,7 +575,7 @@ def generate_motion_profile(
             current_dist >= segments[current_segment][-1]
             and current_segment < len(segments) - 1
         ):
-            current_dist = dd
+            current_dist = 0
             current_segment += 1
 
         t_along_curve = distance_to_time(current_dist, segments[current_segment])
@@ -590,6 +616,8 @@ def generate_motion_profile(
 
         velocities[i] = adjusted_vmax
         current_dist += dd
+
+        print(i, curvature, current_segment, heading, t_along_curve)
 
     velocities[0] = 0
     velocities[-1] = 0
