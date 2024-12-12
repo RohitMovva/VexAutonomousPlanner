@@ -17,6 +17,7 @@ class Node(QGraphicsItem):
         self.doink = False
         self.is_reverse_node = False
         self.turn = 0
+        self.lb = 0
         self.wait_time = 0
         self.dragging = False
         self.offset = QPoint(0, 0)
@@ -173,6 +174,10 @@ class Node(QGraphicsItem):
         turn_action.triggered.connect(self.set_turn)
         attributes_menu.addAction(turn_action)
 
+        lb_action = QAction("LB Value: " + str(self.lb))
+        lb_action.triggered.connect(self.set_lb)
+        attributes_menu.addAction(lb_action)
+
         wait_action = QAction("Wait time: " + str(self.wait_time))
         wait_action.triggered.connect(self.set_wait)
         attributes_menu.addAction(wait_action)
@@ -227,6 +232,7 @@ class Node(QGraphicsItem):
             or self.is_reverse_node
             or self.stop
             or self.turn != 0
+            or self.lb != 0
             or self.wait_time != 0
         )
     
@@ -273,6 +279,30 @@ class Node(QGraphicsItem):
             self.turn = dialog.intValue()
             self.parent.update_path()
             print(f"Turn set to: {self.turn}")
+
+    def set_lb(self):
+        # Get the position of the node in screen coordinates
+        scene_pos = self.scenePos()
+        view_pos = self.scene().views()[0].mapFromScene(scene_pos)
+        screen_pos = self.scene().views()[0].viewport().mapToGlobal(view_pos)
+
+        # Create the dialog
+        dialog = QInputDialog(self.scene().views()[0])
+        dialog.setWindowTitle("Set LB")
+        dialog.setLabelText("Enter value (0-4):")
+        dialog.setIntRange(0, 4)
+        dialog.setIntValue(self.lb)
+
+        # Set the position of the dialog
+        dialog.move(
+            int(screen_pos.x() + self.radius), int(screen_pos.y() + self.radius)
+        )
+
+        # Show the dialog and get the result
+        if dialog.exec() == QInputDialog.DialogCode.Accepted:
+            self.lb = dialog.intValue()
+            self.parent.update_path()
+            print(f"LB value set to: {self.lb}")
 
     def set_wait(self):
         # Get the position of the node in screen coordinates

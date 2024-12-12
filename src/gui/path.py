@@ -1,6 +1,7 @@
 import json
 import math
 from math import sqrt
+from typing import List
 
 from PyQt6.QtCore import QLineF, QPointF, QSize, Qt, QSizeF, QRectF
 from PyQt6.QtGui import QColor, QMouseEvent, QPainter, QPainterPath, QPen, QPixmap, QVector2D, QTransform, QBrush
@@ -39,7 +40,7 @@ class StyledRectItem(QGraphicsRectItem):
         self.setBrush(QBrush(fill_color))
 
 
-def create_curve_segments(start, end, control1, control2=None):
+def create_curve_segments(start, end, control1, control2=None) -> List[float]:
     numsegments = 250
     segments = [0]
     ox, oy = None, None
@@ -110,12 +111,12 @@ class PathWidget(QGraphicsView):
         self.all_headings = []
         self.all_nodes_map = []  # Represents index of node n in any of the above lists
 
-        self.nodes = []
+        self.nodes: List[node.Node] = []
         self.start_node = None
         self.end_node = None
 
         self.path = None
-        self.line_data = []
+        self.line_data: List[List[float]] = []
 
         self.path_item = QGraphicsPathItem()
         self.scene.addItem(self.path_item)
@@ -285,22 +286,22 @@ class PathWidget(QGraphicsView):
         self, v_max: float, a_max: float, j_max: float, track_width: float
     ):
         # Clear lists
-        self.all_time_intervals = []
-        self.all_positions = []
-        self.all_velocities = []
-        self.all_accelerations = []
-        self.all_headings = []
-        self.all_angular_velocities = []
-        self.all_nodes_map = []
-        self.all_coords = []
+        self.all_time_intervals: List[float] = []
+        self.all_positions: List[float] = []
+        self.all_velocities: List[float] = []
+        self.all_accelerations: List[float] = []
+        self.all_headings: List[float] = []
+        self.all_angular_velocities: List[float] = []
+        self.all_nodes_map: List[int] = []
+        self.all_coords: List[float] = []
 
-        current_position = 0
-        segment_data = [[], []]
-        segment_length = 0
-        turn_values = []
-        reverse_values = []
-        wait_times = []
-        is_reversed = False
+        current_position: int = 0
+        segment_data: List[List[List[float]]] = [[], []]
+        segment_length: int = 0
+        turn_values: List[float] = []
+        reverse_values: List[bool] = []
+        wait_times: List[float] = []
+        is_reversed: bool = False
         
         for i in range(0, len(self.line_data)):
             if (self.nodes[i].is_reverse_node):
@@ -408,7 +409,7 @@ class PathWidget(QGraphicsView):
         factor = 0.25
         self.path.clear()
         self.path = QPainterPath(points[0])
-        self.line_data = []
+        self.line_data: List[List[float]] = []
         cp1 = None
         for p, current in enumerate(points[1:-1], 1):
             # previous segment
@@ -565,7 +566,7 @@ class PathWidget(QGraphicsView):
             n.turn = -n.turn
         self.update_path()
 
-    def load_nodes(self, node_str):
+    def load_nodes(self, node_str: str) -> None:
         nodes_data = json.loads(node_str)
         self.clear_nodes()
         for node_data in nodes_data:
@@ -589,14 +590,14 @@ class PathWidget(QGraphicsView):
 
         self.update_path()
 
-    def index_of(self, node):
+    def index_of(self, node: node.Node) -> int:
         return self.nodes.index(node)
 
     def auto_save(self):
         if self.parent.current_working_file is not None:
             self.parent.auto_save()
 
-    def toggle_visualization(self, state):
+    def toggle_visualization(self, state: bool) -> None:
         print("Visualizing:", state)
         self.visualize = state
         self.update()

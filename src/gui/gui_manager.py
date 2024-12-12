@@ -289,17 +289,18 @@ class AutonomousPlannerGUIManager(QMainWindow):
             )
             for i in range(0, len(time_intervals), 1):  # Every 25ms save data
                 # nodes_data.append([coords[i][0], coords[i][1], headings[i]])
-                nodes_data.append([time_intervals[i], coords[i][0]/12, coords[i][1]/12, headings[i] * (math.pi / 180), velocities[i], angular_velocities[i]])
+                nodes_data.append([0, time_intervals[i], coords[i][0], coords[i][1], headings[i] * (math.pi / 180), velocities[i]*12, angular_velocities[i]])
                 # nodes_data.append([velocities[i], headings[i]])
 
         nodes_actions = [
             [
+                1, 
                 int(cur_node.spin_intake),
                 int(cur_node.clamp_goal),
                 int(cur_node.doink),
                 int(cur_node.is_reverse_node),
                 cur_node.turn,
-                # cur_node.wait_time,
+                cur_node.lb,
             ]
             for cur_node in nodes
         ]
@@ -381,10 +382,10 @@ class AutonomousPlannerGUIManager(QMainWindow):
                 new_node.is_reverse_node = bool(node_data[7])
                 new_node.stop = bool(node_data[8])
                 new_node.turn = node_data[9]
-                new_node.wait_time = node_data[10]
+                new_node.lb = node_data[10]
+                new_node.wait_time = node_data[11]
                 self.nodes.append(new_node)
                 new_node.show()
-                print(node_data, new_node.turn)
 
         self.central_widget.update_path()
 
@@ -403,6 +404,7 @@ class AutonomousPlannerGUIManager(QMainWindow):
                 int(cur_node.is_reverse_node),
                 int(cur_node.stop),
                 cur_node.turn,
+                cur_node.lb,
                 cur_node.wait_time,
             ]
             for cur_node in nodes
@@ -572,6 +574,9 @@ class AutonomousPlannerGUIManager(QMainWindow):
         self.central_widget.generate_motion_profile_lists(
             self.max_velocity, self.max_acceleration, self.max_jerk, self.track_width
         )
+        # for velo in self.central_widget.all_headings:
+        #     print(velo)
+        # print()
 
         utilities.create_mpl_plot(
             self.central_widget.all_time_intervals,
@@ -587,6 +592,10 @@ class AutonomousPlannerGUIManager(QMainWindow):
         self.central_widget.generate_motion_profile_lists(
             self.max_velocity, self.max_acceleration, self.max_jerk, self.track_width
         )
+        # for velo in self.central_widget.all_angular_velocities:
+        #     print(velo)
+        # print()
+        # print(self.central_widget.all_angular_velocities)
 
         utilities.create_mpl_plot(
             self.central_widget.all_time_intervals,
