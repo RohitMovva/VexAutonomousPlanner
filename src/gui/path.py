@@ -1,6 +1,9 @@
 import json
 import math
 from math import sqrt
+from typing import List
+import numpy as np
+from splines.natural_cubic_spline import NaturalCubicSpline
 
 from PyQt6.QtCore import QLineF, QPointF, QSize, Qt, QSizeF, QRectF
 from PyQt6.QtGui import QColor, QMouseEvent, QPainter, QPainterPath, QPen, QPixmap, QVector2D, QTransform, QBrush
@@ -39,7 +42,7 @@ class StyledRectItem(QGraphicsRectItem):
         self.setBrush(QBrush(fill_color))
 
 
-def create_curve_segments(start, end, control1, control2=None):
+def create_curve_segments(start, end, control1, control2=None) -> List[float]:
     numsegments = 250
     segments = [0]
     ox, oy = None, None
@@ -110,12 +113,12 @@ class PathWidget(QGraphicsView):
         self.all_headings = []
         self.all_nodes_map = []  # Represents index of node n in any of the above lists
 
-        self.nodes = []
+        self.nodes: List[node.Node] = []
         self.start_node = None
         self.end_node = None
 
         self.path = None
-        self.line_data = []
+        self.line_data: List[List[float]] = []
 
         self.path_item = QGraphicsPathItem()
         self.scene.addItem(self.path_item)
@@ -131,6 +134,11 @@ class PathWidget(QGraphicsView):
         self.mouseDown = False
 
         self.visualize = False
+        
+        self.path = QPainterPath()
+        self.spline_points = []
+        self.steps = 50  # Number of interpolation points between control points
+        
 
     def fit_image_to_view(self):
         self.fitInView(self.image_item, Qt.AspectRatioMode.KeepAspectRatio)
@@ -285,22 +293,22 @@ class PathWidget(QGraphicsView):
         self, v_max: float, a_max: float, j_max: float, track_width: float
     ):
         # Clear lists
-        self.all_time_intervals = []
-        self.all_positions = []
-        self.all_velocities = []
-        self.all_accelerations = []
-        self.all_headings = []
-        self.all_angular_velocities = []
-        self.all_nodes_map = []
-        self.all_coords = []
+        self.all_time_intervals: List[float] = []
+        self.all_positions: List[float] = []
+        self.all_velocities: List[float] = []
+        self.all_accelerations: List[float] = []
+        self.all_headings: List[float] = []
+        self.all_angular_velocities: List[float] = []
+        self.all_nodes_map: List[int] = []
+        self.all_coords: List[float] = []
 
-        current_position = 0
-        segment_data = [[], []]
-        segment_length = 0
-        turn_values = []
-        reverse_values = []
-        wait_times = []
-        is_reversed = False
+        current_position: int = 0
+        segment_data: List[List[List[float]]] = [[], []]
+        segment_length: int = 0
+        turn_values: List[float] = []
+        reverse_values: List[bool] = []
+        wait_times: List[float] = []
+        is_reversed: bool = False
         
         for i in range(0, len(self.line_data)):
             if (self.nodes[i].is_reverse_node):
@@ -378,7 +386,72 @@ class PathWidget(QGraphicsView):
             self.all_nodes_map,
             self.all_coords,
         )
+    
+    def compute_spline_coefficients(self, x: np.ndarray, y: np.ndarray):
+        """Compute natural cubic spline coefficients for a set of points"""
+        n = len(x)
+        if n < 3:
+            return None
+            
+        # Build the tridiagonal system for the second derivatives
+        h = np.diff(x)  # Intervals between x points
+        
+        # Build the tridiagonal matrix A
+        A = np.zeros((n, n))
+        r = np.zeros(n)
+        
+        # Interior points
+        for i in range(1, n-1):
+            A[i, i-1] = h[i-1]
+            A[i, i] = 2 * (h[i-1] + h[i])
+            A[i, i+1] = h[i]
+            
+            r[i] = 3 * ((y[i+1] - y[i]) / h[i] - (y[i] - y[i-1]) / h[i-1])
+        
+        # Boundary conditions for natural spline (second derivatives = 0 at endpoints)
+        A[0, 0] = 1
+        A[-1, -1] = 1
+        
+        # Solve for second derivatives
+        m = np.linalg.solve(A, r)
+        
+        # Calculate coefficients for each segment
+        coeffs = {'a': np.zeros(n-1), 'b': np.zeros(n-1), 
+                 'c': np.zeros(n-1), 'd': np.zeros(n-1)}
+                 
+        for i in range(n-1):
+            coeffs['a'][i] = y[i]
+            coeffs['b'][i] = (y[i+1] - y[i]) / h[i] - h[i] * (2 * m[i] + m[i+1]) / 3
+            coeffs['c'][i] = m[i]
+            coeffs['d'][i] = (m[i+1] - m[i]) / (3 * h[i])
+            
+        return coeffs
+        
+    def evaluate_spline_segment(self, t: np.ndarray, coeffs: dict, i: int, x0: float) -> np.ndarray:
+        """Evaluate the spline segment i at points t"""
+        t_norm = t - x0
+        return (coeffs['a'][i] + 
+                coeffs['b'][i] * t_norm + 
+                coeffs['c'][i] * t_norm**2 + 
+                coeffs['d'][i] * t_norm**3)
 
+    def build_path(self, points: List[QPointF], nodes=None):
+        # Convert points to numpy array to use in build path function
+        points = np.array([[point.x(), point.y()] for point in points])
+        print("Points:", points)
+        # Create a natural cubic spline
+        spline = NaturalCubicSpline()
+        path = spline.build_path(points)
+
+        # Create a QPainterPath to draw the spline
+        self.path = QPainterPath()
+        self.path.moveTo(points[0][0], points[0][1])
+        for i in range(1, len(points)):
+            self.path.lineTo(points[i][0], points[i][1])
+
+        
+        return path
+    
     def update_path(self):
         # Should update with any new, moved, modified, or removed nodes
         if self.start_node and self.end_node and len(self.nodes) > 1:
@@ -402,61 +475,61 @@ class PathWidget(QGraphicsView):
     def save(self):
         self.parent.auto_save()
 
-    # Modified version of path generation logic from @musicamante on stackoverflow
-    def build_path(self, points: list[QPointF]):
-        # print("Building path...")
-        factor = 0.25
-        self.path.clear()
-        self.path = QPainterPath(points[0])
-        self.line_data = []
-        cp1 = None
-        for p, current in enumerate(points[1:-1], 1):
-            # previous segment
-            source = QLineF(points[p - 1], current)
-            # next segment
-            target = QLineF(current, points[p + 1])
+    # # Modified version of path generation logic from @musicamante on stackoverflow
+    # def build_path(self, points: list[QPointF]):
+    #     # print("Building path...")
+    #     factor = 0.25
+    #     self.path.clear()
+    #     self.path = QPainterPath(points[0])
+    #     self.line_data: List[List[float]] = []
+    #     cp1 = None
+    #     for p, current in enumerate(points[1:-1], 1):
+    #         # previous segment
+    #         source = QLineF(points[p - 1], current)
+    #         # next segment
+    #         target = QLineF(current, points[p + 1])
 
-            targetAngle = target.angleTo(source)
-            turnVal = (self.nodes[p].turn)
-            if (self.nodes[p].turn and self.nodes[p].is_reverse_node):
-                angle = source.angle() + 180
-            elif self.nodes[p].turn:
-                angle = source.angle()
-            elif self.nodes[p].is_reverse_node:
-                angle = (target.angle() - 90 + (targetAngle) / 2) % 360
-            elif targetAngle > 180:
-                angle = (source.angle() + source.angleTo(target) / 2) % 360
-            else:
-                angle = (target.angle() + target.angleTo(source) / 2) % 360
+    #         targetAngle = target.angleTo(source)
+    #         turnVal = (self.nodes[p].turn)
+    #         if (self.nodes[p].turn and self.nodes[p].is_reverse_node):
+    #             angle = source.angle() + 180
+    #         elif self.nodes[p].turn:
+    #             angle = source.angle()
+    #         elif self.nodes[p].is_reverse_node:
+    #             angle = (target.angle() - 90 + (targetAngle) / 2) % 360
+    #         elif targetAngle > 180:
+    #             angle = (source.angle() + source.angleTo(target) / 2) % 360
+    #         else:
+    #             angle = (target.angle() + target.angleTo(source) / 2) % 360
 
-            if self.nodes[p].is_reverse_node:
-                revTarget = QLineF.fromPolar(
-                    source.length() * factor, angle
-                ).translated(current)
-            else:
-                revTarget = QLineF.fromPolar(
-                    source.length() * factor, angle + 180
-                ).translated(current)
+    #         if self.nodes[p].is_reverse_node:
+    #             revTarget = QLineF.fromPolar(
+    #                 source.length() * factor, angle
+    #             ).translated(current)
+    #         else:
+    #             revTarget = QLineF.fromPolar(
+    #                 source.length() * factor, angle + 180
+    #             ).translated(current)
 
-            cp2 = revTarget.p2()
+    #         cp2 = revTarget.p2()
 
-            if p == 1:
-                self.line_data.append([self.path.currentPosition(), current, cp2])
-                self.path.quadTo(cp2, current)
-            else:
-                self.line_data.append([self.path.currentPosition(), current, cp1, cp2])
-                self.path.cubicTo(cp1, cp2, current)
-            revSource = QLineF.fromPolar(
-                target.length() * factor, angle + turnVal
-            ).translated(current)
-            cp1 = revSource.p2()
+    #         if p == 1:
+    #             self.line_data.append([self.path.currentPosition(), current, cp2])
+    #             self.path.quadTo(cp2, current)
+    #         else:
+    #             self.line_data.append([self.path.currentPosition(), current, cp1, cp2])
+    #             self.path.cubicTo(cp1, cp2, current)
+    #         revSource = QLineF.fromPolar(
+    #             target.length() * factor, angle + turnVal
+    #         ).translated(current)
+    #         cp1 = revSource.p2()
 
-        # The final curve, that joins to the last point
-        if cp1 is None:
-            return
+    #     # The final curve, that joins to the last point
+    #     if cp1 is None:
+    #         return
 
-        self.line_data.append([self.path.currentPosition(), points[-1], cp1])
-        self.path.quadTo(cp1, points[-1])
+    #     self.line_data.append([self.path.currentPosition(), points[-1], cp1])
+    #     self.path.quadTo(cp1, points[-1])
 
     def update_lines(self):
         self.repaint()
@@ -565,7 +638,7 @@ class PathWidget(QGraphicsView):
             n.turn = -n.turn
         self.update_path()
 
-    def load_nodes(self, node_str):
+    def load_nodes(self, node_str: str) -> None:
         nodes_data = json.loads(node_str)
         self.clear_nodes()
         for node_data in nodes_data:
@@ -583,20 +656,21 @@ class PathWidget(QGraphicsView):
                 node.is_reverse_node = bool(node_data[7])
                 node.stop = bool(node_data[8])
                 node.turn = node_data[9]
-                node.wait_time = node_data[10]
+                node.lb = node_data[10]
+                node.wait_time = node_data[11]
 
                 node.show()
 
         self.update_path()
 
-    def index_of(self, node):
+    def index_of(self, node: node.Node) -> int:
         return self.nodes.index(node)
 
     def auto_save(self):
         if self.parent.current_working_file is not None:
             self.parent.auto_save()
 
-    def toggle_visualization(self, state):
+    def toggle_visualization(self, state: bool) -> None:
         print("Visualizing:", state)
         self.visualize = state
         self.update()
