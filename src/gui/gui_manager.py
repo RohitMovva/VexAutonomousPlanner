@@ -369,6 +369,7 @@ class AutonomousPlannerGUIManager(QMainWindow):
         self.clear_nodes()
         for node_data in nodes_data:
             if len(node_data) > 4:
+                print(node_data)
                 new_node = node.Node(
                     node_data[0], node_data[1], self.central_widget, gui_instance=self
                 )
@@ -382,8 +383,8 @@ class AutonomousPlannerGUIManager(QMainWindow):
                 new_node.is_reverse_node = bool(node_data[7])
                 new_node.stop = bool(node_data[8])
                 new_node.turn = node_data[9]
-                new_node.lb = node_data[10]
-                new_node.wait_time = node_data[11]
+                new_node.lb = node_data[11]
+                new_node.wait_time = node_data[12]
                 self.nodes.append(new_node)
                 new_node.show()
 
