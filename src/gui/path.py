@@ -436,21 +436,22 @@ class PathWidget(QGraphicsView):
                 coeffs['d'][i] * t_norm**3)
 
     def build_path(self, points: List[QPointF], nodes=None):
-        # Convert points to numpy array to use in build path function
         points = np.array([[point.x(), point.y()] for point in points])
         print("Points:", points)
+
         # Create a natural cubic spline
         spline = NaturalCubicSpline()
-        path = spline.build_path(points)
+        path_points = spline.build_path(points)
 
         # Create a QPainterPath to draw the spline
         self.path = QPainterPath()
-        self.path.moveTo(points[0][0], points[0][1])
-        for i in range(1, len(points)):
-            self.path.lineTo(points[i][0], points[i][1])
+        self.path.moveTo(path_points[0][0], path_points[0][1])
 
-        
-        return path
+        # Use the interpolated points from the spline
+        for point in path_points[1:]:
+            self.path.lineTo(point[0], point[1])
+
+        return path_points
     
     def update_path(self):
         # Should update with any new, moved, modified, or removed nodes
