@@ -4,6 +4,7 @@ from math import sqrt
 from typing import List
 import numpy as np
 from splines.natural_cubic_spline import NaturalCubicSpline
+from splines.cubic_hermite_spline import CubicHermiteSpline
 
 from PyQt6.QtCore import QLineF, QPointF, QSize, Qt, QSizeF, QRectF
 from PyQt6.QtGui import QColor, QMouseEvent, QPainter, QPainterPath, QPen, QPixmap, QVector2D, QTransform, QBrush
@@ -136,9 +137,7 @@ class PathWidget(QGraphicsView):
         self.visualize = False
         
         self.path = QPainterPath()
-        self.spline_points = []
-        self.steps = 50  # Number of interpolation points between control points
-        
+        self.spline = CubicHermiteSpline()
 
     def fit_image_to_view(self):
         self.fitInView(self.image_item, Qt.AspectRatioMode.KeepAspectRatio)
@@ -386,71 +385,103 @@ class PathWidget(QGraphicsView):
             self.all_nodes_map,
             self.all_coords,
         )
-    
-    def compute_spline_coefficients(self, x: np.ndarray, y: np.ndarray):
-        """Compute natural cubic spline coefficients for a set of points"""
-        n = len(x)
-        if n < 3:
-            return None
-            
-        # Build the tridiagonal system for the second derivatives
-        h = np.diff(x)  # Intervals between x points
-        
-        # Build the tridiagonal matrix A
-        A = np.zeros((n, n))
-        r = np.zeros(n)
-        
-        # Interior points
-        for i in range(1, n-1):
-            A[i, i-1] = h[i-1]
-            A[i, i] = 2 * (h[i-1] + h[i])
-            A[i, i+1] = h[i]
-            
-            r[i] = 3 * ((y[i+1] - y[i]) / h[i] - (y[i] - y[i-1]) / h[i-1])
-        
-        # Boundary conditions for natural spline (second derivatives = 0 at endpoints)
-        A[0, 0] = 1
-        A[-1, -1] = 1
-        
-        # Solve for second derivatives
-        m = np.linalg.solve(A, r)
-        
-        # Calculate coefficients for each segment
-        coeffs = {'a': np.zeros(n-1), 'b': np.zeros(n-1), 
-                 'c': np.zeros(n-1), 'd': np.zeros(n-1)}
-                 
-        for i in range(n-1):
-            coeffs['a'][i] = y[i]
-            coeffs['b'][i] = (y[i+1] - y[i]) / h[i] - h[i] * (2 * m[i] + m[i+1]) / 3
-            coeffs['c'][i] = m[i]
-            coeffs['d'][i] = (m[i+1] - m[i]) / (3 * h[i])
-            
-        return coeffs
-        
-    def evaluate_spline_segment(self, t: np.ndarray, coeffs: dict, i: int, x0: float) -> np.ndarray:
-        """Evaluate the spline segment i at points t"""
-        t_norm = t - x0
-        return (coeffs['a'][i] + 
-                coeffs['b'][i] * t_norm + 
-                coeffs['c'][i] * t_norm**2 + 
-                coeffs['d'][i] * t_norm**3)
 
-    def build_path(self, points: List[QPointF], nodes=None):
-        points = np.array([[point.x(), point.y()] for point in points])
-        print("Points:", points)
+    def update_spline(self, points: List[QPointF], nodes: List):
+        """
+        Update the path by splitting at reverse nodes.
+        Each segment is handled by a separate CubicHermiteSpline.
+        """
+        # 1) Convert to NumPy array
+        points_array = np.array([[pt.x(), pt.y()] for pt in points])
+        
+        # 2) Identify indices where a node is marked reverse
+        #    We'll split after each reverse node
+        reverse_indices = [i for i, node in enumerate(nodes) if node.is_reverse_node]
 
-        # Create a natural cubic spline
-        spline = NaturalCubicSpline()
-        path_points = spline.build_path(points)
+        # Edge cases:
+        # If there are no reverse nodes, we just build once.
+        # If the last node is reverse, that can mean a segment from that node to the end is reversed, etc.
+        # We'll store segment boundaries in a list: [0, ..., N-1]
+        segment_indices = [0]  # start index
+        for idx in reverse_indices:
+            # We treat the reverse node as an end for one segment, 
+            # and the start for the next segment
+            if idx not in segment_indices:
+                segment_indices.append(idx)
+        # Finally, add the last index if not included
+        if segment_indices[-1] != len(points) - 1:
+            segment_indices.append(len(points) - 1)
+        
+        # 3) Build sub-splines
+        # We'll gather all sub-paths in one list
+        all_path_points = []
 
-        # Create a QPainterPath to draw the spline
+        # We'll iterate over consecutive pairs in segment_indices:
+        # e.g., if segment_indices = [0, 3, 5], 
+        # we want segments [0..3], [3..5].
+        for start_idx, end_idx in zip(segment_indices[:-1], segment_indices[1:]):
+            # The points for this segment
+            seg_points = points_array[start_idx:end_idx+1]
+
+            # The nodes for this segment
+            seg_nodes = nodes[start_idx:end_idx+1]
+            
+            # Check if the start node in this segment is a reverse node.
+            # Or if *either* node is marked reverse, you might want to 
+            # flip or do something special. The logic is up to you.
+            # 
+            # For a minimal example: if the *start* node was reversed,
+            # we interpret that as "this segment is traversed backward".
+            # We'll just check if the segment starts or ends in a reverse node:
+            
+            forward_segment = True
+            if seg_nodes[0].is_reverse_node:
+                forward_segment = False
+            elif seg_nodes[-1].is_reverse_node:
+                # Sometimes you want to see if the end node is reversed
+                # and handle that. But it depends on your convention.
+                # For demonstration, let's assume if the end node is reversed,
+                # we also handle it by reversing the segment. 
+                forward_segment = False
+
+            if not forward_segment:
+                # Reverse the segment so it goes "backwards"
+                seg_points = seg_points[::-1]
+                seg_nodes = seg_nodes[::-1]
+
+            # Now build a new spline for just this segment
+            sub_spline = CubicHermiteSpline()
+            sub_path_points = sub_spline.build_path(seg_points, seg_nodes)
+
+            # If we reversed the segment to get geometry, but logically 
+            # we still want the sub-path in the original "forward" order 
+            # for drawing, you may want to flip it back. 
+            # Typically if you're physically going backward, 
+            # you'll keep the reversed coordinates. 
+            # But if your desired final path is always "left to right," 
+            # you might reorder sub_path_points back. 
+            # This step is optional, depends on your usage:
+            if not forward_segment:
+                sub_path_points = sub_path_points[::-1]
+
+            # If it's the first segment, just append all.
+            # For subsequent segments, we might want to skip the first point 
+            # if it duplicates the last point of the previous segment
+            if len(all_path_points) > 0:
+                # Compare the last point of all_path_points with first of sub_path_points
+                if np.allclose(all_path_points[-1], sub_path_points[0], atol=1e-9):
+                    sub_path_points = sub_path_points[1:]
+
+            all_path_points.extend(sub_path_points)
+
+        path_points = np.array(all_path_points)
+        
+        # 4) Create QPainterPath
         self.path = QPainterPath()
         self.path.moveTo(path_points[0][0], path_points[0][1])
-
-        # Use the interpolated points from the spline
-        for point in path_points[1:]:
-            self.path.lineTo(point[0], point[1])
-
+        for p in path_points[1:]:
+            self.path.lineTo(p[0], p[1])
+        
         return path_points
     
     def update_path(self):
@@ -462,7 +493,7 @@ class PathWidget(QGraphicsView):
                     continue
                 points.append(node.pos())
             points.append(self.end_node.pos())
-            self.build_path(points)
+            self.update_spline(points, self.nodes)
 
         else:
             self.path = QPainterPath()
