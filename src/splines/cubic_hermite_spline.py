@@ -247,20 +247,20 @@ class CubicHermiteSpline(Spline):
                     continue
                     
         self.path_points = np.array(path_points)
-        epsilon = 1e-7
-        for j in range(0, 5):
-            epsilon *= 10
-            print("Epsilon:", epsilon)
+        # epsilon = 1e-7
+        # for j in range(0, 5):
+        #     epsilon *= 10
+        #     print("Epsilon:", epsilon)
 
-            t_node = self.t_points[1]
-            deriv_before = self.get_derivative(t_node - epsilon)
-            deriv_after = self.get_derivative(t_node + epsilon)
-            print("Derivative before node:", deriv_before)
-            print("Derivative after node:", deriv_after)
-            angle_before = np.arctan2(deriv_before[1], deriv_before[0])
-            angle_after = np.arctan2(deriv_after[1], deriv_after[0])
-            print("Angle before node:", np.degrees(angle_before))
-            print("Angle after node:", np.degrees(angle_after))
+        #     t_node = self.t_points[1]
+        #     deriv_before = self.get_derivative(t_node - epsilon)
+        #     deriv_after = self.get_derivative(t_node + epsilon)
+        #     print("Derivative before node:", deriv_before)
+        #     print("Derivative after node:", deriv_after)
+        #     angle_before = np.arctan2(deriv_before[1], deriv_before[0])
+        #     angle_after = np.arctan2(deriv_after[1], deriv_after[0])
+        #     print("Angle before node:", np.degrees(angle_before))
+        #     print("Angle after node:", np.degrees(angle_after))
 
         return self.path_points
         

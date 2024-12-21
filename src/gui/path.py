@@ -387,101 +387,95 @@ class PathWidget(QGraphicsView):
         )
 
     def update_spline(self, points: List[QPointF], nodes: List):
-        """
-        Update the path by splitting at reverse nodes.
-        Each segment is handled by a separate CubicHermiteSpline.
-        """
-        # 1) Convert to NumPy array
+        if len(points) < 2:
+            return np.array([])
+
+        # Convert to NumPy array
         points_array = np.array([[pt.x(), pt.y()] for pt in points])
         
-        # 2) Identify indices where a node is marked reverse
-        #    We'll split after each reverse node
-        reverse_indices = [i for i, node in enumerate(nodes) if node.is_reverse_node]
-
-        # Edge cases:
-        # If there are no reverse nodes, we just build once.
-        # If the last node is reverse, that can mean a segment from that node to the end is reversed, etc.
-        # We'll store segment boundaries in a list: [0, ..., N-1]
-        segment_indices = [0]  # start index
-        for idx in reverse_indices:
-            # We treat the reverse node as an end for one segment, 
-            # and the start for the next segment
-            if idx not in segment_indices:
-                segment_indices.append(idx)
-        # Finally, add the last index if not included
-        if segment_indices[-1] != len(points) - 1:
-            segment_indices.append(len(points) - 1)
+        # Create a list of segment descriptors - each containing start index, end index, 
+        # and whether it's a reverse segment
+        segments = []
+        current_start = 0
+        current_direction = 1  # 1 for forward, -1 for reverse
         
-        # 3) Build sub-splines
-        # We'll gather all sub-paths in one list
+        # Identify all segments while keeping track of direction changes
+        for i in range(1, len(points)):
+            is_reverse = nodes[i].is_reverse_node if i < len(nodes) else False
+            
+            if is_reverse or i == len(points) - 1:
+                # Add current segment
+                segments.append({
+                    'start_idx': current_start,
+                    'end_idx': i,
+                    'is_reverse': current_direction == -1
+                })
+                
+                if is_reverse:
+                    # Update for next segment
+                    current_start = i
+                    current_direction *= -1  # Flip direction
+        
         all_path_points = []
+        last_derivative = None
 
-        # We'll iterate over consecutive pairs in segment_indices:
-        # e.g., if segment_indices = [0, 3, 5], 
-        # we want segments [0..3], [3..5].
-        for start_idx, end_idx in zip(segment_indices[:-1], segment_indices[1:]):
-            # The points for this segment
-            seg_points = points_array[start_idx:end_idx+1]
-
-            # The nodes for this segment
-            seg_nodes = nodes[start_idx:end_idx+1]
+        # Process each segment
+        for i, segment in enumerate(segments):
+            start_idx = segment['start_idx']
+            end_idx = segment['end_idx']
+            is_reverse = segment['is_reverse']
             
-            # Check if the start node in this segment is a reverse node.
-            # Or if *either* node is marked reverse, you might want to 
-            # flip or do something special. The logic is up to you.
-            # 
-            # For a minimal example: if the *start* node was reversed,
-            # we interpret that as "this segment is traversed backward".
-            # We'll just check if the segment starts or ends in a reverse node:
+            # Get points for this segment
+            seg_points = points_array[start_idx:end_idx + 1]
+            seg_nodes = nodes[start_idx:end_idx + 1]
             
-            forward_segment = True
-            if seg_nodes[0].is_reverse_node:
-                forward_segment = False
-            elif seg_nodes[-1].is_reverse_node:
-                # Sometimes you want to see if the end node is reversed
-                # and handle that. But it depends on your convention.
-                # For demonstration, let's assume if the end node is reversed,
-                # we also handle it by reversing the segment. 
-                forward_segment = False
-
-            if not forward_segment:
-                # Reverse the segment so it goes "backwards"
-                seg_points = seg_points[::-1]
-                seg_nodes = seg_nodes[::-1]
-
-            # Now build a new spline for just this segment
+            # Create spline for this segment
             sub_spline = CubicHermiteSpline()
-            sub_path_points = sub_spline.build_path(seg_points, seg_nodes)
-
-            # If we reversed the segment to get geometry, but logically 
-            # we still want the sub-path in the original "forward" order 
-            # for drawing, you may want to flip it back. 
-            # Typically if you're physically going backward, 
-            # you'll keep the reversed coordinates. 
-            # But if your desired final path is always "left to right," 
-            # you might reorder sub_path_points back. 
-            # This step is optional, depends on your usage:
-            if not forward_segment:
-                sub_path_points = sub_path_points[::-1]
-
-            # If it's the first segment, just append all.
-            # For subsequent segments, we might want to skip the first point 
-            # if it duplicates the last point of the previous segment
-            if len(all_path_points) > 0:
-                # Compare the last point of all_path_points with first of sub_path_points
-                if np.allclose(all_path_points[-1], sub_path_points[0], atol=1e-9):
-                    sub_path_points = sub_path_points[1:]
-
+            
+            # Handle tangents
+            est_tangents = sub_spline.estimate_tangents(seg_points)
+            
+            if last_derivative is not None:
+                # Maintain tangent continuity at segment boundaries
+                if is_reverse:
+                    # For reverse segments, use exact opposite of last derivative
+                    est_tangents[0] = -last_derivative
+                else:
+                    # For normal segments, maintain the same derivative
+                    est_tangents[0] = last_derivative
+            
+            # Build path with custom tangents
+            sub_path_points = sub_spline.build_path(seg_points, seg_nodes, tangents=est_tangents)
+            
+            # Handle segment connections
+            if all_path_points and np.allclose(all_path_points[-1], sub_path_points[0], atol=1e-7):
+                sub_path_points = sub_path_points[1:]
+            
+            # Add points to final path
             all_path_points.extend(sub_path_points)
-
+            
+            # Update last_derivative for next segment
+            t_end = sub_spline.t_points[-1]
+            current_derivative = sub_spline.get_derivative(t_end)
+            
+            if is_reverse:
+                # If this was a reverse segment, the next segment should continue
+                # in the opposite direction
+                last_derivative = -current_derivative
+            else:
+                last_derivative = current_derivative
+        
+        # Convert to array and create path
         path_points = np.array(all_path_points)
         
-        # 4) Create QPainterPath
-        self.path = QPainterPath()
-        self.path.moveTo(path_points[0][0], path_points[0][1])
-        for p in path_points[1:]:
-            self.path.lineTo(p[0], p[1])
-        
+        if len(path_points) > 0:
+            self.path = QPainterPath()
+            self.path.moveTo(path_points[0][0], path_points[0][1])
+            for p in path_points[1:]:
+                self.path.lineTo(p[0], p[1])
+        else:
+            self.path = QPainterPath()
+
         return path_points
     
     def update_path(self):
