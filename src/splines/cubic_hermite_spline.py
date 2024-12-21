@@ -34,7 +34,7 @@ class CubicHermiteSpline(Spline):
         """
         n = len(points)
         tangents = np.zeros_like(points)
-        tension = 0.8  # Catmull-Rom tension parameter
+        tension = 0.5  # Catmull-Rom tension parameter
         
         # Interior points: Catmull-Rom tangents
         for i in range(1, n-1):
