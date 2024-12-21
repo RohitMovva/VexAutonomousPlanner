@@ -59,23 +59,7 @@ class CubicHermiteSpline(Spline):
                 self.tangents = self.estimate_tangents(points)
             else:
                 self.tangents = tangents
-
-            # ---------------------------------------------------------------------
-            # Force cusp logic at reverse nodes:
-            # Instead of flipping the angle by 180°, we set the tangent to zero
-            # at the reverse node, then optionally flip the tangent for the next node.
-            # ---------------------------------------------------------------------
-            # for i, node in enumerate(nodes):
-            #     if node.is_reverse_node:
-            #         # 1) Zero out tangent at i -> cusp in velocity
-            #         self.tangents[i] = np.zeros_like(self.tangents[i])
-                    
-            #         # 2) (Optional) Flip the tangent at i+1 if you really want to go back
-            #         #    *immediately* in the opposite direction on the next segment.
-            #         if i + 1 < len(self.tangents):
-            #             self.tangents[i + 1] = -self.tangents[i + 1]
-
-            # Compute spline coefficients
+                
             self.coefficients = self.compute_hermite_coefficients(points, self.tangents, self.t_points)
 
             return True
@@ -247,20 +231,6 @@ class CubicHermiteSpline(Spline):
                     continue
                     
         self.path_points = np.array(path_points)
-        # epsilon = 1e-7
-        # for j in range(0, 5):
-        #     epsilon *= 10
-        #     print("Epsilon:", epsilon)
-
-        #     t_node = self.t_points[1]
-        #     deriv_before = self.get_derivative(t_node - epsilon)
-        #     deriv_after = self.get_derivative(t_node + epsilon)
-        #     print("Derivative before node:", deriv_before)
-        #     print("Derivative after node:", deriv_after)
-        #     angle_before = np.arctan2(deriv_before[1], deriv_before[0])
-        #     angle_after = np.arctan2(deriv_after[1], deriv_after[0])
-        #     print("Angle before node:", np.degrees(angle_before))
-        #     print("Angle after node:", np.degrees(angle_after))
 
         return self.path_points
         
@@ -289,3 +259,90 @@ class CubicHermiteSpline(Spline):
         Get the most recently generated path points
         """
         return self.path_points
+    
+    def update_end_tangent(self, new_tangent: np.ndarray) -> bool:
+        """
+        Update the end tangent of the last segment and recompute coefficients
+        """
+        if self.coefficients is None or self.t_points is None or self.tangents is None:
+            print("  Cannot update: spline not initialized")
+            return False
+            
+        try:
+            # Log current state
+            print("  Update end tangent:")
+            print(f"    Current end tangent: {self.tangents[-1]}")
+            print(f"    New end tangent: {new_tangent}")
+            
+            # Store current coefficients for comparison
+            old_coeffs_x = self.coefficients['x'][-1].copy()
+            old_coeffs_y = self.coefficients['y'][-1].copy()
+            
+            # Update the last tangent
+            self.tangents[-1] = new_tangent
+            
+            # Get segment info
+            last_seg_idx = len(self.t_points) - 2
+            dt = self.t_points[last_seg_idx + 1] - self.t_points[last_seg_idx]
+            print(f"    Segment dt: {dt}")
+            
+            # Get points for the last segment
+            p0 = np.array([self.get_point(self.t_points[last_seg_idx])])
+            p1 = np.array([self.get_point(self.t_points[last_seg_idx + 1])])
+            print(f"    Segment points: {p0} -> {p1}")
+            
+            # Hermite basis matrix
+            M = np.array([
+                [ 2, -2,  1,  1],
+                [-3,  3, -2, -1],
+                [ 0,  0,  1,  0],
+                [ 1,  0,  0,  0]
+            ])
+            
+            # Update geometry matrices
+            Gx = np.array([
+                p0[0][0],
+                p1[0][0],
+                dt * self.tangents[last_seg_idx][0],
+                dt * new_tangent[0]
+            ])
+            
+            Gy = np.array([
+                p0[0][1],
+                p1[0][1],
+                dt * self.tangents[last_seg_idx][1],
+                dt * new_tangent[1]
+            ])
+            
+            # Compute new coefficients
+            cx = M @ Gx
+            cy = M @ Gy
+            
+            print("    Coefficient changes:")
+            print(f"      X old: {old_coeffs_x}")
+            print(f"      X new: {cx}")
+            print(f"      Y old: {old_coeffs_y}")
+            print(f"      Y new: {cy}")
+            
+            # Update coefficients
+            self.coefficients['x'][last_seg_idx] = cx
+            self.coefficients['y'][last_seg_idx] = cy
+            
+            # Generate new path points directly using the updated coefficients
+            t_vals = np.linspace(0, 1, self.steps)
+            path_points = []
+            
+            for t in t_vals:
+                T = np.array([t**3, t**2, t, 1.0])
+                x = T @ cx
+                y = T @ cy
+                if np.all(np.isfinite([x, y])) and np.all(np.abs([x, y]) < 1e6):
+                    path_points.append([x, y])
+                    
+            self.path_points = np.array(path_points)
+            
+            return True
+            
+        except Exception as e:
+            print(f"  Error updating end tangent: {e}")
+            return False

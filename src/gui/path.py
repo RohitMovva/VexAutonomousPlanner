@@ -393,8 +393,7 @@ class PathWidget(QGraphicsView):
         # Convert to NumPy array
         points_array = np.array([[pt.x(), pt.y()] for pt in points])
         
-        # Create a list of segment descriptors - each containing start index, end index, 
-        # and whether it's a reverse segment
+        # Create a list of segment descriptors
         segments = []
         current_start = 0
         current_direction = 1  # 1 for forward, -1 for reverse
@@ -402,28 +401,32 @@ class PathWidget(QGraphicsView):
         # Identify all segments while keeping track of direction changes
         for i in range(1, len(points)):
             is_reverse = nodes[i].is_reverse_node if i < len(nodes) else False
-            
             if is_reverse or i == len(points) - 1:
-                # Add current segment
                 segments.append({
                     'start_idx': current_start,
                     'end_idx': i,
                     'is_reverse': current_direction == -1
                 })
-                
                 if is_reverse:
-                    # Update for next segment
                     current_start = i
-                    current_direction *= -1  # Flip direction
-        
-        all_path_points = []
-        last_derivative = None
+                    current_direction *= -1
 
+        print(f"\nFound {len(segments)} segments:")
+        for i, seg in enumerate(segments):
+            print(f"Segment {i}: {seg}")
+
+        all_path_points = []
+        segment_splines = []  # Keep track of all splines and their points
+        last_derivative = None
+        
         # Process each segment
         for i, segment in enumerate(segments):
             start_idx = segment['start_idx']
             end_idx = segment['end_idx']
             is_reverse = segment['is_reverse']
+            
+            print(f"\nProcessing segment {i}:")
+            print(f"  Start idx: {start_idx}, End idx: {end_idx}, Is reverse: {is_reverse}")
             
             # Get points for this segment
             seg_points = points_array[start_idx:end_idx + 1]
@@ -434,40 +437,92 @@ class PathWidget(QGraphicsView):
             
             # Handle tangents
             est_tangents = sub_spline.estimate_tangents(seg_points)
+            print(f"  Estimated tangents:")
+            print(f"    Start: {est_tangents[0]}")
+            print(f"    End: {est_tangents[-1]}")
             
             if last_derivative is not None:
-                # Maintain tangent continuity at segment boundaries
+                print(f"  Last derivative: {last_derivative}")
                 if is_reverse:
-                    # For reverse segments, use exact opposite of last derivative
-                    est_tangents[0] = -last_derivative
+                    print("  Reverse node detected, averaging tangents:")
+                    # Average the estimated tangent with the negative of last derivative
+                    averaged_tangent = (est_tangents[0] - last_derivative) / 2
+                    print(f"    Original estimated tangent: {est_tangents[0]}")
+                    print(f"    Negative last derivative: {-last_derivative}")
+                    print(f"    Averaged tangent: {averaged_tangent}")
+                    
+                    # Update the last spline's end tangent and rebuild its path
+                    if segment_splines:
+                        print("  Updating last spline's end tangent")
+                        last_spline = segment_splines[-1]['spline']
+                        update_success = last_spline.update_end_tangent(-averaged_tangent)
+                        print(f"    Update success: {update_success}")
+                        
+                        if update_success:
+                            # Rebuild the last segment's path points
+                            last_seg_points = points_array[segments[i-1]['start_idx']:segments[i-1]['end_idx'] + 1]
+                            last_seg_nodes = nodes[segments[i-1]['start_idx']:segments[i-1]['end_idx'] + 1]
+                            
+                            print("  Rebuilding last segment:")
+                            print(f"    Points: {last_seg_points}")
+                            print(f"    Old end tangent: {last_spline.get_derivative(last_spline.t_points[-1])}")
+                            
+                            new_points = last_spline.path_points
+                            print(f"    New end tangent: {last_spline.get_derivative(last_spline.t_points[-1])}")
+                            
+                            # Verify the path was actually updated
+                            if np.array_equal(new_points, segment_splines[-1]['points']):
+                                print("    Warning: Path points unchanged after update!")
+                            else:
+                                print("    Path points successfully updated")
+                                segment_splines[-1]['points'] = new_points
+                    
+                    # For reverse segments, update both start and end tangents
+                    est_tangents[0] = averaged_tangent
+                    
+                    # Calculate a new end tangent that maintains the averaged angle
+                    avg_magnitude = np.linalg.norm(averaged_tangent)
+                    end_dir = est_tangents[-1] / np.linalg.norm(est_tangents[-1])
+                    est_tangents[-1] = end_dir * avg_magnitude
+                    
+                    print(f"  Adjusted end tangent: {est_tangents[-1]}")
                 else:
-                    # For normal segments, maintain the same derivative
                     est_tangents[0] = last_derivative
-            
+                    print("  Normal connection, maintaining derivative")
+                
+                print(f"  Final start tangent for segment: {est_tangents[0]}")
+                
             # Build path with custom tangents
             sub_path_points = sub_spline.build_path(seg_points, seg_nodes, tangents=est_tangents)
             
-            # Handle segment connections
-            if all_path_points and np.allclose(all_path_points[-1], sub_path_points[0], atol=1e-7):
-                sub_path_points = sub_path_points[1:]
-            
-            # Add points to final path
-            all_path_points.extend(sub_path_points)
+            # Store spline and its points
+            segment_splines.append({
+                'spline': sub_spline,
+                'points': sub_path_points
+            })
             
             # Update last_derivative for next segment
             t_end = sub_spline.t_points[-1]
             current_derivative = sub_spline.get_derivative(t_end)
+            print(f"  End derivative for segment: {current_derivative}")
             
             if is_reverse:
-                # If this was a reverse segment, the next segment should continue
-                # in the opposite direction
                 last_derivative = -current_derivative
+                print(f"  Setting next segment's start derivative to: {last_derivative}")
             else:
                 last_derivative = current_derivative
+                print(f"  Setting next segment's start derivative to: {last_derivative}")
         
+        # Combine all path points
+        all_path_points = []
+        for i, segment in enumerate(segment_splines):
+            points = segment['points']
+            if all_path_points and np.allclose(all_path_points[-1], points[0], atol=1e-7):
+                points = points[1:]
+            all_path_points.extend(points)
+                
         # Convert to array and create path
         path_points = np.array(all_path_points)
-        
         if len(path_points) > 0:
             self.path = QPainterPath()
             self.path.moveTo(path_points[0][0], path_points[0][1])
@@ -475,9 +530,9 @@ class PathWidget(QGraphicsView):
                 self.path.lineTo(p[0], p[1])
         else:
             self.path = QPainterPath()
-
+            
         return path_points
-    
+            
     def update_path(self):
         # Should update with any new, moved, modified, or removed nodes
         if self.start_node and self.end_node and len(self.nodes) > 1:
