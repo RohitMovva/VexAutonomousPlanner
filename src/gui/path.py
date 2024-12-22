@@ -3,10 +3,11 @@ import math
 from math import sqrt
 from typing import List
 import numpy as np
-from splines.natural_cubic_spline import NaturalCubicSpline
-from splines.cubic_hermite_spline import CubicHermiteSpline
+# from splines.natural_cubic_spline import NaturalCubicSpline
+# from splines.cubic_hermite_spline import CubicHermiteSpline
+from splines.bspline import BSpline
 from splines.spline_manager import SplineManager
-
+from splines.b_spline_manager import BSplineManager
 from PyQt6.QtCore import QLineF, QPointF, QSize, Qt, QSizeF, QRectF
 from PyQt6.QtGui import QColor, QMouseEvent, QPainter, QPainterPath, QPen, QPixmap, QVector2D, QTransform, QBrush
 from PyQt6.QtWidgets import (
@@ -138,7 +139,7 @@ class PathWidget(QGraphicsView):
         self.visualize = False
         
         self.path = QPainterPath()
-        self.spline_manager = SplineManager(CubicHermiteSpline)
+        self.spline_manager = BSplineManager()
 
     def fit_image_to_view(self):
         self.fitInView(self.image_item, Qt.AspectRatioMode.KeepAspectRatio)
@@ -389,12 +390,14 @@ class PathWidget(QGraphicsView):
 
     def update_spline(self, points: List[QPointF], nodes: List[node.Node]):
         # convert points to numpy array of floats and from pixels to inches
+        print("Initial points:", points)
         points = np.array([[point.x(), point.y()] for point in points])
         # points = np.array([[point.x(), point.y()] for point in points])
         # for i in range(len(points)):
         #     points[i][0] = (points[i][0] / (2000)) * 12.3266567842 * 12
         #     points[i][1] = (points[i][1] / (2000)) * 12.3266567842 * 12
         path_points = self.spline_manager.update_splines(points, nodes)
+        print("Final result:", path_points)
 
         
         # convert from feet to pixels

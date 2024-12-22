@@ -1,8 +1,9 @@
 from typing import Dict, Optional, Tuple
 from splines.spline import Spline  # type: ignore
 import numpy as np
+import inspect
 
-class CubicHermiteSpline(Spline):
+class G2HermiteSpline(Spline):
     """G2 continuous Hermite spline implementation"""
     
     def __init__(self):
@@ -16,16 +17,24 @@ class CubicHermiteSpline(Spline):
         
     def compute_parameters(self, points: np.ndarray) -> np.ndarray:
         """
-        Compute parameter values for spline fitting using cumulative chord length
+        Compute parameter values with improved spacing for G2 continuity
         """
         diffs = np.diff(points, axis=0)
         segment_lengths = np.sqrt(np.sum(diffs**2, axis=1))
-        t = np.zeros(len(points))
-        t[1:] = np.cumsum(segment_lengths)
         
-        # Normalize to [0, 1]
+        # Use centripetal parameterization (sqrt of chord length)
+        # This generally gives better shape preservation than uniform or chord-length
+        sqrt_lengths = np.sqrt(segment_lengths)
+        t = np.zeros(len(points))
+        t[1:] = np.cumsum(sqrt_lengths)
+        
+        # Normalize to [0, 1] with endpoint handling
         if t[-1] > 0:
             t = t / t[-1]
+            
+            # Adjust spacing near endpoints for better control
+            alpha = 0.1  # Controls end-point spacing
+            t = t ** alpha * (1 - (1 - t) ** alpha)
             
         return t
         
@@ -77,6 +86,11 @@ class CubicHermiteSpline(Spline):
         return tangents, second_derivatives
         
     def initialize_spline(self, points: np.ndarray, nodes, tangents: Optional[np.ndarray] = None) -> bool:
+        print("\nG2HermiteSpline initialization:")
+        print(f"Class name: {self.__class__.__name__}")
+        print(f"Method being called: {inspect.currentframe().f_code.co_name}")
+        print(f"Has estimate_tangents_and_derivatives: {hasattr(self, 'estimate_tangents_and_derivatives')}")
+        print(f"Has compute_parameters: {hasattr(self, 'compute_parameters')}")
         if len(points) < 2:
             print("Not enough points")
             return False
