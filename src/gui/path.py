@@ -5,6 +5,7 @@ from typing import List
 import numpy as np
 from splines.natural_cubic_spline import NaturalCubicSpline
 from splines.cubic_hermite_spline import CubicHermiteSpline
+from splines.spline_manager import SplineManager
 
 from PyQt6.QtCore import QLineF, QPointF, QSize, Qt, QSizeF, QRectF
 from PyQt6.QtGui import QColor, QMouseEvent, QPainter, QPainterPath, QPen, QPixmap, QVector2D, QTransform, QBrush
@@ -137,7 +138,7 @@ class PathWidget(QGraphicsView):
         self.visualize = False
         
         self.path = QPainterPath()
-        self.spline = CubicHermiteSpline()
+        self.spline_manager = SplineManager(CubicHermiteSpline)
 
     def fit_image_to_view(self):
         self.fitInView(self.image_item, Qt.AspectRatioMode.KeepAspectRatio)
@@ -386,117 +387,20 @@ class PathWidget(QGraphicsView):
             self.all_coords,
         )
 
-    def update_spline(self, points: List[QPointF], nodes: List):
-        if len(points) < 2:
-            return np.array([])
+    def update_spline(self, points: List[QPointF], nodes: List[node.Node]):
+        # convert points to numpy array of floats and from pixels to inches
+        points = np.array([[point.x(), point.y()] for point in points])
+        # points = np.array([[point.x(), point.y()] for point in points])
+        # for i in range(len(points)):
+        #     points[i][0] = (points[i][0] / (2000)) * 12.3266567842 * 12
+        #     points[i][1] = (points[i][1] / (2000)) * 12.3266567842 * 12
+        path_points = self.spline_manager.update_splines(points, nodes)
 
-        # Convert to NumPy array
-        points_array = np.array([[pt.x(), pt.y()] for pt in points])
         
-        # Create a list of segment descriptors
-        segments = []
-        current_start = 0
-        
-        # Identify all segments
-        for i in range(1, len(points)):
-            is_reverse = nodes[i].is_reverse_node if i < len(nodes) else False
-            if is_reverse or i == len(points) - 1:
-                segments.append({
-                    'start_idx': current_start,
-                    'end_idx': i,
-                    'is_reverse': is_reverse,
-                    'transition_point': i,
-                    'tangents': None,  # Will store finalized tangents
-                    'spline': None,    # Will store spline object
-                    'points': None     # Will store final points
-                })
-                current_start = i
-
-        print(f"\nFound {len(segments)} segments:")
-        for i, seg in enumerate(segments):
-            print(f"Segment {i}: {seg}")
-
-        # First pass: Calculate all tangents
-        for i, segment in enumerate(segments):
-            start_idx = segment['start_idx']
-            end_idx = segment['end_idx']
-            
-            print(f"\nCalculating tangents for segment {i}:")
-            print(f"  Start idx: {start_idx}, End idx: {end_idx}")
-            
-            # Create spline and get initial tangent estimates
-            sub_spline = CubicHermiteSpline()
-            segment['spline'] = sub_spline
-            
-            seg_points = points_array[start_idx:end_idx + 1]
-            est_tangents = sub_spline.estimate_tangents(seg_points)
-            print(f"  Initial tangent estimates: {est_tangents}")
-            
-            # Store initial tangents
-            segment['tangents'] = est_tangents.copy()
-
-        # Second pass: Process reverse nodes and adjust tangents
-        for i, segment in enumerate(segments):
-            start_idx = segment['start_idx']
-            
-            # Check if current node is a reverse node
-            is_reverse = nodes[start_idx].is_reverse_node if start_idx < len(nodes) else False
-            
-            if is_reverse and i > 0:
-                print(f"\nProcessing reverse node at segment {i}:")
-                
-                # Get incoming tangent from previous segment
-                prev_segment = segments[i-1]
-                incoming_tangent = prev_segment['tangents'][-1]
-                outgoing_tangent = segment['tangents'][0]
-                
-                print(f"  Incoming tangent: {incoming_tangent}")
-                print(f"  Outgoing tangent: {outgoing_tangent}")
-                
-                # Normalize vectors
-                incoming_norm = np.linalg.norm(incoming_tangent)
-                outgoing_norm = np.linalg.norm(outgoing_tangent)
-                
-                if incoming_norm > 0 and outgoing_norm > 0:
-                    # Instead of complex angle calculations, let's use the tangent that
-                    # would naturally occur if we reversed the direction of movement
-                    reversed_incoming = -incoming_tangent
-                    
-                    # Now we can average the reversed incoming tangent with the outgoing tangent
-                    averaged_tangent = (reversed_incoming + outgoing_tangent) / 2
-                    
-                    # Update both segments' tangents
-                    prev_segment['tangents'][-1] = -averaged_tangent
-                    segment['tangents'][0] = averaged_tangent
-
-        # Final pass: Build all paths with corrected tangents
-        all_path_points = []
-        
-        for i, segment in enumerate(segments):            
-            start_idx = segment['start_idx']
-            end_idx = segment['end_idx']
-            seg_points = points_array[start_idx:end_idx + 1]
-            seg_nodes = nodes[start_idx:end_idx + 1]
-                        
-            # Build path with finalized tangents
-            segment['points'] = segment['spline'].build_path(seg_points, seg_nodes, tangents=segment['tangents'])
-            
-            # Add points to final path
-            if i > 0 and len(all_path_points) > 0:
-                # Check if points need to be connected
-                prev_end = all_path_points[-1]
-                curr_start = segment['points'][0]
-                if np.allclose(prev_end, curr_start, atol=1e-7):
-                    segment_points = segment['points'][1:]
-                else:
-                    segment_points = segment['points']
-            else:
-                segment_points = segment['points']
-                
-            all_path_points.extend(segment_points)
-        
-        # Convert to array and create path
-        path_points = np.array(all_path_points)
+        # convert from feet to pixels
+        # for i in range(len(path_points)):
+        #     path_points[i][0] = (path_points[i][0] / 12.3266567842*12) * 2000
+        #     path_points[i][1] = (path_points[i][1] / 12.3266567842*12) * 2000
         if len(path_points) > 0:
             self.path = QPainterPath()
             self.path.moveTo(path_points[0][0], path_points[0][1])

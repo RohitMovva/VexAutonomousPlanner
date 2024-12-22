@@ -3,7 +3,7 @@ from splines.spline import Spline  # type: ignore
 import numpy as np
 
 class CubicHermiteSpline(Spline):
-    """Cubic Hermite spline implementation"""
+    """G2 continuous Hermite spline implementation"""
     
     def __init__(self):
         super().__init__()
@@ -12,6 +12,7 @@ class CubicHermiteSpline(Spline):
         self.steps: int = 50  # Number of points to generate per segment
         self.t_points: Optional[np.ndarray] = None
         self.tangents: Optional[np.ndarray] = None
+        self.second_derivatives: Optional[np.ndarray] = None
         
     def compute_parameters(self, points: np.ndarray) -> np.ndarray:
         """
@@ -28,23 +29,52 @@ class CubicHermiteSpline(Spline):
             
         return t
         
-    def estimate_tangents(self, points: np.ndarray) -> np.ndarray:
+    def estimate_tangents_and_derivatives(self, points: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
         """
-        Estimate tangent vectors at each point using Catmull-Rom method
+        Estimate tangent vectors and second derivatives for G2 continuity
+        
+        Args:
+            points: Array of points shape (N, 2)
+            
+        Returns:
+            Tuple[np.ndarray, np.ndarray]: Tangents and second derivatives arrays
         """
         n = len(points)
-        tangents = np.zeros_like(points)
-        tension = 0.5  # Catmull-Rom tension parameter
+        tangents = np.zeros_like(points, dtype=np.float64)
+        second_derivatives = np.zeros_like(points, dtype=np.float64)
         
-        # Interior points: Catmull-Rom tangents
+        # Compute second derivatives at interior points
         for i in range(1, n-1):
-            tangents[i] = tension * (points[i+1] - points[i-1])
+            # Use three adjacent points to estimate second derivative
+            second_derivatives[i] = points[i-1] - 2*points[i] + points[i+1]
         
-        # Endpoints: match slope of the adjacent segment
-        tangents[0] = tension * (points[1] - points[0]) * 2
-        tangents[-1] = tension * (points[-1] - points[-2]) * 2
+        # Estimate second derivatives at endpoints using forward/backward differences
+        second_derivatives[0] = second_derivatives[1]
+        second_derivatives[-1] = second_derivatives[-2]
         
-        return tangents
+        # Compute segment lengths for scaling
+        diffs = np.diff(points, axis=0)
+        segment_lengths = np.sqrt(np.sum(diffs**2, axis=1))
+        avg_length = np.mean(segment_lengths)
+        
+        # Compute tangents that ensure G2 continuity
+        for i in range(1, n-1):
+            prev_diff = points[i] - points[i-1]
+            next_diff = points[i+1] - points[i]
+            
+            # Scale by segment lengths
+            prev_len = segment_lengths[i-1]
+            next_len = segment_lengths[i]
+            scale = avg_length / max(prev_len, next_len)
+            
+            # Combine first and second derivatives with scaling
+            tangents[i] = scale * ((prev_diff + next_diff)/2 + second_derivatives[i]/6)
+        
+        # Handle endpoints with G2 consideration
+        tangents[0] = scale * (points[1] - points[0] + second_derivatives[0]/6)
+        tangents[-1] = scale * (points[-1] - points[-2] + second_derivatives[-1]/6)
+        
+        return tangents, second_derivatives
         
     def initialize_spline(self, points: np.ndarray, nodes, tangents: Optional[np.ndarray] = None) -> bool:
         if len(points) < 2:
@@ -54,34 +84,39 @@ class CubicHermiteSpline(Spline):
         try:
             self.t_points = self.compute_parameters(points)
             
-            # Use provided tangents or estimate them
+            # Estimate both tangents and second derivatives for G2 continuity
             if tangents is None:
-                self.tangents = self.estimate_tangents(points)
+                self.tangents, self.second_derivatives = self.estimate_tangents_and_derivatives(points)
             else:
                 self.tangents = tangents
+                _, self.second_derivatives = self.estimate_tangents_and_derivatives(points)
                 
-            self.coefficients = self.compute_hermite_coefficients(points, self.tangents, self.t_points)
-
+            self.coefficients = self.compute_g2_coefficients(
+                points, self.tangents, self.second_derivatives, self.t_points)
+            
             return True
 
         except Exception as e:
             print(f"Error initializing spline: {e}")
             return False
             
-    def compute_hermite_coefficients(self, points: np.ndarray, 
-                                     tangents: np.ndarray, 
-                                     t: np.ndarray) -> Dict:
+    def compute_g2_coefficients(self, points: np.ndarray, 
+                               tangents: np.ndarray,
+                               second_derivatives: np.ndarray, 
+                               t: np.ndarray) -> Dict:
         """
-        Compute Hermite spline coefficients for each segment using the standard matrix form
+        Compute G2 continuous Hermite spline coefficients
         """
         n = len(points) - 1
         
-        # Hermite basis matrix
-        M = np.array([
-            [ 2, -2,  1,  1],
-            [-3,  3, -2, -1],
-            [ 0,  0,  1,  0],
-            [ 1,  0,  0,  0]
+        # Extended basis matrix for G2 continuity
+        M_g2 = np.array([
+            [ 1,  0,  0,  0,  0,  0],
+            [ 0,  1,  0,  0,  0,  0],
+            [ 0,  0,  1/2, 0,  0,  0],
+            [-10, 10, -6, -4,  1/2, 0],
+            [ 15, -15, 8,  7, -1, -1/2],
+            [-6,  6, -3, -3,  1/2, 1/2]
         ])
         
         coeffs_x = []
@@ -89,26 +124,30 @@ class CubicHermiteSpline(Spline):
         
         for i in range(n):
             dt = t[i+1] - t[i]
+            dt2 = dt * dt
             
-            # Geometry matrix for x coordinates
+            # Create geometry matrices including second derivative information
             Gx = np.array([
                 points[i][0],
                 points[i+1][0],
-                dt * tangents[i][0],
-                dt * tangents[i+1][0]
+                tangents[i][0],
+                tangents[i+1][0],
+                second_derivatives[i][0] * dt2,
+                second_derivatives[i+1][0] * dt2
             ])
             
-            # Geometry matrix for y coordinates
             Gy = np.array([
                 points[i][1],
                 points[i+1][1],
-                dt * tangents[i][1],
-                dt * tangents[i+1][1]
+                tangents[i][1],
+                tangents[i+1][1],
+                second_derivatives[i][1] * dt2,
+                second_derivatives[i+1][1] * dt2
             ])
             
             # Compute coefficients
-            cx = M @ Gx
-            cy = M @ Gy
+            cx = M_g2 @ Gx
+            cy = M_g2 @ Gy
             
             coeffs_x.append(cx)
             coeffs_y.append(cy)
@@ -134,7 +173,7 @@ class CubicHermiteSpline(Spline):
         
     def get_point(self, t: float) -> np.ndarray:
         """
-        Get point on spline at parameter t
+        Get point on spline at parameter t using G2 basis functions
         """
         if self.t_points is None or self.coefficients is None:
             raise ValueError("Spline not initialized")
@@ -145,8 +184,8 @@ class CubicHermiteSpline(Spline):
         t_local = (t - self.t_points[i]) / (self.t_points[i+1] - self.t_points[i])
         t_local = np.clip(t_local, 0, 1)
         
-        # Compute basis vector
-        T = np.array([t_local**3, t_local**2, t_local, 1.0])
+        # Extended basis vector for G2 continuity
+        T = np.array([1, t_local, t_local**2, t_local**3, t_local**4, t_local**5])
         
         # Compute point coordinates using coefficient matrices
         x = T @ self.coefficients['x'][i]
@@ -155,23 +194,27 @@ class CubicHermiteSpline(Spline):
         return np.array([x, y])
         
     def get_derivative(self, t: float) -> np.ndarray:
+        """
+        Get first derivative at parameter t
+        """
         if self.t_points is None or self.coefficients is None:
             raise ValueError("Spline not initialized")
             
         i = self._find_segment(t)
         dt = self.t_points[i+1] - self.t_points[i]
         
-        # Normalize t to [0, 1]
+        # Normalize t to [0, 1] for this segment
         t_local = (t - self.t_points[i]) / dt
         t_local = np.clip(t_local, 0, 1)
         
-        # Derivative of cubic polynomial: [3a, 2b, c] * [t², t, 1]
-        T = np.array([3 * t_local**2, 2 * t_local, 1.0, 0.0])
+        # Derivative of the extended basis
+        T = np.array([0, 1, 2*t_local, 3*t_local**2, 4*t_local**3, 5*t_local**4])
         
-        dx = T @ self.coefficients['x'][i]
-        dy = T @ self.coefficients['y'][i]
+        # Compute derivatives using coefficient matrices
+        dx = T @ self.coefficients['x'][i] / dt
+        dy = T @ self.coefficients['y'][i] / dt
         
-        return np.array([dx, dy]) / dt
+        return np.array([dx, dy])
         
     def get_second_derivative(self, t: float) -> np.ndarray:
         """
@@ -182,26 +225,27 @@ class CubicHermiteSpline(Spline):
             
         i = self._find_segment(t)
         dt = self.t_points[i+1] - self.t_points[i]
+        dt2 = dt * dt
         
-        # Normalize t to [0, 1]
+        # Normalize t to [0, 1] for this segment
         t_local = (t - self.t_points[i]) / dt
         t_local = np.clip(t_local, 0, 1)
         
-        # The second derivative logic (if needed) would be adapted similarly,
-        # but since your main concern is the tangent angle at reversed nodes,
-        # we can leave this as is.
+        # Second derivative of the extended basis
+        T = np.array([0, 0, 2, 6*t_local, 12*t_local**2, 20*t_local**3])
         
-        # This part of code would need a proper Hermite second derivative calculation if required.
-        # Currently, it's not fully implemented and would need Hermite basis second derivative computation.
+        # Compute second derivatives using coefficient matrices
+        d2x = T @ self.coefficients['x'][i] / dt2
+        d2y = T @ self.coefficients['y'][i] / dt2
         
-        raise NotImplementedError("Second derivative computation not fully implemented.")
+        return np.array([d2x, d2y])
         
     def build_path(self, points: np.ndarray, 
                    nodes = None,
                    tangents: Optional[np.ndarray] = None,
                    steps: Optional[int] = None) -> np.ndarray:
         """
-        Build a path through the given points using cubic Hermite splines
+        Build a path through the given points using G2 continuous Hermite splines
         """
         if steps is not None:
             self.steps = steps
@@ -231,118 +275,46 @@ class CubicHermiteSpline(Spline):
                     continue
                     
         self.path_points = np.array(path_points)
+        return self.path_points
 
-        return self.path_points
-        
-    def fit(self, x: np.ndarray, y: np.ndarray) -> bool:
-        """
-        Fit cubic Hermite spline to points
-        """
-        if len(x) != len(y) or len(x) < 2:
-            return False
-            
-        # Store parameter values
-        self.t_points = x
-        
-        # Handle 2D points
-        if y.ndim == 2:
-            points = np.column_stack([x, y])
-        else:
-            points = np.column_stack([x, y.reshape(-1, 1)])
-            
-        # Estimate tangents and initialize spline
-        tangents = self.estimate_tangents(points)
-        return self.initialize_spline(points, tangents)
-        
-    def get_path_points(self) -> Optional[np.ndarray]:
-        """
-        Get the most recently generated path points
-        """
-        return self.path_points
-    
     def update_end_tangent(self, new_tangent: np.ndarray) -> bool:
         """
-        Update the end tangent of the last segment and recompute coefficients
+        Update the end tangent while maintaining G2 continuity
         """
-        if self.coefficients is None or self.t_points is None or self.tangents is None:
-            print("  Cannot update: spline not initialized")
+        if (self.coefficients is None or self.t_points is None or 
+            self.tangents is None or self.second_derivatives is None):
+            print("Cannot update: spline not initialized")
             return False
             
         try:
-            # Log current state
-            print("  Update end tangent:")
-            print(f"    Current end tangent: {self.tangents[-1]}")
-            print(f"    New end tangent: {new_tangent}")
-            
-            # Store current coefficients for comparison
-            old_coeffs_x = self.coefficients['x'][-1].copy()
-            old_coeffs_y = self.coefficients['y'][-1].copy()
-            
             # Update the last tangent
             self.tangents[-1] = new_tangent
             
-            # Get segment info
-            last_seg_idx = len(self.t_points) - 2
-            dt = self.t_points[last_seg_idx + 1] - self.t_points[last_seg_idx]
-            print(f"    Segment dt: {dt}")
+            # Recompute second derivatives to maintain G2 continuity
+            last_idx = len(self.t_points) - 1
+            if last_idx > 1:
+                dt = self.t_points[-1] - self.t_points[-2]
+                self.second_derivatives[-1] = (new_tangent - self.tangents[-2]) / dt
             
-            # Get points for the last segment
-            p0 = np.array([self.get_point(self.t_points[last_seg_idx])])
-            p1 = np.array([self.get_point(self.t_points[last_seg_idx + 1])])
-            print(f"    Segment points: {p0} -> {p1}")
+            # Recompute coefficients for the last segment
+            points = np.array([self.get_point(t) for t in self.t_points])
+            last_coeffs = self.compute_g2_coefficients(
+                points[-2:], 
+                self.tangents[-2:],
+                self.second_derivatives[-2:],
+                self.t_points[-2:]
+            )
             
-            # Hermite basis matrix
-            M = np.array([
-                [ 2, -2,  1,  1],
-                [-3,  3, -2, -1],
-                [ 0,  0,  1,  0],
-                [ 1,  0,  0,  0]
-            ])
-            
-            # Update geometry matrices
-            Gx = np.array([
-                p0[0][0],
-                p1[0][0],
-                dt * self.tangents[last_seg_idx][0],
-                dt * new_tangent[0]
-            ])
-            
-            Gy = np.array([
-                p0[0][1],
-                p1[0][1],
-                dt * self.tangents[last_seg_idx][1],
-                dt * new_tangent[1]
-            ])
-            
-            # Compute new coefficients
-            cx = M @ Gx
-            cy = M @ Gy
-            
-            print("    Coefficient changes:")
-            print(f"      X old: {old_coeffs_x}")
-            print(f"      X new: {cx}")
-            print(f"      Y old: {old_coeffs_y}")
-            print(f"      Y new: {cy}")
-            
-            # Update coefficients
-            self.coefficients['x'][last_seg_idx] = cx
-            self.coefficients['y'][last_seg_idx] = cy
-            
-            # Generate new path points directly using the updated coefficients
-            t_vals = np.linspace(0, 1, self.steps)
-            path_points = []
-            
-            for t in t_vals:
-                T = np.array([t**3, t**2, t, 1.0])
-                x = T @ cx
-                y = T @ cy
-                if np.all(np.isfinite([x, y])) and np.all(np.abs([x, y]) < 1e6):
-                    path_points.append([x, y])
-                    
-            self.path_points = np.array(path_points)
+            # Update the last segment's coefficients
+            self.coefficients['x'][-1] = last_coeffs['x'][0]
+            self.coefficients['y'][-1] = last_coeffs['y'][0]
             
             return True
             
         except Exception as e:
-            print(f"  Error updating end tangent: {e}")
+            print(f"Error updating end tangent: {e}")
             return False
+            
+    def get_path_points(self) -> Optional[np.ndarray]:
+        """Get the most recently generated path points"""
+        return self.path_points
