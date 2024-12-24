@@ -61,7 +61,7 @@ class SplineManager:
 
         print("\n=== Starting G2 Spline Update ===")
         
-        # Create segments (same as before)
+        # Create segments
         self.segments = []
         current_start = 0
         
@@ -75,107 +75,43 @@ class SplineManager:
                     end_idx=i,
                     is_reverse=nodes[current_start].is_reverse_node if current_start < len(nodes) else False,
                     transition_point=i,
-                    second_derivatives=None  # Initialize new field
+                    second_derivatives=None
                 )
                 self.segments.append(segment)
                 current_start = i
 
-        # Add in update_splines method, after initial segment creation:
-        print("\n=== Segment Details ===")
-        for i, segment in enumerate(self.segments):
-            print(f"\nSegment {i}:")
-            print(f"  Start idx: {segment.start_idx}")
-            print(f"  End idx: {segment.end_idx}")
-            print(f"  Points range: {points[segment.start_idx:segment.end_idx + 1]}")
-            print(f"  Is reverse: {segment.is_reverse}")
-            print(f"  Transition point: {segment.transition_point}")
-
-        # First pass: Calculate initial derivatives
+        # First pass: Calculate initial derivatives for each segment
         print("\n=== Initial Derivative Calculation ===")
         for i, segment in enumerate(self.segments):
-            
             sub_spline = self.spline_class()
             segment.spline = sub_spline
             
             seg_points = points[segment.start_idx:segment.end_idx + 1]
             
-            # Check if spline class provides G2 estimation
+            # Get initial derivatives
             if hasattr(sub_spline, 'estimate_tangents_and_derivatives'):
                 segment.tangents, segment.second_derivatives = sub_spline.estimate_tangents_and_derivatives(seg_points)
             else:
                 segment.tangents, segment.second_derivatives = self._estimate_default_derivatives(seg_points)
 
-            # Add in first pass of derivative calculation:
-            print(f"\nSegment {i} Derivatives:")
-            print(f"  Points shape: {seg_points.shape}")
-            print(f"  Tangents shape: {segment.tangents.shape}")
-            print(f"  Second derivatives shape: {segment.second_derivatives.shape}")
-            print(f"  Sample tangents: \n{segment.tangents}")
-            print(f"  Sample second derivatives: \n{segment.second_derivatives}")
+        # Second pass: Ensure G2 continuity across segment boundaries
+        print("\n=== Ensuring G2 Continuity Across Segments ===")
+        for i in range(1, len(self.segments)):
+            prev_segment = self.segments[i-1]
+            curr_segment = self.segments[i]
+            
+            # Match derivatives at segment boundaries
+            if not (prev_segment.is_reverse or curr_segment.is_reverse):
+                # Direct connection - match derivatives exactly
+                curr_segment.tangents[0] = prev_segment.tangents[-1]
+                curr_segment.second_derivatives[0] = prev_segment.second_derivatives[-1]
+            else:
+                # Reverse connection - reverse derivatives and ensure smooth transition
+                reverse_factor = -1 if prev_segment.is_reverse else 1
+                curr_segment.tangents[0] = reverse_factor * prev_segment.tangents[-1]
+                curr_segment.second_derivatives[0] = reverse_factor * prev_segment.second_derivatives[-1]
 
-        # Second pass: Handle reverse nodes and ensure G2 continuity
-        print("\n=== Processing Reverse Nodes with G2 Continuity ===")
-        for i, segment in enumerate(self.segments):
-            if segment.is_reverse:
-                prev_segment = self.segments[i-1] if i > 0 else None
-                next_segment = self.segments[i+1] if i + 1 < len(self.segments) else None
-                
-                if prev_segment:
-                    # Handle tangent continuity
-                    incoming_tangent = prev_segment.tangents[-1]
-                    outgoing_tangent = segment.tangents[0]
-                    
-                    # Average tangents while preserving magnitude
-                    if np.linalg.norm(incoming_tangent) > 0 and np.linalg.norm(outgoing_tangent) > 0:
-                        reversed_incoming = -incoming_tangent
-                        averaged_tangent = (reversed_incoming + outgoing_tangent) / 2
-                        avg_magnitude = (np.linalg.norm(incoming_tangent) + np.linalg.norm(outgoing_tangent)) / 2
-                        if np.linalg.norm(averaged_tangent) > 0:
-                            averaged_tangent *= (avg_magnitude / np.linalg.norm(averaged_tangent))
-                        
-                        # Update tangents
-                        prev_segment.tangents[-1] = -averaged_tangent
-                        segment.tangents[0] = averaged_tangent
-                        
-                        # Ensure G2 continuity by matching second derivatives
-                        segment.second_derivatives[0] = -prev_segment.second_derivatives[-1]
-                    
-                elif next_segment:
-                    # Similar process for connection to next segment
-                    current_tangent = segment.tangents[-1]
-                    next_tangent = next_segment.tangents[0]
-                    
-                    if np.linalg.norm(current_tangent) > 0 and np.linalg.norm(next_tangent) > 0:
-                        reversed_current = -current_tangent
-                        averaged_tangent = (reversed_current + next_tangent) / 2
-                        avg_magnitude = (np.linalg.norm(current_tangent) + np.linalg.norm(next_tangent)) / 2
-                        if np.linalg.norm(averaged_tangent) > 0:
-                            averaged_tangent *= (avg_magnitude / np.linalg.norm(averaged_tangent))
-                        
-                        # Update tangents
-                        segment.tangents = np.array([-averaged_tangent, -averaged_tangent])
-                        next_segment.tangents[0] = averaged_tangent
-                        
-                        # Ensure G2 continuity
-                        next_segment.second_derivatives[0] = -segment.second_derivatives[-1]
-
-            # Add in second pass for reverse node processing:
-            if segment.is_reverse:
-                print(f"\nProcessing reverse segment {i}:")
-                print(f"  Start point: {points[segment.start_idx]}")
-                print(f"  End point: {points[segment.end_idx]}")
-                
-                if prev_segment:
-                    print("  Previous segment exists:")
-                    print(f"    Incoming tangent: {incoming_tangent}")
-                    print(f"    Outgoing tangent: {outgoing_tangent}")
-                    print(f"    Averaged tangent: {averaged_tangent}")
-                    print(f"    Updated prev segment end tangent: {prev_segment.tangents[-1]}")
-                    print(f"    Updated current segment start tangent: {segment.tangents[0]}")
-                    print(f"    Second derivatives at boundary: {segment.second_derivatives[0]}, {prev_segment.second_derivatives[-1]}")
-
-
-        # Final pass: Generate path points with G2 continuity
+        # Final pass: Generate path points with improved sampling
         print("\n=== Generating G2 Continuous Path ===")
         all_path_points = []
         
@@ -184,103 +120,54 @@ class SplineManager:
             
             try:
                 if hasattr(segment.spline, 'initialize_spline'):
-                    # Ensure all arrays match in length
-                    if len(segment.tangents) != len(seg_points):
-                        print(f"Warning: Adjusting tangent array length")
-                        if len(segment.tangents) > len(seg_points):
-                            segment.tangents = segment.tangents[:len(seg_points)]
-                            segment.second_derivatives = segment.second_derivatives[:len(seg_points)]
-                        else:
-                            segment.tangents = np.vstack([segment.tangents, 
-                                                        np.tile(segment.tangents[-1], 
-                                                        (len(seg_points) - len(segment.tangents), 1))])
-                            segment.second_derivatives = np.vstack([segment.second_derivatives,
-                                                                 np.tile(segment.second_derivatives[-1],
-                                                                 (len(seg_points) - len(segment.second_derivatives), 1))])
-                    
                     # Initialize with both tangents and second derivatives
-                    if hasattr(segment.spline, 'initialize_spline_g2'):
-                        segment.spline.initialize_spline_g2(seg_points, None, 
-                                                         segment.tangents, 
-                                                         segment.second_derivatives)
-                    else:
-                        segment.spline.initialize_spline(seg_points, None, segment.tangents)
+                    success = segment.spline.initialize_spline(seg_points, None, segment.tangents)
+                    if not success:
+                        print(f"Warning: Failed to initialize segment {i}")
+                        continue
+                    
                 else:
                     segment.spline.fit(seg_points[:, 0], seg_points[:, 1])
-                    
-                # Generate points
-                t_vals = np.linspace(0, 1, 250)
-                segment.points = np.array([segment.spline.get_point(t) for t in t_vals])
                 
-                # Handle segment connections
+                # Adaptive sampling based on segment length and curvature
+                seg_length = np.sum(np.sqrt(np.sum(np.diff(seg_points, axis=0)**2, axis=1)))
+                base_samples = 50
+                samples = max(base_samples, int(seg_length / 10))  # Adjust sampling density
+                
+                t_vals = np.linspace(0, 1, samples)
+                segment_points = []
+                
+                for t in t_vals:
+                    try:
+                        point = segment.spline.get_point(t)
+                        if np.all(np.isfinite(point)) and np.all(np.abs(point) < 1e6):
+                            segment_points.append(point)
+                    except Exception as e:
+                        print(f"Error generating point at t={t}: {e}")
+                        continue
+                
+                segment.points = np.array(segment_points)
+                
+                # Handle segment connections with proper overlap removal
                 if i > 0 and len(all_path_points) > 0:
-                    if np.allclose(all_path_points[-1], segment.points[0], atol=1e-7):
-                        segment_points = segment.points[1:]
-                    else:
-                        segment_points = segment.points
-                else:
-                    segment_points = segment.points
-                    
+                    if np.allclose(all_path_points[-1], segment_points[0], atol=1e-7):
+                        segment_points = segment_points[1:]
+                
                 all_path_points.extend(segment_points)
                 
             except Exception as e:
                 print(f"Error processing segment {i}: {str(e)}")
 
-            # Add in final pass for point generation:
-            print(f"\nGenerating points for segment {i}:")
-            print(f"  Input points: {seg_points}")
-            print(f"  Final tangents: {segment.tangents}")
-            print(f"  Final second derivatives: {segment.second_derivatives}")
-            
-            if i > 0:
-                print(f"  Previous end point: {all_path_points[-1] if len(all_path_points) > 0 else None}")
-                print(f"  Current start point: {segment.points[0] if segment.points is not None else None}")
+        # Ensure the path ends at the final target point
+        if len(all_path_points) > 0:
+            final_point = points[-1]
+            if not np.allclose(all_path_points[-1], final_point, atol=1e-7):
+                all_path_points[-1] = final_point
 
-
-        # Store and return final path
         self.path_points = np.array(all_path_points)
         self._compute_parameter_map()
-
-        # Add after final path generation:
-        if len(self.path_points) > 0:
-            print("\n=== Final Path Statistics ===")
-            print(f"Total points: {len(self.path_points)}")
-            print(f"Start point: {self.path_points[0]}")
-            print(f"End point: {self.path_points[-1]}")
-            print(f"Original end point: {points[-1]}")
-            endpoint_diff = np.linalg.norm(self.path_points[-1] - points[-1])
-            print(f"Distance to target endpoint: {endpoint_diff}")
-            
-            # Check continuity between segments
-            print("\n=== Segment Continuity Check ===")
-            for i in range(len(self.segments)-1):
-                if self.segments[i].points is not None and self.segments[i+1].points is not None:
-                    end_point = self.segments[i].points[-1]
-                    start_point = self.segments[i+1].points[0]
-                    gap = np.linalg.norm(end_point - start_point)
-                    print(f"Gap between segments {i} and {i+1}: {gap}")
-                    if gap > 1e-6:
-                        print(f"  Warning: Significant gap detected!")
-                        print(f"  End point of segment {i}: {end_point}")
-                        print(f"  Start point of segment {i+1}: {start_point}")
         
         return self.path_points
-    
-    # def _estimate_default_tangents(self, points: np.ndarray) -> np.ndarray:
-    #     """Provide default tangent estimation if not provided by spline class"""
-    #     n = len(points)
-    #     tangents = np.zeros_like(points)
-    #     tension = 1.5
-        
-    #     # Interior points
-    #     for i in range(1, n-1):
-    #         tangents[i] = tension * (points[i+1] - points[i-1])
-            
-    #     # Endpoints
-    #     tangents[0] = tension * (points[1] - points[0]) * 2
-    #     tangents[-1] = tension * (points[-1] - points[-2]) * 2
-        
-    #     return tangents
 
     def _compute_parameter_map(self):
         """Compute mapping from global parameter to (segment_index, local_parameter)"""

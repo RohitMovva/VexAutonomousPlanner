@@ -232,21 +232,6 @@ class BSpline(Spline):
             for i in range(2):
                 self.control_points[:,i] = A_inv @ points[:,i]
             
-            # Ensure curve passes through endpoints exactly
-            if len(points) >= 2:
-                self.control_points[0] = points[0]
-                self.control_points[-1] = points[-1]
-                
-                # Adjust neighboring control points to maintain curve shape
-                if len(points) >= 3:
-                    # Adjust first interior control point
-                    v1 = points[1] - points[0]
-                    self.control_points[1] = points[0] + v1 * 0.75
-                    
-                    # Adjust last interior control point
-                    v2 = points[-2] - points[-1]
-                    self.control_points[-2] = points[-1] + v2 * 0.75
-            
             # Transform back to original space
             self.control_points = self.control_points * self._scale + self._center
             return True

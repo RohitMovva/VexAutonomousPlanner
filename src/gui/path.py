@@ -3,8 +3,8 @@ import math
 from math import sqrt
 from typing import List
 import numpy as np
-# from splines.natural_cubic_spline import NaturalCubicSpline
-# from splines.cubic_hermite_spline import CubicHermiteSpline
+from splines.natural_cubic_spline import NaturalCubicSpline
+from splines.cubic_hermite_spline import G2HermiteSpline
 from splines.bspline import BSpline
 from splines.spline_manager import SplineManager
 from splines.b_spline_manager import BSplineManager
@@ -139,7 +139,7 @@ class PathWidget(QGraphicsView):
         self.visualize = False
         
         self.path = QPainterPath()
-        self.spline_manager = BSplineManager()
+        self.spline_manager = SplineManager(G2HermiteSpline)
 
     def fit_image_to_view(self):
         self.fitInView(self.image_item, Qt.AspectRatioMode.KeepAspectRatio)
