@@ -1,118 +1,108 @@
 import numpy as np
 import matplotlib.pyplot as plt
-from math import atan2, degrees
+from typing import List, Tuple
+from splines.quintic_hermite_spline import QuinticHermiteSpline
 
-def analyze_spline_headings(spline, points, num_samples=200):
-    """
-    Analyze and plot the headings along the spline
-    """
-    # Initialize the spline
-    spline.initialize_spline(points, None)
+def create_test_cases() -> List[Tuple[np.ndarray, np.ndarray]]:
+    """Create various test cases for the spline."""
+    test_cases = []
     
-    # Generate evenly spaced parameters
-    t_values = np.linspace(0, 1, num_samples)
+    # Test case 1: Simple curve
+    x1 = np.array([0, 1, 2])
+    y1 = np.array([0, 1, 0])
+    test_cases.append((x1, y1))
     
-    # Compute points and derivatives
-    path_points = np.array([spline.get_point(t) for t in t_values])
-    derivatives = np.array([spline.get_derivative(t) for t in t_values])
+    # Test case 2: S-curve
+    x2 = np.array([0, 1, 2, 3])
+    y2 = np.array([0, 1, -1, 0])
+    test_cases.append((x2, y2))
     
-    # Calculate headings (angles in degrees)
-    headings = np.array([degrees(atan2(deriv[1], deriv[0])) 
-                        for deriv in derivatives])
+    # Test case 3: Circle-like curve
+    theta = np.linspace(0, 2*np.pi, 8)[:-1]  # Remove last point to avoid overlap
+    x3 = np.cos(theta)
+    y3 = np.sin(theta)
+    test_cases.append((x3, y3))
     
-    # Create subplots
-    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 10))
+    return test_cases
+
+def test_spline(spline: QuinticHermiteSpline, x: np.ndarray, y: np.ndarray, 
+                title: str, ax: plt.Axes) -> None:
+    """Test the spline with given control points and plot the results."""
+    # Fit the spline
+    success = spline.fit(x, y)
+    start_tangent = np.array([1.0,0])
+    end_tangent = np.array([0.0, -1.0])
+    spline.set_starting_tangent(start_tangent)
+    spline.set_ending_tangent(end_tangent)
+    if not success:
+        print(f"Failed to fit spline for {title}")
+        return
     
-    # Plot the spline and control points
-    ax1.plot(path_points[:, 0], path_points[:, 1], 'b-', label='Spline')
-    ax1.plot(points[:, 0], points[:, 1], 'ro', label='Control points')
+    # Generate points along the spline
+    t = np.linspace(spline.parameters[0], spline.parameters[-1], 200)
+    points = np.array([spline.get_point(ti) for ti in t])
+    derivatives = np.array([spline.get_derivative(ti) for ti in t])
+    second_derivatives = np.array([spline.get_second_derivative(ti) for ti in t])
     
-    # Plot tangent vectors at control points
-    if spline.tangents is not None:
-        for point, tangent in zip(points, spline.tangents):
-            ax1.arrow(point[0], point[1], 
-                     tangent[0]*0.2, tangent[1]*0.2,
-                     head_width=0.05, head_length=0.1, fc='g', ec='g')
+    # Plot the spline
+    ax.plot(points[:, 0], points[:, 1], 'b-', label='Spline')
+    ax.plot(x, y, 'ro', label='Control Points')
     
-    ax1.grid(True)
-    ax1.legend()
-    ax1.set_title('Spline Path with Control Points')
-    ax1.axis('equal')
+    # Plot derivatives at control points
+    if spline.first_derivatives is not None:
+        scale = 0.2  # Scale factor for derivative vectors
+        for i in range(len(x)):
+            dx, dy = spline.first_derivatives[i]
+            ax.arrow(x[i], y[i], dx*scale, dy*scale, 
+                    head_width=0.05, head_length=0.1, fc='g', ec='g')
     
-    # Plot the heading vs parameter value
-    ax2.plot(t_values, headings, 'b-')
-    ax2.grid(True)
-    ax2.set_title('Spline Heading vs Parameter')
-    ax2.set_xlabel('Parameter (t)')
-    ax2.set_ylabel('Heading (degrees)')
+    ax.set_title(title)
+    ax.grid(True)
+    ax.axis('equal')
+    ax.legend()
+
+def main():
+    # Create figure
+    fig = plt.figure(figsize=(15, 5))
+    test_cases = create_test_cases()
     
-    # Add vertical lines at control point parameters
-    if spline.t_points is not None:
-        for t in spline.t_points:
-            ax2.axvline(x=t, color='r', linestyle='--', alpha=0.3)
+    # Test each case
+    for i, (x, y) in enumerate(test_cases, 1):
+        ax = fig.add_subplot(1, 3, i)
+        spline = QuinticHermiteSpline()
+        test_spline(spline, x, y, f'Test Case {i}', ax)
     
     plt.tight_layout()
     plt.show()
     
-    # Print detailed heading analysis at control points
-    print("\nHeading Analysis at Control Points:")
-    for i, t in enumerate(spline.t_points):
-        if i < len(spline.t_points) - 1:
-            # Get headings just before and after the control point
-            t_before = t - 0.001
-            t_after = t + 0.001
-            
-            if t_before >= 0:
-                deriv_before = spline.get_derivative(t_before)
-                heading_before = degrees(atan2(deriv_before[1], deriv_before[0]))
-            else:
-                heading_before = None
-                
-            deriv_at = spline.get_derivative(t)
-            heading_at = degrees(atan2(deriv_at[1], deriv_at[0]))
-            
-            deriv_after = spline.get_derivative(t_after)
-            heading_after = degrees(atan2(deriv_after[1], deriv_after[0]))
-            
-            print(f"\nControl Point {i}:")
-            if heading_before is not None:
-                print(f"Heading before: {heading_before:.2f}°")
-            print(f"Heading at point: {heading_at:.2f}°")
-            print(f"Heading after: {heading_after:.2f}°")
-            if heading_before is not None:
-                print(f"Change through point: {abs(heading_after - heading_before):.2f}°")
-
-def test_spline_headings():
-    """
-    Test the spline with different point configurations
-    """
-    from splines.quintic_hermite_spline import G2HermiteSpline
+    # Additional test: Verify continuity
+    print("\nTesting continuity at segment joints...")
+    spline = QuinticHermiteSpline()
+    x = np.array([0, 1, 2, 3])
+    y = np.array([0, 1, -1, 0])
+    spline.fit(x, y)
     
-    # Test cases
-    test_points = [
-        # Simple curve
-        np.array([
-            [0, 0],
-            [1, 1],
-            [2, 0]
-        ]),
+    # Check continuity at internal points
+    for i in range(1, len(x)-1):
+        t = spline.parameters[i]
         
-        # S-curve
-        np.array([
-            [0, 0],
-            [1, 1],
-            [2, 0],
-            [3, -1],
-            [4, 0]
-        ])
-    ]
-    
-    for i, points in enumerate(test_points):
-        print(f"\nTest Case {i + 1}:")
-        print("Points:", points)
+        # Check position continuity
+        point_left = spline.get_point(t - 1e-6)
+        point_right = spline.get_point(t + 1e-6)
+        position_diff = np.linalg.norm(point_right - point_left)
+        print(f"Position difference at t={t}: {position_diff:.2e}")
         
-        spline = G2HermiteSpline()
-        analyze_spline_headings(spline, points)
+        # Check derivative continuity
+        deriv_left = spline.get_derivative(t - 1e-6)
+        deriv_right = spline.get_derivative(t + 1e-6)
+        deriv_diff = np.linalg.norm(deriv_right - deriv_left)
+        print(f"Derivative difference at t={t}: {deriv_diff:.2e}")
+        
+        # Check second derivative continuity
+        second_deriv_left = spline.get_second_derivative(t - 1e-6)
+        second_deriv_right = spline.get_second_derivative(t + 1e-6)
+        second_deriv_diff = np.linalg.norm(second_deriv_right - second_deriv_left)
+        print(f"Second derivative difference at t={t}: {second_deriv_diff:.2e}\n")
 
 if __name__ == "__main__":
-    test_spline_headings()
+    main()

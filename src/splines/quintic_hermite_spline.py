@@ -17,6 +17,8 @@ class QuinticHermiteSpline(Spline):
         super().__init__()
         self.first_derivatives: Optional[np.ndarray] = None
         self.second_derivatives: Optional[np.ndarray] = None
+        self.starting_tangent: Optional[np.ndarray] = None
+        self.ending_tangent: Optional[np.ndarray] = None
         
     def fit(self, x: np.ndarray, y: np.ndarray, 
             first_derivatives: Optional[np.ndarray] = None,
@@ -57,7 +59,6 @@ class QuinticHermiteSpline(Spline):
         # Compute parameter values (assuming uniform parameterization)
         num_points = len(x)
         self.parameters = np.linspace(0, num_points - 1, num_points)
-        
         # If derivatives weren't provided, compute them
         if self.first_derivatives is None or self.second_derivatives is None:
             try:
@@ -81,6 +82,11 @@ class QuinticHermiteSpline(Spline):
             segment = np.vstack([p0, p1, d0, d1, dd0, dd1])
             self.segments.append(segment)
         
+        if (self.starting_tangent is not None):
+            self.set_starting_tangent(self.starting_tangent)
+        if (self.ending_tangent is not None):
+            self.set_ending_tangent(self.ending_tangent)
+
         return True
         
     def _compute_derivatives(self) -> None:
@@ -90,6 +96,20 @@ class QuinticHermiteSpline(Spline):
         Uses finite difference approximations or other numerical methods.
         """
         num_points = len(self.control_points)
+    
+        # Initialize derivative arrays if they don't exist
+        if self.first_derivatives is None:
+            self.first_derivatives = np.zeros_like(self.control_points)
+        if self.second_derivatives is None:
+            self.second_derivatives = np.zeros_like(self.control_points)
+
+        # Calculate scale factor based on average distance between points
+        distances = np.linalg.norm(np.diff(self.control_points, axis=0), axis=1)
+        scale_factor = np.mean(distances)
+        
+        # Use scale-aware step size
+        h = self.parameters[1] - self.parameters[0]
+        h = h * scale_factor  # Scale the step size
 
         # Initialize derivative arrays if they don't exist
         if self.first_derivatives is None:
@@ -396,7 +416,6 @@ class QuinticHermiteSpline(Spline):
         """
         if not self.parameters.size:
             raise ValueError("Spline has not been fitted yet")
-            
         # Check if parameter is within valid range
         t_min = self.parameters[0]
         t_max = self.parameters[-1]
@@ -439,6 +458,13 @@ class QuinticHermiteSpline(Spline):
         if self.first_derivatives is None or not len(self.segments):
             return False
             
+        # Normalize the tangent vector and scale by the average segment length
+        norm = np.linalg.norm(tangent)
+        if norm > 0:
+            distances = np.linalg.norm(np.diff(self.control_points, axis=0), axis=1)
+            scale = np.mean(distances)
+            tangent = (tangent / norm) * scale
+
         # Store the original first derivative
         original_derivative = self.first_derivatives[0].copy()
         
@@ -456,7 +482,8 @@ class QuinticHermiteSpline(Spline):
             
             # Update the first segment matrix
             self.segments[0] = np.vstack([p0, p1, d0, d1, dd0, dd1])
-            
+        
+        self.starting_tangent = tangent
         return True
     
     def set_ending_tangent(self, tangent: np.ndarray) -> bool:
@@ -476,7 +503,14 @@ class QuinticHermiteSpline(Spline):
         # Check if spline has been fitted
         if self.first_derivatives is None or not len(self.segments):
             return False
-            
+        
+        # Normalize the tangent vector and scale by the average segment length
+        norm = np.linalg.norm(tangent)
+        if norm > 0:
+            distances = np.linalg.norm(np.diff(self.control_points, axis=0), axis=1)
+            scale = np.mean(distances)
+            tangent = (tangent / norm) * scale
+
         # Store the original first derivative
         original_derivative = self.first_derivatives[-1].copy()
         
@@ -495,5 +529,7 @@ class QuinticHermiteSpline(Spline):
             
             # Update the last segment matrix
             self.segments[-1] = np.vstack([p0, p1, d0, d1, dd0, dd1])
+
+        self.ending_tangent = tangent
             
         return True
