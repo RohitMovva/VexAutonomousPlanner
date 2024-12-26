@@ -179,55 +179,55 @@ class TestQuinticHermiteSplineManager(unittest.TestCase):
             point = self.manager.get_point_at_parameter(t)
             np.testing.assert_array_almost_equal(point, expected, decimal=2)
             
-    # def test_derivatives(self):
-    #     """Test first and second derivatives computation."""
-    #     points = np.array([
-    #         [0.0, 0.0],
-    #         [1.0, 1.0],
-    #         [2.0, 0.0]
-    #     ])
+    def test_derivatives(self):
+        """Test first and second derivatives computation."""
+        points = np.array([
+            [0.0, 0.0],
+            [1.0, 1.0],
+            [2.0, 0.0]
+        ])
         
-    #     nodes = [Node(False) for _ in range(3)]
+        nodes = [Node(False) for _ in range(3)]
         
-    #     # Build the path
-    #     success = self.manager.build_path(points, nodes)
-    #     self.assertTrue(success)
+        # Build the path
+        success = self.manager.build_path(points, nodes)
+        self.assertTrue(success)
         
-    #     # Test that derivatives exist and have correct shape
-    #     t = 0.5
-    #     first_deriv = self.manager.get_derivative_at_parameter(t)
-    #     second_deriv = self.manager.get_second_derivative_at_parameter(t)
+        # Test that derivatives exist and have correct shape
+        t = 0.5
+        first_deriv = self.manager.get_derivative_at_parameter(t)
+        second_deriv = self.manager.get_second_derivative_at_parameter(t)
         
-    #     self.assertEqual(first_deriv.shape, (2,))
-    #     self.assertEqual(second_deriv.shape, (2,))
+        self.assertEqual(first_deriv.shape, (2,))
+        self.assertEqual(second_deriv.shape, (2,))
         
-    # def test_invalid_inputs(self):
-    #     """Test handling of invalid inputs."""
-    #     # Test mismatched points and nodes
-    #     points = np.array([[0.0, 0.0], [1.0, 1.0]])
-    #     nodes = [Node(False)]
+    def test_invalid_inputs(self):
+        """Test handling of invalid inputs."""
+        # Test mismatched points and nodes
+        points = np.array([[0.0, 0.0], [1.0, 1.0]])
+        nodes = [Node(False)]
         
-    #     success = self.manager.build_path(points, nodes)
-    #     self.assertFalse(success)
+        success = self.manager.build_path(points, nodes)
+        self.assertFalse(success)
         
-    #     # Test too few points
-    #     points = np.array([[0.0, 0.0]])
-    #     nodes = [Node(False)]
+        # Test too few points
+        points = np.array([[0.0, 0.0]])
+        nodes = [Node(False)]
         
-    #     success = self.manager.build_path(points, nodes)
-    #     self.assertFalse(success)
+        success = self.manager.build_path(points, nodes)
+        self.assertFalse(success)
         
-    #     # Test invalid parameter access
-    #     points = np.array([[0.0, 0.0], [1.0, 1.0], [2.0, 0.0]])
-    #     nodes = [Node(False) for _ in range(3)]
+        # Test invalid parameter access
+        points = np.array([[0.0, 0.0], [1.0, 1.0], [2.0, 0.0]])
+        nodes = [Node(False) for _ in range(3)]
         
-    #     self.manager.build_path(points, nodes)
+        self.manager.build_path(points, nodes)
         
-    #     with self.assertRaises(ValueError):
-    #         self.manager.get_point_at_parameter(-1.0)
+        with self.assertRaises(ValueError):
+            self.manager.get_point_at_parameter(-1.0)
             
-    #     with self.assertRaises(ValueError):
-    #         self.manager.get_point_at_parameter(10.0)
+        with self.assertRaises(ValueError):
+            self.manager.get_point_at_parameter(10.0)
 
 if __name__ == '__main__':
     unittest.main()

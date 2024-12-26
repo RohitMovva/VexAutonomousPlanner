@@ -1,7 +1,6 @@
-from typing import Dict, Optional, Tuple
+from typing import Optional, Tuple
 from splines.spline import Spline  # type: ignore
 import numpy as np
-import inspect
 
 class QuinticHermiteSpline(Spline):
     """

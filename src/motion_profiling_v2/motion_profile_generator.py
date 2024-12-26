@@ -553,8 +553,7 @@ def calculate_turn_velocities(turn_angle, track_width, v_max, a_max, j_max, dt):
 
 def generate_motion_profile(
     setpoint_velocities,
-    control_points,
-    segments,
+    spline_manager,
     v_max,
     a_max,
     j_max,

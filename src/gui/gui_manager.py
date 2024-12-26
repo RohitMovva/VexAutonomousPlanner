@@ -213,30 +213,6 @@ class AutonomousPlannerGUIManager(QMainWindow):
     def mirror_nodes(self):
         self.central_widget.mirror_nodes()
 
-    # def recalculate_nodes_map(self):
-    #     current_dist = 0
-    #     current_segment = 0
-
-    # for i in range(len(self.)):
-    #     if (current_dist >= segments[current_segment][-1] and current_segment < len(segments)-1):
-    #         current_dist = 0
-    #         current_segment += 1
-    #         nodes_map.append(i)
-
-    #     t_along_curve = distToTime(current_dist, segments[current_segment])
-    #     if (len(control_points[current_segment]) == 3): # Quadratic Bezier curve
-    #         headings.append(
-    #             quad_bezier_angle(t_along_curve, control_points[current_segment][0], control_points[current_segment][2], control_points[current_segment][1]))
-
-    #     else: # Cubic
-    #         headings.append(
-    #             cubic_bezier_angle(t_along_curve, control_points[current_segment][0], control_points[current_segment][2], control_points[current_segment][3], control_points[current_segment][1]))
-
-    #     if (i > 0):
-    #         current_dist += positions[i]-positions[i-1]
-    #     else:
-    #         current_dist = positions[i]
-
     def save_nodes_to_file(self):
         nodes_string = ""
         nodes = self.central_widget.get_nodes()

@@ -300,8 +300,8 @@ class PathWidget(QGraphicsView):
         self.all_coords: List[float] = []
 
         current_position: int = 0
-        segment_data: List[List[List[float]]] = [[], []]
-        segment_length: int = 0
+        # segment_data: List[List[List[float]]] = [[], []]
+        # segment_length: int = 0
         turn_values: List[float] = []
         reverse_values: List[bool] = []
         wait_times: List[float] = []
@@ -310,17 +310,17 @@ class PathWidget(QGraphicsView):
         for i in range(0, len(self.line_data)):
             if (self.nodes[i].is_reverse_node):
                 is_reversed = not is_reversed
-            line = self.line_data[i][:]
+            # line = self.line_data[i][:]
 
-            if len(line) == 3:
-                segments = create_curve_segments(line[0], line[1], line[2])
+            # if len(line) == 3:
+            #     segments = create_curve_segments(line[0], line[1], line[2])
 
-            else:
-                segments = create_curve_segments(line[0], line[1], line[2], line[3])
+            # else:
+            #     segments = create_curve_segments(line[0], line[1], line[2], line[3])
 
-            segment_data[0].append(line)
-            segment_data[1].append(segments)
-            segment_length += segments[-1]
+            # segment_data[0].append(line)
+            # segment_data[1].append(segments)
+            # segment_length += segments[-1]
 
             turn_values.append(self.nodes[i].turn)
             reverse_values.append(is_reversed)
@@ -340,7 +340,7 @@ class PathWidget(QGraphicsView):
                 nodes_map,
                 coords,
             ) = motion_profile_generator.generate_motion_profile(
-                [], segment_data[0], segment_data[1], v_max, a_max, j_max, track_width, turn_values, reverse_values, wait_times
+                [], self.spline_manager, v_max, a_max, j_max, track_width, turn_values, reverse_values, wait_times
             )
 
             if self.all_time_intervals != []:
