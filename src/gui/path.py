@@ -4,7 +4,7 @@ from math import sqrt
 from typing import List
 import numpy as np
 from splines.natural_cubic_spline import NaturalCubicSpline
-from splines.cubic_hermite_spline import G2HermiteSpline
+from splines.quintic_hermite_spline import G2HermiteSpline
 from splines.bspline import BSpline
 from splines.spline_manager import SplineManager
 from splines.b_spline_manager import BSplineManager
