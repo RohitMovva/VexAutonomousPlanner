@@ -3,423 +3,497 @@ from splines.spline import Spline  # type: ignore
 import numpy as np
 import inspect
 
-class G2HermiteSpline(Spline):
-    """G2 continuous Hermite spline implementation"""
+class QuinticHermiteSpline(Spline):
+    """
+    Quintic Hermite spline implementation that interpolates between points using
+    position, first derivative, and second derivative constraints.
+    """
     
     def __init__(self):
+        """
+        Initialize the QuinticHermiteSpline with additional arrays for storing
+        derivative constraints at control points.
+        """
         super().__init__()
-        self.coefficients: Optional[Dict] = None
-        self.path_points: Optional[np.ndarray] = None
-        self.steps: int = 50  # Number of points to generate per segment
-        self.t_points: Optional[np.ndarray] = None
-        self.tangents: Optional[np.ndarray] = None
+        self.first_derivatives: Optional[np.ndarray] = None
         self.second_derivatives: Optional[np.ndarray] = None
         
-    def compute_parameters(self, points: np.ndarray) -> np.ndarray:
+    def fit(self, x: np.ndarray, y: np.ndarray, 
+            first_derivatives: Optional[np.ndarray] = None,
+            second_derivatives: Optional[np.ndarray] = None) -> bool:
         """
-        Compute parameter values with improved spacing
+        Fit the quintic Hermite spline to a set of points with optional derivative constraints.
+        
+        Args:
+            x: x-coordinates of control points
+            y: y-coordinates of control points
+            first_derivatives: First derivatives at control points (dx/dt, dy/dt)
+            second_derivatives: Second derivatives at control points (d²x/dt², d²y/dt²)
+            
+        Returns:
+            bool: True if fitting was successful, False otherwise
         """
-        diffs = np.diff(points, axis=0)
-        segment_lengths = np.sqrt(np.sum(diffs**2, axis=1))
-        
-        # Use chord length parameterization
-        t = np.zeros(len(points))
-        t[1:] = np.cumsum(segment_lengths)
-        
-        # Normalize to [0, 1]
-        if t[-1] > 0:
-            t = t / t[-1]
-            
-            # Use gentler endpoint adjustment
-            alpha = 0.4  # Reduced from 0.8 for less aggressive adjustment
-            t = t * (1.0 - alpha) + (t ** 2) * alpha
-                
-        return t
-
-            
-    def estimate_tangents_and_derivatives(self, points: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
-        """
-        Estimate tangent vectors and second derivatives with additional debugging
-        """
-        n = len(points)
-        tangents = np.zeros_like(points, dtype=np.float64)
-        second_derivatives = np.zeros_like(points, dtype=np.float64)
-        
-        print("\n=== Tangent and Second Derivative Estimation ===")
-        
-        # Compute segment properties
-        diffs = np.diff(points, axis=0)
-        segment_lengths = np.sqrt(np.sum(diffs**2, axis=1))
-        
-        print(f"Segment lengths: {segment_lengths}")
-        
-        # Estimate interior tangents
-        for i in range(1, n-1):
-            prev_diff = points[i] - points[i-1]
-            next_diff = points[i+1] - points[i]
-            
-            # Normalize segment vectors
-            prev_dir = prev_diff / np.linalg.norm(prev_diff)
-            next_dir = next_diff / np.linalg.norm(next_diff)
-            
-            # Use bisector of angle between segments
-            tangent = prev_dir + next_dir
-            tangent_norm = np.linalg.norm(tangent)
-            if tangent_norm > 0:
-                tangents[i] = tangent / tangent_norm
-                
-            print(f"\nPoint {i}:")
-            print(f"Previous direction: {prev_dir}")
-            print(f"Next direction: {next_dir}")
-            print(f"Computed tangent: {tangents[i]}")
-        
-        # End point tangents
-        tangents[0] = diffs[0] / segment_lengths[0]
-        tangents[-1] = diffs[-1] / segment_lengths[-1]
-        
-        print(f"\nEndpoint tangents:")
-        print(f"Start: {tangents[0]}")
-        print(f"End: {tangents[-1]}")
-        
-        # Compute second derivatives
-        for i in range(1, n-1):
-            h = (segment_lengths[i-1] + segment_lengths[i]) / 2
-            second_derivatives[i] = (tangents[i+1] - tangents[i-1]) / (2 * h)
-            
-            print(f"\nPoint {i} second derivative:")
-            print(f"h = {h}")
-            print(f"Value: {second_derivatives[i]}")
-        
-        # End point second derivatives
-        second_derivatives[0] = second_derivatives[1] * 0.5
-        second_derivatives[-1] = second_derivatives[-2] * 0.5
-        
-        print("\nFinal derivatives:")
-        for i in range(n):
-            print(f"Point {i}:")
-            print(f"Tangent: {tangents[i]}")
-            print(f"Second derivative: {second_derivatives[i]}")
-        
-        return tangents, second_derivatives
-
-        
-    def initialize_spline(self, points: np.ndarray, nodes, tangents: Optional[np.ndarray] = None) -> bool:
-        print("\nG2HermiteSpline initialization:")
-        print(f"Class name: {self.__class__.__name__}")
-        print(f"Method being called: {inspect.currentframe().f_code.co_name}")
-        print(f"Has estimate_tangents_and_derivatives: {hasattr(self, 'estimate_tangents_and_derivatives')}")
-        print(f"Has compute_parameters: {hasattr(self, 'compute_parameters')}")
-        if len(points) < 2:
-            print("Not enough points")
+        # Validate input arrays
+        if len(x) != len(y):
             return False
-
-        try:
-            self.t_points = self.compute_parameters(points)
-            
-            # Estimate both tangents and second derivatives for G2 continuity
-            if tangents is None:
-                self.tangents, self.second_derivatives = self.estimate_tangents_and_derivatives(points)
-            else:
-                self.tangents = tangents
-                _, self.second_derivatives = self.estimate_tangents_and_derivatives(points)
-                
-            self.coefficients = self.compute_g2_coefficients(
-                points, self.tangents, self.second_derivatives, self.t_points)
-            
-            return True
-
-        except Exception as e:
-            print(f"Error initializing spline: {e}")
+        
+        if len(x) < 2:  # Need at least 2 points to create a spline
             return False
+        
+        # Store control points
+        self.control_points = np.column_stack((x, y))
+        
+        # Validate derivative arrays if provided
+        if first_derivatives is not None:
+            if len(first_derivatives) != len(x):
+                return False
+            self.first_derivatives = first_derivatives
+        
+        if second_derivatives is not None:
+            if len(second_derivatives) != len(x):
+                return False
+            self.second_derivatives = second_derivatives
+        
+        # Compute parameter values (assuming uniform parameterization)
+        num_points = len(x)
+        self.parameters = np.linspace(0, num_points - 1, num_points)
+        
+        # If derivatives weren't provided, compute them
+        if self.first_derivatives is None or self.second_derivatives is None:
+            try:
+                self._compute_derivatives()
+            except Exception:
+                return False
+        
+        # Initialize segment matrices for efficient evaluation
+        self.segments = []
+        for i in range(len(x) - 1):
+            # Get the control points and derivatives for this segment
+            p0 = self.control_points[i]
+            p1 = self.control_points[i + 1]
+            d0 = self.first_derivatives[i]
+            d1 = self.first_derivatives[i + 1]
+            dd0 = self.second_derivatives[i]
+            dd1 = self.second_derivatives[i + 1]
             
-    def compute_g2_coefficients(self, points: np.ndarray, 
-                            tangents: np.ndarray,
-                            second_derivatives: np.ndarray, 
-                            t: np.ndarray) -> Dict:
+            # Compute the coefficient matrix for this segment
+            # [p0, p1, d0, d1, dd0, dd1]
+            segment = np.vstack([p0, p1, d0, d1, dd0, dd1])
+            self.segments.append(segment)
+        
+        return True
+        
+    def _compute_derivatives(self) -> None:
+        
         """
-        Compute G2 continuous Hermite spline coefficients with detailed debugging
+        Compute missing first and second derivatives at control points if not provided.
+        Uses finite difference approximations or other numerical methods.
         """
-        n = len(points) - 1
-        print("\nComputing G2 coefficients with detailed debugging:")
-        
-        # Quintic Hermite basis matrix
-        M_h = np.array([
-            [ 1,  0,  0,  0,  0,  0],     # Position at t=0
-            [ 0,  1,  0,  0,  0,  0],     # First derivative at t=0
-            [ 0,  0,  0.5,  0,  0,  0],   # Second derivative at t=0
-            [ 1,  1,  0.5,  1,  1,  0.5], # Position at t=1
-            [ 0,  1,  1,  0,  1,  1],     # First derivative at t=1
-            [ 0,  0,  1,  0,  0,  1]      # Second derivative at t=1
-        ])
-        
-        print("\nBasis Matrix M_h:")
-        print(M_h)
-        
-        coeffs_x = []
-        coeffs_y = []
-        
-        # Compute segment properties
-        diffs = np.diff(points, axis=0)
-        segment_lengths = np.sqrt(np.sum(diffs**2, axis=1))
-        
-        for i in range(n):
-            dt = t[i+1] - t[i]
-            dt2 = dt * dt
-            
-            # Normalize and scale derivatives
-            chord = points[i+1] - points[i]
-            chord_length = segment_lengths[i]
-            
-            print(f"\n=== Segment {i} Analysis ===")
-            print(f"dt = {dt:.3f}")
-            print(f"Chord length = {chord_length:.3f}")
-            print(f"Points: {points[i]} -> {points[i+1]}")
-            print(f"Original tangents: {tangents[i]} -> {tangents[i+1]}")
-            print(f"Original second derivatives: {second_derivatives[i]} -> {second_derivatives[i+1]}")
-            
-            # Scale derivatives by segment properties
-            scaled_tang_i = tangents[i] * chord_length
-            scaled_tang_ip1 = tangents[i+1] * chord_length
-            scaled_acc_i = second_derivatives[i] * chord_length * chord_length
-            scaled_acc_ip1 = second_derivatives[i+1] * chord_length * chord_length
-            
-            print(f"Scaled tangents: {scaled_tang_i} -> {scaled_tang_ip1}")
-            print(f"Scaled accelerations: {scaled_acc_i} -> {scaled_acc_ip1}")
-            
-            # Create geometry vectors
-            Gx = np.array([
-                points[i][0],                    # Position at t=0
-                scaled_tang_i[0] / dt,          # First derivative at t=0
-                scaled_acc_i[0] / dt2,          # Second derivative at t=0
-                points[i+1][0],                  # Position at t=1
-                scaled_tang_ip1[0] / dt,        # First derivative at t=1
-                scaled_acc_ip1[0] / dt2         # Second derivative at t=1
-            ])
-            
-            Gy = np.array([
-                points[i][1],
-                scaled_tang_i[1] / dt,
-                scaled_acc_i[1] / dt2,
-                points[i+1][1],
-                scaled_tang_ip1[1] / dt,
-                scaled_acc_ip1[1] / dt2
-            ])
-            
-            print("\nGeometry vectors:")
-            print(f"Gx: {Gx}")
-            print(f"Gy: {Gy}")
-            
-            # Compute coefficients
-            cx = M_h @ Gx
-            cy = M_h @ Gy
-            
-            print("\nComputed coefficients:")
-            print(f"cx: {cx}")
-            print(f"cy: {cy}")
-            
-            # Verify continuity at key points
-            t_values = [0.0, 0.001, 0.999, 1.0]
-            for t_val in t_values:
-                T = np.array([1, t_val, t_val**2, t_val**3, t_val**4, t_val**5])
-                dT = np.array([0, 1, 2*t_val, 3*t_val**2, 4*t_val**3, 5*t_val**4])
-                
-                pos = np.array([T @ cx, T @ cy])
-                deriv = np.array([dT @ cx, dT @ cy])
-                heading = np.degrees(np.arctan2(deriv[1], deriv[0]))
-                
-                print(f"\nt={t_val:.3f}:")
-                print(f"T: {T}")
-                print(f"dT: {dT}")
-                print(f"Position: {pos}")
-                print(f"Derivative: {deriv}")
-                print(f"Heading: {heading:.2f}°")
-            
-            coeffs_x.append(cx)
-            coeffs_y.append(cy)
-        
-        return {
-            'x': np.array(coeffs_x),
-            'y': np.array(coeffs_y)
-        }
+        num_points = len(self.control_points)
 
+        # Initialize derivative arrays if they don't exist
+        if self.first_derivatives is None:
+            self.first_derivatives = np.zeros_like(self.control_points)
+        if self.second_derivatives is None:
+            self.second_derivatives = np.zeros_like(self.control_points)
 
-        
-    def _find_segment(self, t: float) -> int:
-        """Find the spline segment containing parameter t"""
-        if self.t_points is None:
-            raise ValueError("Spline not initialized")
+        h = self.parameters[1] - self.parameters[0]
+
+        if num_points == 2:
+            # Linear case
+            derivative = (self.control_points[1] - self.control_points[0]) / h
+            self.first_derivatives[0] = derivative
+            self.first_derivatives[1] = derivative
             
-        t = np.clip(t, 0, 1)
-        
-        if t <= self.t_points[0]:
-            return 0
-        if t >= self.t_points[-1]:
-            return len(self.t_points) - 2
+            # Zero second derivatives for linear case
+            self.second_derivatives[0] = np.zeros_like(self.control_points[0])
+            self.second_derivatives[1] = np.zeros_like(self.control_points[0])
             
-        return np.searchsorted(self.t_points, t) - 1
+        elif num_points == 3:
+            # First derivatives
+            # Forward difference for first point
+            self.first_derivatives[0] = (
+                self.control_points[1] - self.control_points[0]
+            ) / h
+            
+            # Central difference for middle point
+            self.first_derivatives[1] = (
+                self.control_points[2] - self.control_points[0]
+            ) / (2 * h)
+            
+            # Backward difference for last point
+            self.first_derivatives[2] = (
+                self.control_points[2] - self.control_points[1]
+            ) / h
+            
+            # Second derivatives
+            # Basic three-point formula for middle point
+            middle_second_deriv = (
+                self.control_points[0] - 
+                2 * self.control_points[1] + 
+                self.control_points[2]
+            ) / (h * h)
+            
+            # Copy to endpoints
+            self.second_derivatives[0] = middle_second_deriv
+            self.second_derivatives[1] = middle_second_deriv
+            self.second_derivatives[2] = middle_second_deriv
+            
+        else: # 4+ points          
+            # Compute first derivatives
+            # For interior points: central difference
+            for i in range(1, num_points - 1):
+                self.first_derivatives[i] = (
+                    self.control_points[i + 1] - self.control_points[i - 1]
+                ) / (2 * h)
+            
+            # For endpoints: one-sided differences
+            # Forward difference for first point
+            self.first_derivatives[0] = (
+                -3 * self.control_points[0] + 
+                4 * self.control_points[1] - 
+                self.control_points[2]
+            ) / (2 * h)
+            
+            # Backward difference for last point
+            self.first_derivatives[-1] = (
+                3 * self.control_points[-1] - 
+                4 * self.control_points[-2] + 
+                self.control_points[-3]
+            ) / (2 * h)
+            
+            # Compute second derivatives
+            # For interior points: central difference
+            for i in range(1, num_points - 1):
+                self.second_derivatives[i] = (
+                    self.control_points[i - 1] - 
+                    2 * self.control_points[i] + 
+                    self.control_points[i + 1]
+                ) / (h * h)
+            
+            # For endpoints: forward/backward differences
+            # Forward difference for first point
+            self.second_derivatives[0] = (
+                2 * self.control_points[0] - 
+                5 * self.control_points[1] + 
+                4 * self.control_points[2] - 
+                self.control_points[3]
+            ) / (h * h)
+            
+            # Backward difference for last point
+            self.second_derivatives[-1] = (
+                2 * self.control_points[-1] - 
+                5 * self.control_points[-2] + 
+                4 * self.control_points[-3] - 
+                self.control_points[-4]
+            ) / (h * h)
         
-    # In get_point method:
+    def _get_basis_functions(self, t: float) -> np.ndarray:
+        """
+        Compute the quintic Hermite basis functions at parameter t.
+        
+        The basis functions are:
+        H₀(t) = 1 - 10t³ + 15t⁴ - 6t⁵    # Position at start point
+        H₁(t) = 10t³ - 15t⁴ + 6t⁵        # Position at end point
+        H₂(t) = t - 6t³ + 8t⁴ - 3t⁵      # First derivative at start point
+        H₃(t) = -4t³ + 7t⁴ - 3t⁵         # First derivative at end point
+        H₄(t) = 0.5t² - 1.5t³ + 1.5t⁴ - 0.5t⁵  # Second derivative at start point
+        H₅(t) = 0.5t³ - t⁴ + 0.5t⁵       # Second derivative at end point
+        
+        Args:
+            t: Parameter value between 0 and 1
+                
+        Returns:
+            np.ndarray: Array containing the six basis functions [H₀, H₁, H₂, H₃, H₄, H₅]
+        """
+        # Precompute powers of t for efficiency
+        t2 = t * t
+        t3 = t2 * t
+        t4 = t3 * t
+        t5 = t4 * t
+        
+        # Compute the basis functions
+        H0 = 1 - 10*t3 + 15*t4 - 6*t5    # Position at start point
+        H1 = 10*t3 - 15*t4 + 6*t5        # Position at end point
+        H2 = t - 6*t3 + 8*t4 - 3*t5      # First derivative at start point
+        H3 = -4*t3 + 7*t4 - 3*t5         # First derivative at end point
+        H4 = 0.5*t2 - 1.5*t3 + 1.5*t4 - 0.5*t5  # Second derivative at start point
+        H5 = 0.5*t3 - t4 + 0.5*t5        # Second derivative at end point
+        
+        return np.array([H0, H1, H2, H3, H4, H5])
+
+    def _get_basis_derivatives(self, t: float) -> np.ndarray:
+        """
+        Compute the derivatives of quintic Hermite basis functions at parameter t.
+        
+        The derivatives of the basis functions are:
+        H₀'(t) = -30t² + 60t³ - 30t⁴        # Position at start point
+        H₁'(t) = 30t² - 60t³ + 30t⁴         # Position at end point
+        H₂'(t) = 1 - 18t² + 32t³ - 15t⁴     # First derivative at start point
+        H₃'(t) = -12t² + 28t³ - 15t⁴        # First derivative at end point
+        H₄'(t) = t - 4.5t² + 6t³ - 2.5t⁴    # Second derivative at start point
+        H₅'(t) = 1.5t² - 4t³ + 2.5t⁴        # Second derivative at end point
+        
+        Args:
+            t: Parameter value between 0 and 1
+            
+        Returns:
+            np.ndarray: Array containing the derivatives of basis functions [H₀', H₁', H₂', H₃', H₄', H₅']
+        """
+        # Precompute powers of t for efficiency
+        t2 = t * t
+        t3 = t2 * t
+        t4 = t3 * t
+        
+        # Compute the derivatives of basis functions
+        H0_prime = -30*t2 + 60*t3 - 30*t4    # Derivative of position at start point
+        H1_prime = 30*t2 - 60*t3 + 30*t4     # Derivative of position at end point
+        H2_prime = 1 - 18*t2 + 32*t3 - 15*t4 # Derivative of first derivative at start point
+        H3_prime = -12*t2 + 28*t3 - 15*t4    # Derivative of first derivative at end point
+        H4_prime = t - 4.5*t2 + 6*t3 - 2.5*t4  # Derivative of second derivative at start point
+        H5_prime = 1.5*t2 - 4*t3 + 2.5*t4    # Derivative of second derivative at end point
+        
+        return np.array([H0_prime, H1_prime, H2_prime, H3_prime, H4_prime, H5_prime])
+        
+    def _get_basis_second_derivatives(self, t: float) -> np.ndarray:
+        """
+        Compute the second derivatives of quintic Hermite basis functions at parameter t.
+        
+        The second derivatives of the basis functions are:
+        H₀''(t) = -60t + 180t² - 120t³      # Position at start point
+        H₁''(t) = 60t - 180t² + 120t³       # Position at end point
+        H₂''(t) = -36t + 96t² - 60t³        # First derivative at start point
+        H₃''(t) = -24t + 84t² - 60t³        # First derivative at end point
+        H₄''(t) = 1 - 9t + 18t² - 10t³      # Second derivative at start point
+        H₅''(t) = 3t - 12t² + 10t³          # Second derivative at end point
+        
+        Args:
+            t: Parameter value between 0 and 1
+            
+        Returns:
+            np.ndarray: Array containing the second derivatives of basis functions [H₀'', H₁'', H₂'', H₃'', H₄'', H₅'']
+        """
+        # Precompute powers of t for efficiency
+        t2 = t * t
+        t3 = t2 * t
+        
+        # Compute the second derivatives of basis functions
+        H0_double_prime = -60*t + 180*t2 - 120*t3    # Second derivative of position at start point
+        H1_double_prime = 60*t - 180*t2 + 120*t3     # Second derivative of position at end point
+        H2_double_prime = -36*t + 96*t2 - 60*t3      # Second derivative of first derivative at start point
+        H3_double_prime = -24*t + 84*t2 - 60*t3      # Second derivative of first derivative at end point
+        H4_double_prime = 1 - 9*t + 18*t2 - 10*t3    # Second derivative of second derivative at start point
+        H5_double_prime = 3*t - 12*t2 + 10*t3        # Second derivative of second derivative at end point
+        
+        return np.array([H0_double_prime, H1_double_prime, H2_double_prime, 
+                        H3_double_prime, H4_double_prime, H5_double_prime])        
     def get_point(self, t: float) -> np.ndarray:
         """
-        Get point on spline at parameter t with improved numerical stability
+        Get point on the quintic Hermite spline at parameter t.
+        Uses the basis functions to interpolate between control points.
+        
+        Args:
+            t: Parameter value between the first and last control point parameters
+            
+        Returns:
+            np.ndarray: Point coordinates [x, y]
         """
-        if self.t_points is None or self.coefficients is None:
-            raise ValueError("Spline not initialized")
+        if not self.segments:
+            raise ValueError("Spline has not been fitted yet")
             
-        i = self._find_segment(t)
-        # print(f"\nPoint generation for t={t}:")
-        # print(f"Selected segment: {i}")
-        # print(f"Segment t_points: [{self.t_points[i]}, {self.t_points[i+1]}]")
+        # Convert global parameter to local parameter and segment index
+        local_t, segment_idx = self._normalize_parameter(t)
         
-        # Normalize t to [0, 1] for this segment
-        t_local = (t - self.t_points[i]) / (self.t_points[i+1] - self.t_points[i])
-        t_local = np.clip(t_local, 0, 1)
-        # print(f"Local parameter t_local: {t_local}")
+        # Get the basis functions at the local parameter value
+        basis = self._get_basis_functions(local_t)
         
-        # Compute powers of t efficiently
-        t2 = t_local * t_local
-        t3 = t2 * t_local
-        t4 = t3 * t_local
-        t5 = t4 * t_local
+        # Get the control points and derivatives for this segment
+        segment = self.segments[segment_idx]
         
-        # Print coefficient matrices for this segment
-        # print(f"X coefficients: {self.coefficients['x'][i]}")
-        # print(f"Y coefficients: {self.coefficients['y'][i]}")
-        
-        # Extended basis vector
-        T = np.array([1, t_local, t2, t3, t4, t5])
-        # print(f"Basis vector T: {T}")
-        
-        # Compute point coordinates
-        x = T @ self.coefficients['x'][i]
-        y = T @ self.coefficients['y'][i]
-        point = np.array([x, y])
-        # print(f"Generated point: {point}")
-        
+        # Compute the point using the basis functions
+        # The segment matrix contains [p0, p1, d0, d1, dd0, dd1]
+        # Each row represents a 2D point or vector
+        point = np.zeros(2)
+        for i in range(6):
+            point += basis[i] * segment[i]
+            
         return point
-            
+        
     def get_derivative(self, t: float) -> np.ndarray:
         """
-        Get first derivative at parameter t
-        """
-        if self.t_points is None or self.coefficients is None:
-            raise ValueError("Spline not initialized")
+        Get first derivative of the quintic Hermite spline at parameter t.
+        Uses the derivatives of basis functions.
+        
+        Args:
+            t: Parameter value between the first and last control point parameters
             
-        i = self._find_segment(t)
-        dt = self.t_points[i+1] - self.t_points[i]
+        Returns:
+            np.ndarray: First derivative [dx/dt, dy/dt]
+        """
+        if not self.segments:
+            raise ValueError("Spline has not been fitted yet")
+            
+        # Convert global parameter to local parameter and segment index
+        local_t, segment_idx = self._normalize_parameter(t)
         
-        # Normalize t to [0, 1] for this segment
-        t_local = (t - self.t_points[i]) / dt
-        t_local = np.clip(t_local, 0, 1)
+        # Get the basis function derivatives at the local parameter value
+        basis_derivatives = self._get_basis_derivatives(local_t)
         
-        # Derivative of the extended basis
-        T = np.array([0, 1, 2*t_local, 3*t_local**2, 4*t_local**3, 5*t_local**4])
+        # Get the control points and derivatives for this segment
+        segment = self.segments[segment_idx]
         
-        # Compute derivatives using coefficient matrices
-        dx = T @ self.coefficients['x'][i] / dt
-        dy = T @ self.coefficients['y'][i] / dt
-        
-        return np.array([dx, dy])
+        # Compute the derivative using the basis function derivatives
+        # The segment matrix contains [p0, p1, d0, d1, dd0, dd1]
+        derivative = np.zeros(2)
+        for i in range(6):
+            derivative += basis_derivatives[i] * segment[i]
+            
+        return derivative
         
     def get_second_derivative(self, t: float) -> np.ndarray:
         """
-        Get second derivative at parameter t
-        """
-        if self.t_points is None or self.coefficients is None:
-            raise ValueError("Spline not initialized")
+        Get second derivative of the quintic Hermite spline at parameter t.
+        Uses the second derivatives of basis functions.
+        
+        Args:
+            t: Parameter value between the first and last control point parameters
             
-        i = self._find_segment(t)
-        dt = self.t_points[i+1] - self.t_points[i]
-        dt2 = dt * dt
-        
-        # Normalize t to [0, 1] for this segment
-        t_local = (t - self.t_points[i]) / dt
-        t_local = np.clip(t_local, 0, 1)
-        
-        # Second derivative of the extended basis
-        T = np.array([0, 0, 2, 6*t_local, 12*t_local**2, 20*t_local**3])
-        
-        # Compute second derivatives using coefficient matrices
-        d2x = T @ self.coefficients['x'][i] / dt2
-        d2y = T @ self.coefficients['y'][i] / dt2
-        
-        return np.array([d2x, d2y])
-        
-    def build_path(self, points: np.ndarray, 
-                   nodes = None,
-                   tangents: Optional[np.ndarray] = None,
-                   steps: Optional[int] = None) -> np.ndarray:
+        Returns:
+            np.ndarray: Second derivative [d²x/dt², d²y/dt²]
         """
-        Build a path through the given points using G2 continuous Hermite splines
-        """
-        if steps is not None:
-            self.steps = steps
+        if not self.segments:
+            raise ValueError("Spline has not been fitted yet")
             
-        # Initialize the spline
-        if not self.initialize_spline(points, nodes, tangents):
-            return points
-            
-        # Generate points segment by segment
-        path_points = []
-        n_segments = len(points) - 1
+        # Convert global parameter to local parameter and segment index
+        local_t, segment_idx = self._normalize_parameter(t)
         
-        for i in range(n_segments):
-            t_start = self.t_points[i]
-            t_end = self.t_points[i + 1]
-            t_segment = np.linspace(t_start, t_end, self.steps)
+        # Get the basis function second derivatives at the local parameter value
+        basis_second_derivatives = self._get_basis_second_derivatives(local_t)
+        
+        # Get the control points and derivatives for this segment
+        segment = self.segments[segment_idx]
+        
+        # Compute the second derivative using the basis function second derivatives
+        # The segment matrix contains [p0, p1, d0, d1, dd0, dd1]
+        second_derivative = np.zeros(2)
+        for i in range(6):
+            second_derivative += basis_second_derivatives[i] * segment[i]
             
-            for t in t_segment:
-                try:
-                    point = self.get_point(t)
-                    if np.all(np.isfinite(point)) and np.all(np.abs(point) < 1e6):
-                        path_points.append(point)
-                    else:
-                        print(f"Warning: Invalid point generated at t={t}: {point}")
-                except Exception as e:
-                    print(f"Error generating point at t={t}: {e}")
-                    continue
-                    
-        self.path_points = np.array(path_points)
-        return self.path_points
-
-    def update_end_tangent(self, new_tangent: np.ndarray) -> bool:
+        return second_derivative
+        
+    def _normalize_parameter(self, t: float) -> Tuple[float, int]:
         """
-        Update the end tangent while maintaining G2 continuity
+        Convert global parameter t to local parameter and segment index.
+        
+        Args:
+            t: Global parameter value between self.parameters[0] and self.parameters[-1]
+            
+        Returns:
+            Tuple[float, int]: Local parameter value (0 to 1) and segment index
+            
+        Raises:
+            ValueError: If t is outside the valid parameter range
         """
-        if (self.coefficients is None or self.t_points is None or 
-            self.tangents is None or self.second_derivatives is None):
-            print("Cannot update: spline not initialized")
+        if not self.parameters.size:
+            raise ValueError("Spline has not been fitted yet")
+            
+        # Check if parameter is within valid range
+        t_min = self.parameters[0]
+        t_max = self.parameters[-1]
+        
+        if t < t_min or t > t_max:
+            raise ValueError(f"Parameter t={t} outside valid range [{t_min}, {t_max}]")
+        
+        # Find which segment the parameter falls into
+        num_segments = len(self.segments)
+        segment_length = (t_max - t_min) / num_segments
+        
+        # Calculate segment index
+        segment_idx = int((t - t_min) / segment_length)
+        
+        # Handle edge case where t == t_max
+        if segment_idx == num_segments:
+            segment_idx = num_segments - 1
+        
+        # Calculate local parameter (0 to 1) within the segment
+        segment_start = t_min + segment_idx * segment_length
+        local_t = (t - segment_start) / segment_length
+        
+        return local_t, segment_idx
+    
+    def set_starting_tangent(self, tangent: np.ndarray) -> bool:
+        """
+        Set the tangent (first derivative) at the start of the spline.
+        
+        Args:
+            tangent: np.ndarray of shape (2,) representing the tangent vector [dx/dt, dy/dt]
+            
+        Returns:
+            bool: True if setting the tangent was successful, False otherwise
+        """
+        # Validate input
+        if not isinstance(tangent, np.ndarray) or tangent.shape != (2,):
             return False
             
-        try:
-            # Update the last tangent
-            self.tangents[-1] = new_tangent
-            
-            # Recompute second derivatives to maintain G2 continuity
-            last_idx = len(self.t_points) - 1
-            if last_idx > 1:
-                dt = self.t_points[-1] - self.t_points[-2]
-                self.second_derivatives[-1] = (new_tangent - self.tangents[-2]) / dt
-            
-            # Recompute coefficients for the last segment
-            points = np.array([self.get_point(t) for t in self.t_points])
-            last_coeffs = self.compute_g2_coefficients(
-                points[-2:], 
-                self.tangents[-2:],
-                self.second_derivatives[-2:],
-                self.t_points[-2:]
-            )
-            
-            # Update the last segment's coefficients
-            self.coefficients['x'][-1] = last_coeffs['x'][0]
-            self.coefficients['y'][-1] = last_coeffs['y'][0]
-            
-            return True
-            
-        except Exception as e:
-            print(f"Error updating end tangent: {e}")
+        # Check if spline has been fitted
+        if self.first_derivatives is None or not len(self.segments):
             return False
             
-    def get_path_points(self) -> Optional[np.ndarray]:
-        """Get the most recently generated path points"""
-        return self.path_points
+        # Store the original first derivative
+        original_derivative = self.first_derivatives[0].copy()
+        
+        # Update the first derivative
+        self.first_derivatives[0] = tangent
+        
+        # Update only the first segment since other segments are unaffected
+        if len(self.segments) > 0:
+            p0 = self.control_points[0]
+            p1 = self.control_points[1]
+            d0 = tangent  # New tangent
+            d1 = self.first_derivatives[1]
+            dd0 = self.second_derivatives[0]
+            dd1 = self.second_derivatives[1]
+            
+            # Update the first segment matrix
+            self.segments[0] = np.vstack([p0, p1, d0, d1, dd0, dd1])
+            
+        return True
+    
+    def set_ending_tangent(self, tangent: np.ndarray) -> bool:
+        """
+        Set the tangent (first derivative) at the end of the spline.
+        
+        Args:
+            tangent: np.ndarray of shape (2,) representing the tangent vector [dx/dt, dy/dt]
+            
+        Returns:
+            bool: True if setting the tangent was successful, False otherwise
+        """
+        # Validate input
+        if not isinstance(tangent, np.ndarray) or tangent.shape != (2,):
+            return False
+            
+        # Check if spline has been fitted
+        if self.first_derivatives is None or not len(self.segments):
+            return False
+            
+        # Store the original first derivative
+        original_derivative = self.first_derivatives[-1].copy()
+        
+        # Update the last first derivative
+        self.first_derivatives[-1] = tangent
+        
+        # Update only the last segment since other segments are unaffected
+        if len(self.segments) > 0:
+            last_idx = len(self.segments) - 1
+            p0 = self.control_points[-2]  # Second-to-last point
+            p1 = self.control_points[-1]  # Last point
+            d0 = self.first_derivatives[-2]  # Second-to-last derivative
+            d1 = tangent  # New ending tangent
+            dd0 = self.second_derivatives[-2]  # Second-to-last second derivative
+            dd1 = self.second_derivatives[-1]  # Last second derivative
+            
+            # Update the last segment matrix
+            self.segments[-1] = np.vstack([p0, p1, d0, d1, dd0, dd1])
+            
+        return True
