@@ -463,9 +463,6 @@ class QuinticHermiteSpline(Spline):
             distances = np.linalg.norm(np.diff(self.control_points, axis=0), axis=1)
             scale = np.mean(distances)
             tangent = (tangent / norm) * scale
-
-        # Store the original first derivative
-        original_derivative = self.first_derivatives[0].copy()
         
         # Update the first derivative
         self.first_derivatives[0] = tangent
@@ -509,16 +506,12 @@ class QuinticHermiteSpline(Spline):
             distances = np.linalg.norm(np.diff(self.control_points, axis=0), axis=1)
             scale = np.mean(distances)
             tangent = (tangent / norm) * scale
-
-        # Store the original first derivative
-        original_derivative = self.first_derivatives[-1].copy()
         
         # Update the last first derivative
         self.first_derivatives[-1] = tangent
         
         # Update only the last segment since other segments are unaffected
         if len(self.segments) > 0:
-            last_idx = len(self.segments) - 1
             p0 = self.control_points[-2]  # Second-to-last point
             p1 = self.control_points[-1]  # Last point
             d0 = self.first_derivatives[-2]  # Second-to-last derivative

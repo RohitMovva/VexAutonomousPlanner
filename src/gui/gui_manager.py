@@ -590,7 +590,6 @@ class AutonomousPlannerGUIManager(QMainWindow):
         )
 
         x, y = zip(*self.central_widget.all_coords)
-        y = [-1 * i for i in y]
 
         utilities.create_mpl_plot(
             x,
@@ -600,7 +599,7 @@ class AutonomousPlannerGUIManager(QMainWindow):
             "Coordinate Profile",
             "X",
             "Y",
-            (-1 * (12.3266567842 * 6), (12.3266567842 * 6)),
-            (-1 * (12.3266567842 * 6), (12.3266567842 * 6)),
+            ((-6), (6)),
+            ((-6), (6)),
             1,
         )

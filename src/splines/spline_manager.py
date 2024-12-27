@@ -247,7 +247,7 @@ class QuinticHermiteSplineManager:
         """
         if self._precomputed_properties is None:
             self.precompute_path_properties()
-        return self._interpolate_property(t, 'headings')
+        return -1*self._interpolate_property(t, 'headings')
     
     def get_curvature(self, t: float) -> float:
         """

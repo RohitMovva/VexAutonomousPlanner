@@ -349,8 +349,9 @@ class PathWidget(QGraphicsView):
         points = np.array([[point.x(), point.y()] for point in points])
 
         for i in range(len(points)):
-            points[i][0] = (points[i][0] / (2000)) * 12.3266567842
-            points[i][1] = (points[i][1] / (2000)) * 12.3266567842
+            points[i][0] = (points[i][0] / (2000) - 0.5) * 12.3266567842
+            points[i][1] = (points[i][1] / (2000) - 0.5) * 12.3266567842
+
         self.spline_manager.build_path(points, nodes)
         t_values = np.linspace(0, len(points) - 1, 200)
         spline_points = np.array([self.spline_manager.get_point_at_parameter(t) for t in t_values])
@@ -358,8 +359,8 @@ class PathWidget(QGraphicsView):
         if len(spline_points) > 0:
             self.path = QPainterPath()
             for i in range(len(spline_points)):
-                spline_points[i][0] = (spline_points[i][0] / (12.3266567842)) * 2000
-                spline_points[i][1] = (spline_points[i][1] / (12.3266567842)) * 2000
+                spline_points[i][0] = (spline_points[i][0] / (12.3266567842) + 0.5) * 2000
+                spline_points[i][1] = (spline_points[i][1] / (12.3266567842) + 0.5) * 2000
             self.path.moveTo(spline_points[0][0], spline_points[0][1])
             for p in spline_points[1:]:
                 self.path.lineTo(p[0], p[1])

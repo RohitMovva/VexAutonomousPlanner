@@ -93,14 +93,13 @@ def generate_other_lists(velocities, spline_manager: QuinticHermiteSplineManager
 
         headings.append(spline_manager.get_heading(t_along_curve))
         x, y = spline_manager.get_point_at_parameter(t_along_curve)
-
         if (reverse_values[current_segment]):
-            headings[-1] = (headings[-1] - 180)
+            headings[-1] = (headings[-1] - math.pi)
             velocities[i] = -velocities[i]
             accelerations[i] = -accelerations[i]
 
-        if (headings[-1] < -180):
-            headings[-1] += 360
+        if (headings[-1] < -math.pi):
+            headings[-1] += 2*math.pi
 
         coords.append(
             (
@@ -118,13 +117,13 @@ def generate_other_lists(velocities, spline_manager: QuinticHermiteSplineManager
         if i > 0:
             # Calculate the change in heading angle
             delta_heading = headings[i] - headings[i - 1]
-            # Normalize the angle difference to be between -180 and 180 degrees
-            if delta_heading > 180:
-                delta_heading -= 360
-            elif delta_heading < -180:
-                delta_heading += 360
+            # Normalize the angle difference to be between -pi and pi
+            if delta_heading > math.pi:
+                delta_heading -= 2*math.pi
+            elif delta_heading < -math.pi:
+                delta_heading += 2*math.pi
             # Convert to radians per second
-            angular_velocity = (delta_heading * (math.pi / 180)) / dt
+            angular_velocity = (delta_heading) / dt
             angular_velocities.append(angular_velocity)
         else:
             # For the first point, assume zero angular velocity
@@ -137,8 +136,8 @@ def generate_other_lists(velocities, spline_manager: QuinticHermiteSplineManager
     for k in range(len(turn_vals)):
         i = nodes_map[k] + coffset
         temp_headings = [headings[i]-turn_vals[k]] # need to reach that heading so subtract value we're turning by before that point
-        if (temp_headings[0] < -180):
-            temp_headings[0] += 360
+        if (temp_headings[0] < -math.pi):
+            temp_headings[0] += 2*math.pi
         temp_angular_velocities = []
         temp_coords = []
         temp_positions = []
@@ -147,11 +146,11 @@ def generate_other_lists(velocities, spline_manager: QuinticHermiteSplineManager
         temp_time_intervals = []
 
         for j in range(len(turn_insertions[k])):
-            temp_headings.append((turn_insertions[k][j] * dt) * (180/math.pi) + temp_headings[-1])
-            if (temp_headings[-1] < -180):
-                temp_headings[-1] += 360
-            elif (temp_headings[-1] > 180):
-                temp_headings[-1] -= 360
+            temp_headings.append((turn_insertions[k][j] * dt) + temp_headings[-1])
+            if (temp_headings[-1] < -math.pi):
+                temp_headings[-1] += 2*math.pi
+            elif (temp_headings[-1] > math.pi):
+                temp_headings[-1] -= 2*math.pi
             temp_angular_velocities.append(turn_insertions[k][j])
             temp_coords.append(coords[i])
             temp_positions.append(positions[i])
@@ -288,7 +287,7 @@ def calculate_turn_velocities(turn_angle, track_width, v_max, a_max, j_max, dt):
     radius = track_width / 2
     # Find arc length based on radius and angle
     # arc_length = (turn_angle / 360) * 2 * math.pi * radius
-    arc_length = (math.pi/180 * abs(turn_angle)) * radius
+    arc_length = (abs(turn_angle)) * radius
 
     # Find time needed for each phase, this is acceleration, constant velocity, and deceleration
     acceleration_time = v_max / a_max
@@ -386,26 +385,18 @@ def generate_motion_profile(
     velocities.append(0)
 
     current_dist = 0
-    print("len(velocities) = ", len(velocities))
     for i in range(0, len(velocities)):
         # print("i = ", i)
         t_along_curve = spline_manager.distance_to_time(current_dist)
         curvature = spline_manager.get_curvature(t_along_curve)
         heading = spline_manager.get_heading(t_along_curve)
 
-        # print("t_along_curve = ", t_along_curve)
-        # print("curvature = ", curvature)
-        # print("heading = ", heading)
-
         curvatures.append(curvature)
         headings.append(heading)
         adjusted_vmax = limit_velocity(v_max, v_max, curvature, track_width)
-        # print("adjusted_vmax = ", adjusted_vmax)
         velocities[i] = adjusted_vmax
         current_dist += dd
 
-        # print(i, curvature, current_segment, heading, t_along_curve)
-    print("Calculating velocities")
     velocities[0] = 0
     velocities[-1] = 0
 
@@ -443,5 +434,4 @@ def generate_motion_profile(
         
         turn_insertions.append(angular_velocities)
     res = generate_other_lists(new_velocities, spline_manager, dt, turn_insertions, turn_values, reverse_values, wait_times)
-    # print(res)
     return res
