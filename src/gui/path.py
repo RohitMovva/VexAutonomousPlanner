@@ -1,6 +1,5 @@
 import json
 import math
-from math import sqrt
 from typing import List
 import numpy as np
 from splines.spline_manager import QuinticHermiteSplineManager
@@ -16,7 +15,6 @@ from PyQt6.QtWidgets import (
 )
 
 import utilities
-from bezier import cubic_bezier, quadratic_bezier
 from gui import node
 from motion_profiling_v2 import motion_profile_generator
 
@@ -39,33 +37,6 @@ class StyledRectItem(QGraphicsRectItem):
         fill_color = QColor(self._color)
         fill_color.setAlpha(40)  # Very transparent fill (0-255)
         self.setBrush(QBrush(fill_color))
-
-
-def create_curve_segments(start, end, control1, control2=None) -> List[float]:
-    numsegments = 250
-    segments = [0]
-    ox, oy = None, None
-    if control2:
-        ox, oy = cubic_bezier.cubic_bezier_point(start, control1, control2, end, 0)
-    else:
-        ox, oy = quadratic_bezier.quadratic_bezier_point(start, control1, end, 0)
-    dx, dy = None, None
-    currlen = 0
-    for i in range(1, numsegments + 1):
-        t = (i) / (numsegments)
-        cx, cy = None, None
-        if control2:
-            cx, cy = cubic_bezier.cubic_bezier_point(start, control1, control2, end, t)
-        else:
-            cx, cy = quadratic_bezier.quadratic_bezier_point(start, control1, end, t)
-
-        dx, dy = ox - cx, oy - cy
-        currlen += sqrt(dx**2 + dy**2)
-        segments.append(currlen * (12.3266567842 / 2000))
-
-        ox, oy = cx, cy
-    return segments
-
 
 class PathWidget(QGraphicsView):
     def __init__(
@@ -307,20 +278,9 @@ class PathWidget(QGraphicsView):
         wait_times: List[float] = []
         is_reversed: bool = False
         
-        for i in range(0, len(self.line_data)):
+        for i in range(0, len(self.nodes)-1):
             if (self.nodes[i].is_reverse_node):
                 is_reversed = not is_reversed
-            # line = self.line_data[i][:]
-
-            # if len(line) == 3:
-            #     segments = create_curve_segments(line[0], line[1], line[2])
-
-            # else:
-            #     segments = create_curve_segments(line[0], line[1], line[2], line[3])
-
-            # segment_data[0].append(line)
-            # segment_data[1].append(segments)
-            # segment_length += segments[-1]
 
             turn_values.append(self.nodes[i].turn)
             reverse_values.append(is_reversed)
@@ -360,17 +320,17 @@ class PathWidget(QGraphicsView):
             )
             self.all_coords.extend(coords)
 
-            current_position += segment_length
-            segment_data = [[], []]
+            # current_position += segment_length
+            # segment_data = [[], []]
             turn_values = []
             wait_times = []
             reverse_values = []
-            segment_length = 0
+            # segment_length = 0
 
 
         print("Accumulated value", self.all_positions[-1])
-        print("Goal value:", current_position)
-        print("Error:", current_position-self.all_positions[-1])
+        print("Goal value:", self.spline_manager.get_total_arc_length())
+        print("Error:", self.spline_manager.get_total_arc_length()-self.all_positions[-1])
         self.all_nodes_map.append(len(self.all_time_intervals))
 
         return (
@@ -389,8 +349,8 @@ class PathWidget(QGraphicsView):
         points = np.array([[point.x(), point.y()] for point in points])
 
         for i in range(len(points)):
-            points[i][0] = (points[i][0] / (2000)) * 12.3266567842 * 12
-            points[i][1] = (points[i][1] / (2000)) * 12.3266567842 * 12
+            points[i][0] = (points[i][0] / (2000)) * 12.3266567842
+            points[i][1] = (points[i][1] / (2000)) * 12.3266567842
         self.spline_manager.build_path(points, nodes)
         t_values = np.linspace(0, len(points) - 1, 200)
         spline_points = np.array([self.spline_manager.get_point_at_parameter(t) for t in t_values])
@@ -398,8 +358,8 @@ class PathWidget(QGraphicsView):
         if len(spline_points) > 0:
             self.path = QPainterPath()
             for i in range(len(spline_points)):
-                spline_points[i][0] = (spline_points[i][0] / (12.3266567842 * 12)) * 2000
-                spline_points[i][1] = (spline_points[i][1] / (12.3266567842 * 12)) * 2000
+                spline_points[i][0] = (spline_points[i][0] / (12.3266567842)) * 2000
+                spline_points[i][1] = (spline_points[i][1] / (12.3266567842)) * 2000
             self.path.moveTo(spline_points[0][0], spline_points[0][1])
             for p in spline_points[1:]:
                 self.path.lineTo(p[0], p[1])

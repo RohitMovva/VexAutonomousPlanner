@@ -1,6 +1,5 @@
-from typing import List, Optional, Tuple, Dict
+from typing import List, Tuple, Dict
 import numpy as np
-from dataclasses import dataclass
 from splines.quintic_hermite_spline import QuinticHermiteSpline
 from gui.node import Node
 
@@ -17,6 +16,7 @@ class QuinticHermiteSplineManager:
         self.splines: List[QuinticHermiteSpline]
         self.nodes: List[Node]
         self.path_parameters: Dict  # Store parameter mappings between global and local
+        self.arc_length: float  # Store the total arc length of the path
         
     def build_path(self, points: np.ndarray, nodes: List[Node]) -> bool:
         """
@@ -66,6 +66,8 @@ class QuinticHermiteSplineManager:
                 
                 if nodes[i].is_reverse_node and i < len(points) - 1:
                     current_start_idx = i
+
+        self.arc_length = None
 
         return True
     
@@ -170,19 +172,202 @@ class QuinticHermiteSplineManager:
             Tuple of (first_derivative, second_derivative) at transition
         """
         pass
+
+    def distance_to_time(self, distance: float) -> float:
+        """
+        Convert a distance along the path to the corresponding parameter t.
+        Uses binary search to find the parameter value that corresponds to the given arc length.
+        
+        Args:
+            distance: Distance along the path from the start
+            
+        Returns:
+            float: Parameter t that corresponds to the given distance
+            
+        Raises:
+            ValueError: If no splines have been initialized or distance is invalid
+        """
+        if not self.splines:
+            raise ValueError("No splines have been initialized")
+            
+        # Get total path length for validation
+        total_length = self.get_total_arc_length()
+        if (distance < 0):
+            distance = 0
+        if (distance > total_length):
+            distance = total_length
+        # if distance < 0 or distance > total_length:
+            # raise ValueError(f"Distance {distance} outside valid range [0, {total_length}]")
+            
+        # Special cases
+        if distance == 0:
+            return 0
+        if distance == total_length:
+            return len(self.nodes) - 1
+            
+        # Binary search to find parameter t
+        t_min = 0
+        t_max = len(self.nodes) - 1
+        tolerance = 1e-6  # Tolerance for distance comparison
+        max_iterations = 50  # Maximum number of binary search iterations
+        
+        # Function to compute arc length from start to parameter t
+        def compute_length_to_t(t: float) -> float:
+            length = 0.0
+            # For each spline segment up to t
+            curr_t = 0
+            for spline in self.splines:
+                segment_length = t - curr_t
+                if segment_length <= 0:
+                    break
+                    
+                # Calculate length for this segment using Simpson's rule
+                n = 100  # number of intervals
+                h = min(1.0, segment_length) / n  # step size
+                
+                segment_length = 0.0
+                # First point
+                derivative = spline.get_derivative(0)
+                segment_length += np.linalg.norm(derivative)
+                
+                # Middle points
+                for i in range(1, n):
+                    local_t = i * h
+                    derivative = spline.get_derivative(local_t)
+                    weight = 4 if i % 2 == 1 else 2
+                    segment_length += weight * np.linalg.norm(derivative)
+                
+                # Last point
+                derivative = spline.get_derivative(min(1.0, segment_length))
+                segment_length += np.linalg.norm(derivative)
+                
+                # Complete Simpson's rule calculation
+                length += (h / 3) * segment_length
+                curr_t += 1
+                
+                if curr_t >= t:
+                    break
+                    
+            return length
+            
+        # Binary search
+        for _ in range(max_iterations):
+            t_mid = (t_min + t_max) / 2
+            length_at_t = compute_length_to_t(t_mid)
+            
+            if abs(length_at_t - distance) < tolerance:
+                return t_mid
+                
+            if length_at_t < distance:
+                t_min = t_mid
+            else:
+                t_max = t_mid
+                
+        # Return best approximation after max iterations
+        return (t_min + t_max) / 2
+
     
     def get_total_arc_length(self) -> float:
         """
-        Calculate total arc length of the complete path.
+        Calculate the total arc length of the entire path by summing the
+        arc lengths of all individual spline segments.
+
+        Returns:
+            float: Total arc length of the complete path
+
+        Raises:
+            ValueError: If no splines have been initialized
         """
-        pass
+        if not self.splines:
+            raise ValueError("No splines have been initialized")
+            
+        # Check if we have cached arc length
+        if self.arc_length is not None:
+            return self.arc_length
+            
+        # Sum up the arc lengths of all spline segments
+        total_length = 0.0
+        for spline in self.splines:
+            total_length += spline.get_total_arc_length()
+            
+        # Cache the result for future use
+        self.arc_length = total_length
+        
+        return total_length
     
+    def get_heading(self, t: float) -> float:
+        """
+        Get the heading (angle in radians) at parameter t on the complete path.
+        The heading is calculated as the angle of the tangent vector (first derivative)
+        relative to the positive x-axis.
+        
+        Args:
+            t: Parameter value normalized to the entire path length
+            
+        Returns:
+            float: Heading angle in radians in range [-π, π]
+            
+        Raises:
+            ValueError: If no splines have been initialized
+        """
+        if not self.splines:
+            raise ValueError("No splines have been initialized")
+            
+        # Get first derivative at parameter t
+        derivative = self.get_derivative_at_parameter(t)
+        
+        # Calculate heading angle using arctan2
+        # arctan2(y, x) returns angle in range [-π, π]
+        heading = np.arctan2(derivative[1], derivative[0])
+        
+        return heading
+
     def get_curvature_at_parameter(self, t: float) -> float:
         """
         Calculate curvature at parameter t on the complete path.
+        
+        The curvature is calculated using the formula:
+        κ = |x'y'' - y'x''| / (x'² + y'²)^(3/2)
+        where x', y' are components of the first derivative and
+        x'', y'' are components of the second derivative.
+        
+        Args:
+            t: Parameter value normalized to the entire path length
+            
+        Returns:
+            float: Curvature at the given parameter value
+            
+        Raises:
+            ValueError: If no splines have been initialized
         """
-        pass
-    
+        if not self.splines:
+            raise ValueError("No splines have been initialized")
+            
+        # Get first and second derivatives at parameter t
+        first_deriv = self.get_derivative_at_parameter(t)
+        second_deriv = self.get_second_derivative_at_parameter(t)
+        
+        # Extract x and y components
+        x_prime = first_deriv[0]
+        y_prime = first_deriv[1]
+        x_double_prime = second_deriv[0]
+        y_double_prime = second_deriv[1]
+        
+        # Calculate denominator (speed squared)
+        speed_squared = x_prime**2 + y_prime**2
+        
+        # Handle special case where speed is zero (singular point)
+        if speed_squared < 1e-10:  # Small threshold to avoid division by zero
+            return 0.0
+            
+        # Calculate numerator (cross product of first and second derivatives)
+        numerator = abs(x_prime * y_double_prime - y_prime * x_double_prime)
+        
+        # Calculate curvature
+        curvature = numerator / (speed_squared ** 1.5)
+        
+        return curvature
+        
     def validate_path_continuity(self) -> bool:
         """
         Validate C2 continuity at all transition points between splines.

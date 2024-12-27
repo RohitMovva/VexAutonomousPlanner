@@ -532,3 +532,127 @@ class QuinticHermiteSpline(Spline):
         self.ending_tangent = tangent
             
         return True
+    
+    def get_arc_length(self, t_start: float, t_end: float, num_points: int = 20) -> float:
+        """
+        Calculate the arc length of the spline between two parameter values using
+        Gaussian quadrature numerical integration.
+        
+        The arc length is computed by integrating the magnitude of the first derivative
+        vector over the parameter range: ∫ |dP/dt| dt from t_start to t_end
+        
+        Args:
+            t_start: Starting parameter value
+            t_end: Ending parameter value
+            num_points: Number of Gaussian quadrature points (default=20)
+            
+        Returns:
+            float: Approximate arc length between the two parameter values
+            
+        Raises:
+            ValueError: If t_start or t_end are outside the valid parameter range,
+                    or if t_start >= t_end
+        """
+        if not self.segments:
+            raise ValueError("Spline has not been fitted yet")
+            
+        if t_start >= t_end:
+            raise ValueError("t_start must be less than t_end")
+            
+        # Validate parameter range
+        t_min = self.parameters[0]
+        t_max = self.parameters[-1]
+        if t_start < t_min or t_end > t_max:
+            raise ValueError(f"Parameters must be within range [{t_min}, {t_max}]")
+        
+        # Gauss-Legendre quadrature points and weights for the interval [-1, 1]
+        # We'll use numpy's built-in function
+        points, weights = np.polynomial.legendre.leggauss(num_points)
+        
+        # Transform Gaussian quadrature points from [-1, 1] to [t_start, t_end]
+        half_length = (t_end - t_start) / 2
+        midpoint = (t_start + t_end) / 2
+        transformed_points = points * half_length + midpoint
+        
+        # Calculate the derivative magnitude at each quadrature point
+        derivative_magnitudes = np.array([
+            np.linalg.norm(self.get_derivative(t)) 
+            for t in transformed_points
+        ])
+        
+        # Compute the integral using the quadrature weights
+        # The half_length factor is due to the change of variables formula
+        arc_length = half_length * np.sum(weights * derivative_magnitudes)
+        
+        return float(arc_length)
+
+    def get_total_arc_length(self) -> float:
+        """
+        Calculate the total arc length of the entire spline.
+        
+        Returns:
+            float: Total arc length of the spline
+            
+        Raises:
+            ValueError: If the spline has not been fitted yet
+        """
+        if not self.segments:
+            raise ValueError("Spline has not been fitted yet")
+            
+        return self.get_arc_length(self.parameters[0], self.parameters[-1])
+
+    def get_parameter_by_arc_length(self, arc_length: float, 
+                                tolerance: float = 1e-6, 
+                                max_iterations: int = 50) -> float:
+        """
+        Find the parameter value t that corresponds to traveling a specific arc length
+        along the spline from the start. Uses binary search.
+        
+        Args:
+            arc_length: Desired arc length from the start of the spline
+            tolerance: Acceptable error in arc length (default=1e-6)
+            max_iterations: Maximum number of binary search iterations (default=50)
+            
+        Returns:
+            float: Parameter value t that gives the desired arc length
+            
+        Raises:
+            ValueError: If arc_length is negative or greater than the total arc length
+        """
+        if not self.segments:
+            raise ValueError("Spline has not been fitted yet")
+            
+        if arc_length < 0:
+            raise ValueError("Arc length must be non-negative")
+            
+        total_length = self.get_total_arc_length()
+        if arc_length > total_length:
+            raise ValueError(f"Arc length {arc_length} exceeds total length {total_length}")
+            
+        # Handle edge cases
+        if arc_length == 0:
+            return self.parameters[0]
+        if arc_length == total_length:
+            return self.parameters[-1]
+        
+        # Binary search for the parameter value
+        t_start = self.parameters[0]
+        t_end = self.parameters[-1]
+        t_min = t_start
+        t_max = t_end
+        
+        for _ in range(max_iterations):
+            t_mid = (t_min + t_max) / 2
+            current_length = self.get_arc_length(t_start, t_mid)
+            
+            error = current_length - arc_length
+            if abs(error) < tolerance:
+                return t_mid
+                
+            if error > 0:
+                t_max = t_mid
+            else:
+                t_min = t_mid
+                
+        # If we reach here, we've hit max iterations but should still have a good approximation
+        return (t_min + t_max) / 2
