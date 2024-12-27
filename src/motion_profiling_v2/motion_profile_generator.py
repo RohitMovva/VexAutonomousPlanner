@@ -94,12 +94,12 @@ def generate_other_lists(velocities, spline_manager: QuinticHermiteSplineManager
         headings.append(spline_manager.get_heading(t_along_curve))
         x, y = spline_manager.get_point_at_parameter(t_along_curve)
         if (reverse_values[current_segment]):
-            headings[-1] = (headings[-1] - math.pi)
+            # headings[-1] = (headings[-1] - math.pi)
             velocities[i] = -velocities[i]
             accelerations[i] = -accelerations[i]
 
-        if (headings[-1] < -math.pi):
-            headings[-1] += 2*math.pi
+        # if (headings[-1] < -math.pi):
+        #     headings[-1] += 2*math.pi
 
         coords.append(
             (

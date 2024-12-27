@@ -8,8 +8,8 @@ def create_test_cases() -> List[Tuple[np.ndarray, np.ndarray]]:
     test_cases = []
     
     # Test case 1: Simple curve
-    x1 = np.array([0, 1, 2])
-    y1 = np.array([0, 1, 0])
+    x1 = np.array([0, .1, 2])
+    y1 = np.array([0, .1, 0])
     test_cases.append((x1, y1))
     
     # Test case 2: S-curve
@@ -30,10 +30,6 @@ def test_spline(spline: QuinticHermiteSpline, x: np.ndarray, y: np.ndarray,
     """Test the spline with given control points and plot the results."""
     # Fit the spline
     success = spline.fit(x, y)
-    start_tangent = np.array([1.0,0])
-    end_tangent = np.array([0.0, -1.0])
-    spline.set_starting_tangent(start_tangent)
-    spline.set_ending_tangent(end_tangent)
     if not success:
         print(f"Failed to fit spline for {title}")
         return
