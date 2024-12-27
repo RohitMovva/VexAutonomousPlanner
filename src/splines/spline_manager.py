@@ -1,7 +1,15 @@
-from typing import List, Tuple, Dict
+from typing import List, Tuple, Dict, Optional
 import numpy as np
 from splines.quintic_hermite_spline import QuinticHermiteSpline
 from gui.node import Node
+from dataclasses import dataclass
+
+@dataclass
+class PathLookupTable:
+    """Cache for quick parameter lookups based on distance"""
+    distances: np.ndarray  # Sorted array of distances
+    parameters: np.ndarray  # Corresponding parameter values
+    total_length: float
 
 class QuinticHermiteSplineManager:
     """
@@ -13,10 +21,12 @@ class QuinticHermiteSplineManager:
         """
         Initialize the spline manager with empty splines and nodes lists.
         """
-        self.splines: List[QuinticHermiteSpline]
-        self.nodes: List[Node]
-        self.path_parameters: Dict  # Store parameter mappings between global and local
-        self.arc_length: float  # Store the total arc length of the path
+        self.splines: List[QuinticHermiteSpline] = []
+        self.nodes: List[Node] = []
+        self.path_parameters: Dict = {}  # Store parameter mappings between global and local
+        self.arc_length: float = 0.0  # Store the total arc length of the path
+        self.lookup_table: Optional[PathLookupTable] = None
+        self._precomputed_properties: Optional[Dict] = None
         
     def build_path(self, points: np.ndarray, nodes: List[Node]) -> bool:
         """
@@ -68,7 +78,9 @@ class QuinticHermiteSplineManager:
                     current_start_idx = i
 
         self.arc_length = None
-
+        # After successful path building, initialize optimization structures
+        self.build_lookup_table()
+        self.precompute_path_properties()
         return True
     
     def get_point_at_parameter(self, t: float) -> np.ndarray:
@@ -175,96 +187,32 @@ class QuinticHermiteSplineManager:
 
     def distance_to_time(self, distance: float) -> float:
         """
-        Convert a distance along the path to the corresponding parameter t.
-        Uses binary search to find the parameter value that corresponds to the given arc length.
-        
-        Args:
-            distance: Distance along the path from the start
-            
-        Returns:
-            float: Parameter t that corresponds to the given distance
-            
-        Raises:
-            ValueError: If no splines have been initialized or distance is invalid
+        Convert distance to parameter t using the lookup table and linear interpolation.
+        Much faster than binary search + numerical integration.
         """
-        if not self.splines:
-            raise ValueError("No splines have been initialized")
+        if self.lookup_table is None:
+            self.build_lookup_table()
             
-        # Get total path length for validation
-        total_length = self.get_total_arc_length()
-        if (distance < 0):
-            distance = 0
-        if (distance > total_length):
-            distance = total_length
-        # if distance < 0 or distance > total_length:
-            # raise ValueError(f"Distance {distance} outside valid range [0, {total_length}]")
-            
-        # Special cases
-        if distance == 0:
+        # Handle edge cases
+        if distance <= 0:
             return 0
-        if distance == total_length:
+        if distance >= self.lookup_table.total_length:
             return len(self.nodes) - 1
             
-        # Binary search to find parameter t
-        t_min = 0
-        t_max = len(self.nodes) - 1
-        tolerance = 1e-6  # Tolerance for distance comparison
-        max_iterations = 50  # Maximum number of binary search iterations
+        # Find closest indices in lookup table
+        idx = np.searchsorted(self.lookup_table.distances, distance)
+        if idx == 0:
+            return self.lookup_table.parameters[0]
+            
+        # Linear interpolation between points
+        d0 = self.lookup_table.distances[idx-1]
+        d1 = self.lookup_table.distances[idx]
+        t0 = self.lookup_table.parameters[idx-1]
+        t1 = self.lookup_table.parameters[idx]
         
-        # Function to compute arc length from start to parameter t
-        def compute_length_to_t(t: float) -> float:
-            length = 0.0
-            # For each spline segment up to t
-            curr_t = 0
-            for spline in self.splines:
-                segment_length = t - curr_t
-                if segment_length <= 0:
-                    break
-                    
-                # Calculate length for this segment using Simpson's rule
-                n = 100  # number of intervals
-                h = min(1.0, segment_length) / n  # step size
-                
-                segment_length = 0.0
-                # First point
-                derivative = spline.get_derivative(0)
-                segment_length += np.linalg.norm(derivative)
-                
-                # Middle points
-                for i in range(1, n):
-                    local_t = i * h
-                    derivative = spline.get_derivative(local_t)
-                    weight = 4 if i % 2 == 1 else 2
-                    segment_length += weight * np.linalg.norm(derivative)
-                
-                # Last point
-                derivative = spline.get_derivative(min(1.0, segment_length))
-                segment_length += np.linalg.norm(derivative)
-                
-                # Complete Simpson's rule calculation
-                length += (h / 3) * segment_length
-                curr_t += 1
-                
-                if curr_t >= t:
-                    break
-                    
-            return length
-            
-        # Binary search
-        for _ in range(max_iterations):
-            t_mid = (t_min + t_max) / 2
-            length_at_t = compute_length_to_t(t_mid)
-            
-            if abs(length_at_t - distance) < tolerance:
-                return t_mid
-                
-            if length_at_t < distance:
-                t_min = t_mid
-            else:
-                t_max = t_mid
-                
-        # Return best approximation after max iterations
-        return (t_min + t_max) / 2
+        # Interpolate
+        t = t0 + (t1 - t0) * (distance - d0) / (d1 - d0)
+        return t
 
     
     def get_total_arc_length(self) -> float:
@@ -297,6 +245,22 @@ class QuinticHermiteSplineManager:
     
     def get_heading(self, t: float) -> float:
         """
+        Get heading at parameter t using precomputed values and interpolation.
+        """
+        if self._precomputed_properties is None:
+            self.precompute_path_properties()
+        return self._interpolate_property(t, 'headings')
+    
+    def get_curvature(self, t: float) -> float:
+        """
+        Get curvature at parameter t using precomputed values and interpolation.
+        """
+        if self._precomputed_properties is None:
+            self.precompute_path_properties()
+        return self._interpolate_property(t, 'curvatures')
+    
+    def _get_heading(self, t: float) -> float:
+        """
         Get the heading (angle in radians) at parameter t on the complete path.
         The heading is calculated as the angle of the tangent vector (first derivative)
         relative to the positive x-axis.
@@ -322,7 +286,7 @@ class QuinticHermiteSplineManager:
         
         return heading
 
-    def get_curvature_at_parameter(self, t: float) -> float:
+    def _get_curvature(self, t: float) -> float:
         """
         Calculate curvature at parameter t on the complete path.
         
@@ -373,3 +337,86 @@ class QuinticHermiteSplineManager:
         Validate C2 continuity at all transition points between splines.
         """
         pass
+
+    def build_lookup_table(self, num_samples: int = 1000) -> None:
+        """
+        Build a lookup table mapping distances to parameters for faster conversions.
+        Uses linear interpolation between samples.
+        """
+        if not self.splines:
+            raise ValueError("No splines initialized")
+            
+        # Generate evenly spaced parameter values
+        total_param_length = len(self.nodes) - 1
+        parameters = np.linspace(0, total_param_length, num_samples)
+        
+        # Calculate corresponding distances
+        distances = np.zeros(num_samples)
+        current_dist = 0.0
+        
+        for i in range(1, num_samples):
+            # Calculate arc length between consecutive parameters
+            prev_param = parameters[i-1]
+            curr_param = parameters[i]
+            
+            spline_idx, local_t = self._map_parameter_to_spline(prev_param)
+            spline = self.splines[spline_idx]
+            
+            # Use pre-computed derivatives for faster arc length calculation
+            derivative = spline.get_derivative(local_t)
+            segment_length = np.linalg.norm(derivative) * (curr_param - prev_param)
+            
+            current_dist += segment_length
+            distances[i] = current_dist
+            
+        self.lookup_table = PathLookupTable(
+            distances=distances,
+            parameters=parameters,
+            total_length=current_dist
+        )
+
+    def precompute_path_properties(self, num_samples: int = 1000) -> None:
+        """
+        Precompute curvature and heading at regular intervals for faster lookup.
+        """
+        if not self.splines:
+            raise ValueError("No splines initialized")
+            
+        parameters = np.linspace(0, len(self.nodes) - 1, num_samples)
+        
+        # Precompute properties
+        curvatures = np.zeros(num_samples)
+        headings = np.zeros(num_samples)
+        
+        for i, t in enumerate(parameters):
+            curvatures[i] = self._get_curvature(t)
+            headings[i] = self._get_heading(t)
+            
+        self._precomputed_properties = {
+            'parameters': parameters,
+            'curvatures': curvatures,
+            'headings': headings
+        }
+
+
+    def _interpolate_property(self, t: float, property_name: str) -> float:
+        """
+        Get a property value at parameter t using linear interpolation of precomputed values.
+        """
+        parameters = self._precomputed_properties['parameters']
+        values = self._precomputed_properties[property_name]
+        
+        # Find surrounding indices
+        idx = np.searchsorted(parameters, t)
+        if idx == 0:
+            return values[0]
+        if idx >= len(parameters):
+            return values[-1]
+            
+        # Linear interpolation
+        t0 = parameters[idx-1]
+        t1 = parameters[idx]
+        v0 = values[idx-1]
+        v1 = values[idx]
+        
+        return v0 + (v1 - v0) * (t - t0) / (t1 - t0)

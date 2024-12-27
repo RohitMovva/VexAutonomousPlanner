@@ -133,7 +133,13 @@ def generate_other_lists(velocities, spline_manager: QuinticHermiteSplineManager
     # x, y, linear velocity will stay the same, just insert a bunch of the same values
     # update the heading and angular velocity
     coffset = 0
-    for k in range(len(nodes_map)):
+    # print("turn_vals = ", turn_vals)
+    print("nodes_map = ", nodes_map)
+    print("headings = ", headings)
+    print("len(headings) = ", len(headings))
+    for k in range(len(turn_vals)):
+        print("nodes_map[k] = ", nodes_map[k])
+        print("coffset = ", coffset)
         i = nodes_map[k] + coffset
         temp_headings = [headings[i]-turn_vals[k]] # need to reach that heading so subtract value we're turning by before that point
         if (temp_headings[0] < -180):
@@ -176,7 +182,7 @@ def generate_other_lists(velocities, spline_manager: QuinticHermiteSplineManager
         nodes_map[k] += coffset
 
     coffset = 0
-    for k in range(len(nodes_map)):
+    for k in range(len(wait_times)):
         
         # nodes_map[k] += offset
         i = nodes_map[k] + coffset
@@ -389,13 +395,17 @@ def generate_motion_profile(
     for i in range(0, len(velocities)):
         # print("i = ", i)
         t_along_curve = spline_manager.distance_to_time(current_dist)
-        curvature = spline_manager.get_curvature_at_parameter(t_along_curve)
+        curvature = spline_manager.get_curvature(t_along_curve)
         heading = spline_manager.get_heading(t_along_curve)
+
+        # print("t_along_curve = ", t_along_curve)
+        # print("curvature = ", curvature)
+        # print("heading = ", heading)
 
         curvatures.append(curvature)
         headings.append(heading)
         adjusted_vmax = limit_velocity(v_max, v_max, curvature, track_width)
-
+        # print("adjusted_vmax = ", adjusted_vmax)
         velocities[i] = adjusted_vmax
         current_dist += dd
 
