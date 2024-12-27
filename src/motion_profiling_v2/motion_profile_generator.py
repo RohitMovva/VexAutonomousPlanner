@@ -64,6 +64,7 @@ def generate_other_lists(velocities, spline_manager: QuinticHermiteSplineManager
     angular_velocities = []  # New list for angular velocities
     nodes_map = [0]
     coords = []
+    spline_manager.rebuild_tables()
 
     # Calculate positions
     for i in range(1, len(velocities)):
@@ -133,13 +134,7 @@ def generate_other_lists(velocities, spline_manager: QuinticHermiteSplineManager
     # x, y, linear velocity will stay the same, just insert a bunch of the same values
     # update the heading and angular velocity
     coffset = 0
-    # print("turn_vals = ", turn_vals)
-    print("nodes_map = ", nodes_map)
-    print("headings = ", headings)
-    print("len(headings) = ", len(headings))
     for k in range(len(turn_vals)):
-        print("nodes_map[k] = ", nodes_map[k])
-        print("coffset = ", coffset)
         i = nodes_map[k] + coffset
         temp_headings = [headings[i]-turn_vals[k]] # need to reach that heading so subtract value we're turning by before that point
         if (temp_headings[0] < -180):

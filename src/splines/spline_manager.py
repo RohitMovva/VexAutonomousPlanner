@@ -79,8 +79,6 @@ class QuinticHermiteSplineManager:
 
         self.arc_length = None
         # After successful path building, initialize optimization structures
-        self.build_lookup_table()
-        self.precompute_path_properties()
         return True
     
     def get_point_at_parameter(self, t: float) -> np.ndarray:
@@ -420,3 +418,10 @@ class QuinticHermiteSplineManager:
         v1 = values[idx]
         
         return v0 + (v1 - v0) * (t - t0) / (t1 - t0)
+    
+    def rebuild_tables(self):
+        """
+        Rebuild the spline tables after modifying control points or constraints.
+        """
+        self.build_lookup_table()
+        self.precompute_path_properties()
