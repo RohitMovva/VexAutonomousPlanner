@@ -8,13 +8,13 @@ def create_test_cases() -> List[Tuple[np.ndarray, np.ndarray]]:
     test_cases = []
     
     # Test case 1: Simple curve
-    x1 = np.array([0, .1, 2])
-    y1 = np.array([0, .1, 0])
+    x1 = np.array([0.0, .1, 2.0])
+    y1 = np.array([0.0, .1, 0.0])
     test_cases.append((x1, y1))
     
     # Test case 2: S-curve
-    x2 = np.array([0, 1, 2, 3])
-    y2 = np.array([0, 1, -1, 0])
+    x2 = np.array([0.0, 1.0, 2.0, 3.0])
+    y2 = np.array([0.0, 1.0, -1.0, 0.0])
     test_cases.append((x2, y2))
     
     # Test case 3: Circle-like curve
@@ -74,8 +74,8 @@ def main():
     # Additional test: Verify continuity
     print("\nTesting continuity at segment joints...")
     spline = QuinticHermiteSpline()
-    x = np.array([0, 1, 2, 3])
-    y = np.array([0, 1, -1, 0])
+    x = np.array([0.0, 1.0, 2.0, 3.0])
+    y = np.array([0.0, 1.0, -1.0, 0.0])
     spline.fit(x, y)
     
     # Check continuity at internal points

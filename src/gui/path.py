@@ -333,6 +333,15 @@ class PathWidget(QGraphicsView):
         print("Error:", self.spline_manager.get_total_arc_length()-self.all_positions[-1])
         self.all_nodes_map.append(len(self.all_time_intervals))
 
+        left_wheel_velocities = []
+        right_wheel_velocities = []
+        for i in range(len(self.all_velocities)):
+            left_wheel_velocities.append(self.all_velocities[i] - self.all_angular_velocities[i] * track_width / 2)
+            right_wheel_velocities.append(self.all_velocities[i] + self.all_angular_velocities[i] * track_width / 2)
+
+        print("Left wheel velocities:", left_wheel_velocities)
+        print("Right wheel velocities:", right_wheel_velocities)
+
         return (
             self.all_time_intervals,
             self.all_positions,

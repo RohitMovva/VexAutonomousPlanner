@@ -58,14 +58,42 @@ class QuinticHermiteSplineManager:
                     
                 # Handle tangent continuity at reverse nodes
                 if nodes[i].is_reverse_node:
-                    # Calculate tangent considering direction
-                    prev_vector = points[i] - points[i-1]
-                    next_vector = points[i+1] - points[i] if i < len(points)-1 else points[i] - points[i-1]
+                    # print("\n=== Reverse Node Analysis ===")
+                    # print(f"Node index: {i}")
+                    # print(f"Node position: {points[i]}")
+                    # print(f"Previous point: {points[i-1]}")
+                    # print(f"Next point: {points[i+1]}" if i < len(points)-1 else "No next point")
                     
-                    prev_vector = prev_vector / np.linalg.norm(prev_vector)
-                    next_vector = next_vector / np.linalg.norm(next_vector)
-                    # Set average tangent, average first term then average second term
-                    dif_vector = (prev_vector - next_vector) / 2
+                    # Calculate segment lengths
+                    prev_length = np.linalg.norm(points[i] - points[i-1])
+                    next_length = np.linalg.norm(points[i+1] - points[i]) if i < len(points)-1 else prev_length
+                    
+                    # print(f"Previous segment length: {prev_length}")
+                    # print(f"Next segment length: {next_length}")
+                    
+                    # Calculate vectors and scale by segment lengths
+                    prev_vector = (points[i] - points[i-1]) * (1.0 / prev_length if prev_length > 0 else 1.0)
+                    next_vector = (points[i+1] - points[i]) * (1.0 / next_length if next_length > 0 else 1.0)
+                    
+                    # print(f"Scaled previous vector: {prev_vector}")
+                    # print(f"Scaled next vector: {next_vector}")
+                    
+                    # Calculate difference vector and normalize
+                    dif_vector = prev_vector - next_vector
+                    dif_norm = np.linalg.norm(dif_vector)
+                    # print(f"Initial difference vector: {dif_vector}")
+                    # print(f"Difference vector norm: {dif_norm}")
+                    
+                    if dif_norm > 0:
+                        dif_vector = dif_vector / dif_norm
+                    
+                    # Scale the difference vector by the minimum segment length
+                    min_length = min(prev_length, next_length)
+                    dif_vector = dif_vector * min_length
+                    
+                    # print(f"Final difference vector: {dif_vector}")
+                    # print(f"Min segment length used for scaling: {min_length}")
+                    # print("===========================\n")
                     
                     # Set end tangent for current spline
                     spline.set_ending_tangent(dif_vector)
@@ -78,6 +106,7 @@ class QuinticHermiteSplineManager:
                     current_start_idx = i
 
         self.arc_length = None
+        self.lookup_table = None
         # After successful path building, initialize optimization structures
         return True
     
@@ -247,7 +276,7 @@ class QuinticHermiteSplineManager:
         """
         if self._precomputed_properties is None:
             self.precompute_path_properties()
-        return -1*self._interpolate_property(t, 'headings')
+        return self._interpolate_property(t, 'headings')
     
     def get_curvature(self, t: float) -> float:
         """
@@ -326,7 +355,7 @@ class QuinticHermiteSplineManager:
         numerator = abs(x_prime * y_double_prime - y_prime * x_double_prime)
         
         # Calculate curvature
-        curvature = numerator / (speed_squared ** 1.5)
+        curvature = (x_prime * y_double_prime - y_prime * x_double_prime) / (speed_squared ** 1.5)
         
         return curvature
         
@@ -423,5 +452,5 @@ class QuinticHermiteSplineManager:
         """
         Rebuild the spline tables after modifying control points or constraints.
         """
-        self.build_lookup_table()
-        self.precompute_path_properties()
+        self.build_lookup_table(10000)
+        self.precompute_path_properties(10000)
