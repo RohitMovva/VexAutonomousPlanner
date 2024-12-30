@@ -339,8 +339,8 @@ class PathWidget(QGraphicsView):
             left_wheel_velocities.append(self.all_velocities[i] - self.all_angular_velocities[i] * track_width / 2)
             right_wheel_velocities.append(self.all_velocities[i] + self.all_angular_velocities[i] * track_width / 2)
 
-        print("Left wheel velocities:", left_wheel_velocities)
-        print("Right wheel velocities:", right_wheel_velocities)
+        # print("Left wheel velocities:", left_wheel_velocities)
+        # print("Right wheel velocities:", right_wheel_velocities)
 
         return (
             self.all_time_intervals,
