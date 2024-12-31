@@ -228,13 +228,15 @@ def test_s_curve():
     # Verify curvature-heading relationship
     verify_curvature_heading_relationship(manager, t_vals, headings, curvatures, "S-Curve")
 
-def test_straight_line():
-    """Test heading and curvature on a straight line path."""
+def test_turn_around():
+    """Test heading and curvature on an extreme path."""
     # Initialize spline manager
     
-    # Create points for a straight line
-    x = np.linspace(0, 5, 4)
-    y = x  # 45-degree line
+    # Create points for an extreme path
+    # x = np.linspace(0, 5, 4)
+    # y = x  # 45-degree line
+    x = np.array([0, 1, 2])
+    y = np.array([0, 15, 0])
     points = np.column_stack((x, y))
     
     # Create nodes
@@ -243,7 +245,7 @@ def test_straight_line():
     # Initialize spline manager
     manager = QuinticHermiteSplineManager()
     success = manager.build_path(points, nodes)
-    assert success, "Failed to build straight line path"
+    assert success, "Failed to build extreme path"
     
     # Sample points along the path
     num_samples = 100
@@ -257,7 +259,7 @@ def test_straight_line():
     # 1. Heading should be constant (π/4 for a 45-degree line)
     # 2. Curvature should be zero
     
-    print(f"\nStraight Line Test Results:")
+    print(f"\Extreme Line Test Results:")
     print(f"Expected heading: {np.pi/4:.6f}")
     print(f"Mean heading: {np.mean(headings):.6f}")
     print(f"Heading std dev: {np.std(headings):.6f}")
@@ -298,10 +300,12 @@ def test_straight_line():
     plt.show()
     
     # Verify curvature-heading relationship
-    verify_curvature_heading_relationship(manager, t_vals, headings, curvatures, "Straight Line")
+    verify_curvature_heading_relationship(manager, t_vals, headings, curvatures, "Extreme case")
 
 if __name__ == "__main__":
     # Run all tests
     test_circle_path()
     test_s_curve()
-    test_straight_line()
+    test_turn_around()
+
+
