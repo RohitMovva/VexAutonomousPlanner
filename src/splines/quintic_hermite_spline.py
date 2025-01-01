@@ -649,3 +649,15 @@ class QuinticHermiteSpline(Spline):
         
         # Normalize to range [0, n-1] where n is number of points
         return cumulative_lengths * (len(points) - 1) / cumulative_lengths[-1]
+
+    def get_end_parameter(self) -> float:
+        """
+        Get the parameter value corresponding to the last control point.
+        
+        Returns:
+            float: Parameter value corresponding to the last control point
+        """
+        if not self.parameters.size:
+            raise ValueError("Spline has not been fitted yet")
+            
+        return self.parameters[-1]

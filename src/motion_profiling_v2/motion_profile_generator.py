@@ -61,11 +61,10 @@ def generate_other_lists(velocities, spline_manager: QuinticHermiteSplineManager
     angular_velocities = []  # New list for angular velocities
     nodes_map = [0]
     coords = []
-    # spline_manager.rebuild_tables()
 
     # Calculate positions
-    for velo in velocities:
-        print(velo)
+    # for velo in velocities:
+        # print(velo)
     position = 0
     for i in range(0, len(velocities)-1):
         t_along_curve = spline_manager.distance_to_time(position)
@@ -73,7 +72,7 @@ def generate_other_lists(velocities, spline_manager: QuinticHermiteSplineManager
         left_velocity, right_velocity = get_wheel_velocities(velocities[i], curvature, track_width)
         # max_left = max(max_left, left_velocity)
         # max_right = max(max_right, right_velocity)
-        print("VILS: ", left_velocity, right_velocity)
+        # print("VILS: ", left_velocity, right_velocity)
         positions.append(position)
 
         accel = (velocities[i+1] - velocities[i]) / dt
@@ -99,9 +98,12 @@ def generate_other_lists(velocities, spline_manager: QuinticHermiteSplineManager
         current_dist = positions[i]
 
         t_along_curve = spline_manager.distance_to_time(current_dist)
+        
 
-        if (t_along_curve%1 < old_t%1):
+        if (t_along_curve%1 < old_t%1 and len(nodes_map) < len(turn_vals)):
             nodes_map.append(i)
+
+        print("TAC: ", t_along_curve, current_dist, spline_manager.get_total_arc_length())
         old_t = t_along_curve
         x = None
         y = None
@@ -409,14 +411,17 @@ def generate_motion_profile(
     reverse_values,
     wait_times,
     dd=0.005,
-    dt=0.0025, # CHANGE THIS FOR ACTUAL USE
+    dt=0.025, # CHANGE THIS FOR ACTUAL USE
     K=15.0,
 ):
     velocities = []
     curvatures = []
     headings = []
 
+    spline_manager.rebuild_tables()
+
     dist = spline_manager.get_total_arc_length()
+    print("DIST: ", dist)
     curpos = 0
     while curpos < dist - 1e-5:
         velocities.append(0)
@@ -469,7 +474,7 @@ def generate_motion_profile(
         accel = (velocities[i+1] ** 2 - velocities[i] ** 2) / (2 * dd)
         accum = velocities[i] * tempt + 0.5 * accel * (tempt ** 2)
 
-        print("DIF: ", i*dd - total_dist)
+        # print("DIF: ", i*dd - total_dist)
         # print("*", i, time_stamps[i], total_dist)
         total_dist += accum
     print("TOTAL 1: ", total_dist)
@@ -524,31 +529,31 @@ def generate_motion_profile(
     current_dist = 0
     prev_velocity = 0
     for i in range(0, len(new_velocities)-1):
-        if (new_velocities[i] < min(velocities[math.floor(current_dist // dd)], velocities[math.ceil((current_dist) // dd) + 1]) or 
-            new_velocities[i] > max(velocities[math.floor(current_dist // dd)], velocities[math.ceil((current_dist) // dd) + 1])):
-            print("VIOLATION")
+        # if (new_velocities[i] < min(velocities[math.floor(current_dist // dd)], velocities[math.ceil((current_dist) // dd) + 1]) or 
+        #     new_velocities[i] > max(velocities[math.floor(current_dist // dd)], velocities[math.ceil((current_dist) // dd) + 1])):
+        #     print("VIOLATION")
 
-            print(math.floor(current_dist // dd), math.ceil((current_dist) // dd) + 1, current_dist/dd)
-            # print(current_dist, temp_dist, temp_dist + dd)
+        #     print(math.floor(current_dist // dd), math.ceil((current_dist) // dd) + 1, current_dist/dd)
+        #     # print(current_dist, temp_dist, temp_dist + dd)
 
-            # print(limit_velocity(v_max, v_max, curvature, track_width))
-            print(velocities[math.floor(current_dist // dd)])
+        #     # print(limit_velocity(v_max, v_max, curvature, track_width))
+        #     print(velocities[math.floor(current_dist // dd)])
 
-            # t_along_curve = spline_manager.distance_to_time(temp_dist + dd)
-            # curvature = spline_manager.get_curvature(t_along_curve)
+        #     # t_along_curve = spline_manager.distance_to_time(temp_dist + dd)
+        #     # curvature = spline_manager.get_curvature(t_along_curve)
 
 
-            # print(limit_velocity(v_max, v_max, curvature, track_width))
-            print(velocities[math.ceil((current_dist) // dd) + 1])
+        #     # print(limit_velocity(v_max, v_max, curvature, track_width))
+        #     print(velocities[math.ceil((current_dist) // dd) + 1])
 
-            print(new_velocities[i])
+        #     print(new_velocities[i])
 
-            print()
+        #     print()
 
         t_along_curve = spline_manager.distance_to_time(current_dist)
         curvature = spline_manager.get_curvature(t_along_curve)
         left_velocity, right_velocity = get_wheel_velocities(new_velocities[i], curvature, track_width)
-        print("INVELS: ", left_velocity, right_velocity)
+        # print("INVELS: ", left_velocity, right_velocity)
 
         accel = (new_velocities[i+1] - new_velocities[i]) / dt
         current_dist += new_velocities[i] * dt + 0.5 * accel * (dt ** 2)
@@ -566,17 +571,12 @@ def generate_motion_profile(
         left_velocity, right_velocity = get_wheel_velocities(new_velocities[i], curvature, track_width)
         max_left = max(max_left, left_velocity)
         max_right = max(max_right, right_velocity)
-        print("VOLS: ", left_velocity, right_velocity)
+        # print("VOLS: ", left_velocity, right_velocity)
         positions.append(position)
 
         accel = (new_velocities[i+1] - new_velocities[i]) / dt
         position += new_velocities[i] * dt + 0.5 * accel * (dt ** 2)
-    print(max_left, max_right)
-
-    print("TOTAL 2: ", current_dist)
-    print("END")
 
     res = generate_other_lists(new_velocities, spline_manager, dt, turn_insertions, turn_values, reverse_values, wait_times, track_width)
 
-    print("END")
     return res

@@ -267,7 +267,7 @@ class AutonomousPlannerGUIManager(QMainWindow):
                 # nodes_data.append([coords[i][0], coords[i][1], headings[i]])
                 nodes_data.append([0, time_intervals[i], coords[i][0], coords[i][1], headings[i] * (math.pi / 180), velocities[i]*12, angular_velocities[i]])
                 # nodes_data.append([velocities[i], headings[i]])
-
+        print(nodes_map, len(nodes_data))
         nodes_actions = [
             [
                 1, 

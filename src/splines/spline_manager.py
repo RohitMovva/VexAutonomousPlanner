@@ -107,6 +107,7 @@ class QuinticHermiteSplineManager:
 
         self.arc_length = None
         self.lookup_table = None
+        # self.rebuild_tables()
         # After successful path building, initialize optimization structures
         return True
     
@@ -224,6 +225,7 @@ class QuinticHermiteSplineManager:
         if distance <= 0:
             return 0
         if distance >= self.lookup_table.total_length:
+            # print("Distance exceeds total length")
             return len(self.nodes) - 1
             
         # Find closest indices in lookup table
@@ -244,32 +246,15 @@ class QuinticHermiteSplineManager:
     
     def get_total_arc_length(self) -> float:
         """
-        Calculate the total arc length of the entire path by summing the
-        arc lengths of all individual spline segments.
-
-        Returns:
-            float: Total arc length of the complete path
-
-        Raises:
-            ValueError: If no splines have been initialized
+        Calculate the total arc length using adaptive Gaussian quadrature.
+        Adaptively subdivides based on curvature and speed variation.
         """
         if not self.splines:
             raise ValueError("No splines have been initialized")
+        if self.lookup_table is None:
+            self.build_lookup_table()
             
-        # Check if we have cached arc length
-        if self.arc_length is not None:
-            return self.arc_length
-            
-        # Sum up the arc lengths of all spline segments
-        total_length = 0.0
-        for spline in self.splines:
-            total_length += spline.get_total_arc_length()
-            
-        # Cache the result for future use
-        self.arc_length = total_length
-        
-        return total_length
-    
+        return self.lookup_table.total_length
     def get_heading(self, t: float) -> float:
         """
         Get heading at parameter t using precomputed values and interpolation.
@@ -365,44 +350,93 @@ class QuinticHermiteSplineManager:
         """
         pass
 
-    def build_lookup_table(self, num_samples: int = 1000) -> None:
+    def build_lookup_table(self, min_samples=1000, max_samples=50000, tolerance=1e-6) -> None:
         """
-        Build a lookup table mapping distances to parameters for faster conversions.
-        Uses linear interpolation between samples.
+        Build a distance-to-parameter lookup table using adaptive Gaussian quadrature.
         """
         if not self.splines:
             raise ValueError("No splines initialized")
-            
-        # Generate evenly spaced parameter values
-        total_param_length = len(self.nodes) - 1
-        parameters = np.linspace(0, total_param_length, num_samples)
         
-        # Calculate corresponding distances
-        distances = np.zeros(num_samples)
+        all_parameters = []
+        all_distances = []
         current_dist = 0.0
         
-        for i in range(1, num_samples):
-            # Calculate arc length between consecutive parameters
-            prev_param = parameters[i-1]
-            curr_param = parameters[i]
+        # Gauss-Legendre quadrature points and weights (7-point)
+        gauss_points = np.array([
+            -0.949107912342759,
+            -0.741531185599394,
+            -0.405845151377397,
+            0.000000000000000,
+            0.405845151377397,
+            0.741531185599394,
+            0.949107912342759
+        ])
+        
+        gauss_weights = np.array([
+            0.129484966168870,
+            0.279705391489277,
+            0.381830050505119,
+            0.417959183673469,
+            0.381830050505119,
+            0.279705391489277,
+            0.129484966168870
+        ])
+        
+        for spline_idx, spline in enumerate(self.splines):
+            param_start = spline.parameters[0]
+            param_end = spline.parameters[-1]
             
-            spline_idx, local_t = self._map_parameter_to_spline(prev_param)
-            spline = self.splines[spline_idx]
+            # Determine initial segment count based on curvature
+            curvature_samples = 10
+            test_params = np.linspace(param_start, param_end, curvature_samples)
+            max_curvature = max(abs(spline.get_curvature(t)) for t in test_params)
+            base_segments = max(int(100 * max_curvature + 50), min_samples // len(self.splines))
+            n_segments = min(base_segments, max_samples // len(self.splines))
             
-            # Use pre-computed derivatives for faster arc length calculation
-            derivative = spline.get_derivative(local_t)
-            segment_length = np.linalg.norm(derivative) * (curr_param - prev_param)
+            # Create parameter points with higher density in high-curvature regions
+            local_params = np.linspace(param_start, param_end, n_segments + 1)
+            segment_distances = np.zeros(n_segments)
             
-            current_dist += segment_length
-            distances[i] = current_dist
+            # Compute arc length for each segment using Gaussian quadrature
+            for i in range(n_segments):
+                t0, t1 = local_params[i], local_params[i + 1]
+                mid = (t0 + t1) / 2
+                half_length = (t1 - t0) / 2
+                
+                # Transform Gaussian points to segment interval
+                t_points = mid + half_length * gauss_points
+                
+                # Compute derivatives at all points efficiently
+                derivatives = np.array([spline.get_derivative(t) for t in t_points])
+                speeds = np.linalg.norm(derivatives, axis=1)
+                
+                # Compute segment length using Gaussian quadrature
+                segment_distances[i] = half_length * np.sum(gauss_weights * speeds)
             
+            # Compute cumulative distances
+            cumulative_distances = np.zeros(len(local_params))
+            cumulative_distances[1:] = np.cumsum(segment_distances)
+            
+            # Add offset from previous splines
+            spline_distances = cumulative_distances + current_dist
+            current_dist = spline_distances[-1]
+            
+            # Store results
+            all_parameters.extend(local_params)
+            all_distances.extend(spline_distances)
+        
+        # Convert to numpy arrays
+        all_parameters = np.array(all_parameters)
+        all_distances = np.array(all_distances)
+        
+        # Create final lookup table
         self.lookup_table = PathLookupTable(
-            distances=distances,
-            parameters=parameters,
+            distances=all_distances,
+            parameters=all_parameters,
             total_length=current_dist
         )
-
-    def precompute_path_properties(self, num_samples: int = 1000) -> None:
+        
+    def precompute_path_properties(self, num_samples: int = 100000) -> None:
         """
         Precompute curvature and heading at regular intervals for faster lookup.
         """
@@ -452,5 +486,5 @@ class QuinticHermiteSplineManager:
         """
         Rebuild the spline tables after modifying control points or constraints.
         """
-        self.build_lookup_table(10000)
-        self.precompute_path_properties(10000)
+        self.build_lookup_table()
+        self.precompute_path_properties()
