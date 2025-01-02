@@ -400,6 +400,7 @@ def generate_motion_profile(
         t_along_curve = spline_manager.distance_to_time(current_dist)
 
         curvature = spline_manager.get_curvature(t_along_curve) * 1.03
+        # print("CURVATURE: ", curvature)
         heading = spline_manager.get_heading(t_along_curve)
 
         curvatures.append(curvature)
