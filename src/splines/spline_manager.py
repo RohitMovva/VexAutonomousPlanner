@@ -58,31 +58,18 @@ class QuinticHermiteSplineManager:
                     
                 # Handle tangent continuity at reverse nodes
                 if nodes[i].is_reverse_node:
-                    # print("\n=== Reverse Node Analysis ===")
-                    # print(f"Node index: {i}")
-                    # print(f"Node position: {points[i]}")
-                    # print(f"Previous point: {points[i-1]}")
-                    # print(f"Next point: {points[i+1]}" if i < len(points)-1 else "No next point")
-                    
+
                     # Calculate segment lengths
                     prev_length = np.linalg.norm(points[i] - points[i-1])
                     next_length = np.linalg.norm(points[i+1] - points[i]) if i < len(points)-1 else prev_length
-                    
-                    # print(f"Previous segment length: {prev_length}")
-                    # print(f"Next segment length: {next_length}")
                     
                     # Calculate vectors and scale by segment lengths
                     prev_vector = (points[i] - points[i-1]) * (1.0 / prev_length if prev_length > 0 else 1.0)
                     next_vector = (points[i+1] - points[i]) * (1.0 / next_length if next_length > 0 else 1.0)
                     
-                    # print(f"Scaled previous vector: {prev_vector}")
-                    # print(f"Scaled next vector: {next_vector}")
-                    
                     # Calculate difference vector and normalize
                     dif_vector = prev_vector - next_vector
                     dif_norm = np.linalg.norm(dif_vector)
-                    # print(f"Initial difference vector: {dif_vector}")
-                    # print(f"Difference vector norm: {dif_norm}")
                     
                     if dif_norm > 0:
                         dif_vector = dif_vector / dif_norm
@@ -90,10 +77,6 @@ class QuinticHermiteSplineManager:
                     # Scale the difference vector by the minimum segment length
                     min_length = min(prev_length, next_length)
                     dif_vector = dif_vector * min_length
-                    
-                    # print(f"Final difference vector: {dif_vector}")
-                    # print(f"Min segment length used for scaling: {min_length}")
-                    # print("===========================\n")
                     
                     # Set end tangent for current spline
                     spline.set_ending_tangent(dif_vector)
@@ -107,8 +90,6 @@ class QuinticHermiteSplineManager:
 
         self.arc_length = None
         self.lookup_table = None
-        # self.rebuild_tables()
-        # After successful path building, initialize optimization structures
         return True
     
     def get_point_at_parameter(self, t: float) -> np.ndarray:
@@ -350,75 +331,36 @@ class QuinticHermiteSplineManager:
         """
         pass
 
-    def build_lookup_table(self, min_samples=1000, max_samples=50000, tolerance=1e-6) -> None:
-        """
-        Build a distance-to-parameter lookup table using adaptive Gaussian quadrature.
-        """
+    def build_lookup_table(self, min_samples=1000, max_samples=20000, tolerance=1e-6) -> None:
         if not self.splines:
             raise ValueError("No splines initialized")
         
+        total_param_length = len(self.nodes) - 1
         all_parameters = []
         all_distances = []
         current_dist = 0.0
         
-        # Gauss-Legendre quadrature points and weights (7-point)
-        gauss_points = np.array([
-            -0.949107912342759,
-            -0.741531185599394,
-            -0.405845151377397,
-            0.000000000000000,
-            0.405845151377397,
-            0.741531185599394,
-            0.949107912342759
-        ])
-        
-        gauss_weights = np.array([
-            0.129484966168870,
-            0.279705391489277,
-            0.381830050505119,
-            0.417959183673469,
-            0.381830050505119,
-            0.279705391489277,
-            0.129484966168870
-        ])
-        
         for spline_idx, spline in enumerate(self.splines):
+            # Get parameter range for this spline
             param_start = spline.parameters[0]
             param_end = spline.parameters[-1]
             
-            # Determine initial segment count based on curvature
-            curvature_samples = 10
-            test_params = np.linspace(param_start, param_end, curvature_samples)
-            max_curvature = max(abs(spline.get_curvature(t)) for t in test_params)
-            base_segments = max(int(100 * max_curvature + 50), min_samples // len(self.splines))
-            n_segments = min(base_segments, max_samples // len(self.splines))
+            # Create uniform parameter sampling
+            local_params = np.linspace(param_start, param_end, min_samples)
+            dt = local_params[1] - local_params[0]
             
-            # Create parameter points with higher density in high-curvature regions
-            local_params = np.linspace(param_start, param_end, n_segments + 1)
-            segment_distances = np.zeros(n_segments)
+            # Calculate derivatives and accumulate distances using trapezoidal rule
+            derivatives = np.array([spline.get_derivative(t) for t in local_params])
+            derivative_magnitudes = np.linalg.norm(derivatives, axis=1)
             
-            # Compute arc length for each segment using Gaussian quadrature
-            for i in range(n_segments):
-                t0, t1 = local_params[i], local_params[i + 1]
-                mid = (t0 + t1) / 2
-                half_length = (t1 - t0) / 2
-                
-                # Transform Gaussian points to segment interval
-                t_points = mid + half_length * gauss_points
-                
-                # Compute derivatives at all points efficiently
-                derivatives = np.array([spline.get_derivative(t) for t in t_points])
-                speeds = np.linalg.norm(derivatives, axis=1)
-                
-                # Compute segment length using Gaussian quadrature
-                segment_distances[i] = half_length * np.sum(gauss_weights * speeds)
-            
-            # Compute cumulative distances
-            cumulative_distances = np.zeros(len(local_params))
-            cumulative_distances[1:] = np.cumsum(segment_distances)
+            # Calculate distances using trapezoidal rule
+            partial_distances = np.zeros(len(local_params))
+            partial_distances[1:] = np.cumsum(
+                (derivative_magnitudes[:-1] + derivative_magnitudes[1:]) * 0.5 * dt
+            )
             
             # Add offset from previous splines
-            spline_distances = cumulative_distances + current_dist
+            spline_distances = partial_distances + current_dist
             current_dist = spline_distances[-1]
             
             # Store results
@@ -436,7 +378,7 @@ class QuinticHermiteSplineManager:
             total_length=current_dist
         )
         
-    def precompute_path_properties(self, num_samples: int = 100000) -> None:
+    def precompute_path_properties(self, num_samples: int = 10000) -> None:
         """
         Precompute curvature and heading at regular intervals for faster lookup.
         """
