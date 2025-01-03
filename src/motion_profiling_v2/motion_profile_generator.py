@@ -72,7 +72,7 @@ def generate_other_lists(velocities, spline_manager: QuinticHermiteSplineManager
         left_velocity, right_velocity = get_wheel_velocities(velocities[i], curvature, track_width)
         # max_left = max(max_left, left_velocity)
         # max_right = max(max_right, right_velocity)
-        # print("VILS: ", left_velocity, right_velocity)
+        print("VILS: ", left_velocity, right_velocity)
         positions.append(position)
 
         accel = (velocities[i+1] - velocities[i]) / dt
@@ -381,9 +381,9 @@ def generate_motion_profile(
     curvatures = []
     headings = []
 
-    print("Rebuilding tables")
+    # print("Rebuilding tables")
     spline_manager.rebuild_tables()
-    print("Rebuilt tables")
+    # print("Rebuilt tables")
     dist = spline_manager.get_total_arc_length()
     print("DIST: ", dist)
     curpos = 0
@@ -430,14 +430,11 @@ def generate_motion_profile(
         tempt = time_stamps[i+1] - time_stamps[i]
         accel = (velocities[i+1] ** 2 - velocities[i] ** 2) / (2 * dd)
         accum = velocities[i] * tempt + 0.5 * accel * (tempt ** 2)
-
-        # print("DIF: ", i*dd - total_dist)
-        # print("*", i, time_stamps[i], total_dist)
         total_dist += accum
     
     path_time = time_stamps[-1]
 
-    time_steps = int(path_time / dt)#  + 1
+    time_steps = int(path_time / dt) + 1
 
     new_velocities = []
     total_dist = 0
@@ -469,8 +466,14 @@ def generate_motion_profile(
         t_along_curve = spline_manager.distance_to_time(current_dist)
         curvature = spline_manager.get_curvature(t_along_curve)
 
+        t_along_curve = spline_manager.distance_to_time(current_dist)
+        curvature = spline_manager.get_curvature(t_along_curve)
+        left_velocity, right_velocity = get_wheel_velocities(new_velocities[i], curvature, track_width)
+        print("VELS: ", left_velocity, right_velocity)
+
         accel = (new_velocities[i+1] - new_velocities[i]) / dt
         current_dist += new_velocities[i] * dt + 0.5 * accel * (dt ** 2)
+
 
     res = generate_other_lists(new_velocities, spline_manager, dt, turn_insertions, turn_values, reverse_values, wait_times, track_width)
 

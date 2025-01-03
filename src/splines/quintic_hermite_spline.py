@@ -41,7 +41,7 @@ class QuinticHermiteSpline(Spline):
         except Exception as e:
             return False
         
-        print(f"Computed parameters: {self.parameters}")
+        # print(f"Computed parameters: {self.parameters}")
         
         # Handle provided derivatives
         if first_derivatives is not None:

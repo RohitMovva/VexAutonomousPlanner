@@ -1,6 +1,6 @@
-autonomous_repository_path: C:/Users/tihor/Projects/HighStakesAutonomous/include/routes/routes.h
+autonomous_repository_path: /home/rohit/Projects/HighStakesAutonomous/include/routes/routes.h
 max_acceleration: 5.0
 max_jerk: 45.0
 max_velocity: 4.5
-routes_folder_path: C:/Users/tihor/Projects/VexAutonomousPlanner/routes
+routes_folder_path: /home/rohit/Projects/VexAutonomousPlanner/routes
 track_width: 1.08333333333
