@@ -277,7 +277,16 @@ class PathWidget(QGraphicsView):
         reverse_values: List[bool] = []
         wait_times: List[float] = []
         is_reversed: bool = False
-        
+        constraints = motion_profile_generator.Constraints(
+            max_vel=v_max,        # Maximum velocity in meters/second
+            max_acc=a_max,        # Maximum acceleration in meters/second^2
+            max_dec=a_max,        # Maximum deceleration in meters/second^2
+            friction_coef=0.8,  # Coefficient of friction (typical rubber wheels on concrete)
+            max_jerk=j_max,       # Maximum jerk (rate of change of acceleration) in meters/second^3
+            track_width=track_width     # Distance between wheels in meters
+        )
+
+
         for i in range(0, len(self.nodes)-1):
             if (self.nodes[i].is_reverse_node):
                 is_reversed = not is_reversed
@@ -300,7 +309,7 @@ class PathWidget(QGraphicsView):
                 nodes_map,
                 coords,
             ) = motion_profile_generator.generate_motion_profile(
-                [], self.spline_manager, v_max, a_max, j_max, track_width, turn_values, reverse_values, wait_times
+                self.spline_manager, constraints
             )
 
             if self.all_time_intervals != []:
@@ -335,17 +344,23 @@ class PathWidget(QGraphicsView):
 
         left_wheel_velocities = []
         right_wheel_velocities = []
+        left_wheel_accelerations = []
+        right_wheel_accelerations = []
+
         for i in range(len(self.all_velocities)):
             left_wheel_velocities.append(self.all_velocities[i] - self.all_angular_velocities[i] * track_width / 2)
             right_wheel_velocities.append(self.all_velocities[i] + self.all_angular_velocities[i] * track_width / 2)
 
-        left_max_velocity = max(left_wheel_velocities)
-        right_max_velocity = max(right_wheel_velocities)
-        print("Left max velocity:", left_max_velocity)
-        print("Right max velocity:", right_max_velocity)
+        left_wheel_accelerations = [(left_wheel_velocities[i] - left_wheel_velocities[i - 1])/.025 for i in range(1, len(left_wheel_velocities))]
+        right_wheel_accelerations = [(right_wheel_velocities[i] - right_wheel_velocities[i - 1])/.025 for i in range(1, len(right_wheel_velocities))]
+
+        print(f"Max velocities: {max(left_wheel_velocities), max(right_wheel_velocities)}")
+        # print(f"Max accelerations: {max(left_wheel_accelerations), max(right_wheel_accelerations)}")
+        # print(left_wheel_accelerations)
         # print("Left wheel velocities:", left_wheel_velocities)
         # print("Right wheel velocities:", right_wheel_velocities)
-
+        for i in range(len(left_wheel_accelerations)):
+            print(f"Left wheel acceleration: {left_wheel_accelerations[i]}, Right wheel acceleration: {right_wheel_accelerations[i]}")
         return (
             self.all_time_intervals,
             self.all_positions,
