@@ -103,8 +103,8 @@ class QuinticHermiteSpline(Spline):
             
     def _compute_derivatives(self) -> None:
         """
-        Compute missing first and second derivatives at control points using local segment lengths
-        and tighter curve fitting.
+        Compute missing first and second derivatives at control points using Catmull-Rom
+        approach for first derivatives and a weighted three-point formula for second derivatives.
         """
         num_points = len(self.control_points)
 
@@ -114,78 +114,72 @@ class QuinticHermiteSpline(Spline):
         if self.second_derivatives is None:
             self.second_derivatives = np.zeros_like(self.control_points, dtype=float)
 
-        # Calculate distances between consecutive points
+        # Calculate distances and normalized tangent vectors between consecutive points
         diffs = np.diff(self.control_points, axis=0)
         distances = np.linalg.norm(diffs, axis=1)
         
-        # Compute unit tangent vectors for each segment
-        tangents = np.zeros_like(diffs)
-        for i in range(len(diffs)):
-            if distances[i] > 1e-10:  # Avoid division by zero
-                tangents[i] = diffs[i] / distances[i]
-            else:
-                # For very close points, use neighboring segment or zero
-                if i > 0:
-                    tangents[i] = tangents[i-1]
-                elif i < len(diffs) - 1:
-                    tangents[i] = diffs[i+1] / np.linalg.norm(diffs[i+1])
-                else:
-                    tangents[i] = np.zeros(2)
-
-        # Compute first derivatives using weighted average of adjacent tangents
-        # with a tighter scaling factor
-        for i in range(num_points):
-            if i == 0:
-                # First point: use forward tangent with reduced magnitude
-                self.first_derivatives[i] = tangents[0] * distances[0] * 0.5
-            elif i == num_points - 1:
-                # Last point: use backward tangent with reduced magnitude
-                self.first_derivatives[i] = tangents[-1] * distances[-1] * 0.5
-            else:
-                # Interior points: weighted average of adjacent tangents
-                w1 = distances[i]
-                w2 = distances[i-1]
-                if w1 + w2 > 1e-10:
-                    weighted_tangent = (w1 * tangents[i-1] + w2 * tangents[i]) / (w1 + w2)
-                    # Scale by minimum of adjacent segment lengths to prevent overshooting
-                    local_scale = min(w1, w2) * 0.5
-                    self.first_derivatives[i] = weighted_tangent * local_scale
-                else:
-                    self.first_derivatives[i] = np.zeros(2)
-
-        # Compute second derivatives using local segment lengths
-        # with reduced magnitudes to prevent oscillation
+        # Compute first derivatives using Catmull-Rom approach
         for i in range(num_points):
             if i == 0:
                 # Forward difference for first point
-                if distances[0] > 1e-10:
-                    h = distances[0]
-                    self.second_derivatives[i] = (
-                        self.first_derivatives[1] - self.first_derivatives[0]
-                    ) / (h * 2)  # Increased denominator to reduce magnitude
-                else:
-                    self.second_derivatives[i] = np.zeros(2)
+                self.first_derivatives[i] = diffs[0]
             elif i == num_points - 1:
                 # Backward difference for last point
+                self.first_derivatives[i] = diffs[-1]
+            else:
+                # Centred difference for interior points
+                self.first_derivatives[i] = (diffs[i] + diffs[i-1]) / 2
+
+        # Compute initial second derivatives using central differences
+        temp_second_derivatives = np.zeros_like(self.control_points, dtype=float)
+        for i in range(num_points):
+            if i == 0:
+                # Forward difference for start point
+                if distances[0] > 1e-10:
+                    temp_second_derivatives[i] = (
+                        self.first_derivatives[1] - self.first_derivatives[0]
+                    ) / distances[0]
+            elif i == num_points - 1:
+                # Backward difference for end point
                 if distances[-1] > 1e-10:
-                    h = distances[-1]
-                    self.second_derivatives[i] = (
+                    temp_second_derivatives[i] = (
                         self.first_derivatives[-1] - self.first_derivatives[-2]
-                    ) / (h * 2)  # Increased denominator to reduce magnitude
-                else:
-                    self.second_derivatives[i] = np.zeros(2)
+                    ) / distances[-1]
             else:
                 # Central difference for interior points
-                h_left = distances[i-1]
-                h_right = distances[i]
-                if h_left + h_right > 1e-10:
-                    # Use average of left and right differences with reduced magnitude
-                    left_deriv = (self.first_derivatives[i] - self.first_derivatives[i-1]) / (h_left * 2)
-                    right_deriv = (self.first_derivatives[i+1] - self.first_derivatives[i]) / (h_right * 2)
-                    self.second_derivatives[i] = (left_deriv + right_deriv) / 2
-                else:
-                    self.second_derivatives[i] = np.zeros(2)
-            
+                h1 = distances[i-1]
+                h2 = distances[i]
+                if h1 + h2 > 1e-10:
+                    # Use distance-weighted average of forward and backward differences
+                    w1 = h2 / (h1 + h2)
+                    w2 = h1 / (h1 + h2)
+                    temp_second_derivatives[i] = (
+                        w1 * (self.first_derivatives[i] - self.first_derivatives[i-1]) / h1 +
+                        w2 * (self.first_derivatives[i+1] - self.first_derivatives[i]) / h2
+                    )
+
+        # Apply smoothing to second derivatives using weighted averages
+        for i in range(num_points):
+            if i == 0:
+                # Use forward-weighted average for start point
+                self.second_derivatives[i] = np.zeros(2)
+            elif i == num_points - 1:
+                # Use backward-weighted average for end point
+                self.second_derivatives[i] = np.zeros(2)
+            else:
+                # Use distance-weighted average of neighboring points
+                h1 = distances[i-1] if i > 0 else 1.0
+                h2 = distances[i] if i < num_points-1 else 1.0
+                total = h1 + h2
+                w1 = h2 / total
+                w2 = h1 / total
+                
+                self.second_derivatives[i] = (
+                    w1 * temp_second_derivatives[i-1] +
+                    1.0 * temp_second_derivatives[i] +
+                    w2 * temp_second_derivatives[i+1]
+                ) / (1.0 + w1 + w2)
+                
     def _get_basis_functions(self, t: float) -> np.ndarray:
         """
         Compute the quintic Hermite basis functions at parameter t.
