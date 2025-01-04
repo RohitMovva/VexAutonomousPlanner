@@ -82,8 +82,8 @@ class QuinticHermiteSpline(Spline):
                 if segment_length > 0:
                     d0 = d0 * segment_length
                     d1 = d1 * segment_length
-                    dd0 = dd0 * (segment_length ** 2)
-                    dd1 = dd1 * (segment_length ** 2)
+                    dd0 = dd0 * (segment_length)
+                    dd1 = dd1 * (segment_length)
                 
                 # Compute the coefficient matrix for this segment
                 segment = np.vstack([p0, p1, d0, d1, dd0, dd1])
@@ -133,6 +133,9 @@ class QuinticHermiteSpline(Spline):
         # Compute initial second derivatives using central differences
         temp_second_derivatives = np.zeros_like(self.control_points, dtype=float)
         for i in range(num_points):
+            # Get the first derivative magnitude for scaling
+            d1_mag = np.linalg.norm(self.first_derivatives[i])
+            
             if i == 0:
                 # Forward difference for start point
                 if distances[0] > 1e-10:
@@ -182,103 +185,60 @@ class QuinticHermiteSpline(Spline):
                 
     def _get_basis_functions(self, t: float) -> np.ndarray:
         """
-        Compute the quintic Hermite basis functions at parameter t.
-        
-        The basis functions are:
-        H₀(t) = 1 - 10t³ + 15t⁴ - 6t⁵    # Position at start point
-        H₁(t) = 10t³ - 15t⁴ + 6t⁵        # Position at end point
-        H₂(t) = t - 6t³ + 8t⁴ - 3t⁵      # First derivative at start point
-        H₃(t) = -4t³ + 7t⁴ - 3t⁵         # First derivative at end point
-        H₄(t) = 0.5t² - 1.5t³ + 1.5t⁴ - 0.5t⁵  # Second derivative at start point
-        H₅(t) = 0.5t³ - t⁴ + 0.5t⁵       # Second derivative at end point
-        
-        Args:
-            t: Parameter value between 0 and 1
-                
-        Returns:
-            np.ndarray: Array containing the six basis functions [H₀, H₁, H₂, H₃, H₄, H₅]
+        Compute the quintic Hermite basis functions at parameter t with improved boundary behavior.
         """
-        # Precompute powers of t for efficiency
         t2 = t * t
         t3 = t2 * t
         t4 = t3 * t
         t5 = t4 * t
         
-        # Compute the basis functions
-        H0 = 1 - 10*t3 + 15*t4 - 6*t5    # Position at start point
-        H1 = 10*t3 - 15*t4 + 6*t5        # Position at end point
-        H2 = t - 6*t3 + 8*t4 - 3*t5      # First derivative at start point
-        H3 = -4*t3 + 7*t4 - 3*t5         # First derivative at end point
-        H4 = 0.5*t2 - 1.5*t3 + 1.5*t4 - 0.5*t5  # Second derivative at start point
-        H5 = 0.5*t3 - t4 + 0.5*t5        # Second derivative at end point
+        # Modified basis functions with better boundary behavior
+        H0 = 1 - 10*t3 + 15*t4 - 6*t5
+        H1 = 10*t3 - 15*t4 + 6*t5
+        H2 = t - 6*t3 + 8*t4 - 3*t5
+        H3 = -4*t3 + 7*t4 - 3*t5
+        H4 = 0.5*(t2 - 2*t3 + t4)  # Modified for better C2 continuity
+        H5 = 0.5*(t3 - 2*t4 + t5)  # Modified for better C2 continuity
         
         return np.array([H0, H1, H2, H3, H4, H5])
 
     def _get_basis_derivatives(self, t: float) -> np.ndarray:
         """
-        Compute the derivatives of quintic Hermite basis functions at parameter t.
-        
-        The derivatives of the basis functions are:
-        H₀'(t) = -30t² + 60t³ - 30t⁴        # Position at start point
-        H₁'(t) = 30t² - 60t³ + 30t⁴         # Position at end point
-        H₂'(t) = 1 - 18t² + 32t³ - 15t⁴     # First derivative at start point
-        H₃'(t) = -12t² + 28t³ - 15t⁴        # First derivative at end point
-        H₄'(t) = t - 4.5t² + 6t³ - 2.5t⁴    # Second derivative at start point
-        H₅'(t) = 1.5t² - 4t³ + 2.5t⁴        # Second derivative at end point
-        
-        Args:
-            t: Parameter value between 0 and 1
-            
-        Returns:
-            np.ndarray: Array containing the derivatives of basis functions [H₀', H₁', H₂', H₃', H₄', H₅']
+        Compute derivatives of the modified basis functions.
         """
-        # Precompute powers of t for efficiency
         t2 = t * t
         t3 = t2 * t
         t4 = t3 * t
         
-        # Compute the derivatives of basis functions
-        H0_prime = -30*t2 + 60*t3 - 30*t4    # Derivative of position at start point
-        H1_prime = 30*t2 - 60*t3 + 30*t4     # Derivative of position at end point
-        H2_prime = 1 - 18*t2 + 32*t3 - 15*t4 # Derivative of first derivative at start point
-        H3_prime = -12*t2 + 28*t3 - 15*t4    # Derivative of first derivative at end point
-        H4_prime = t - 4.5*t2 + 6*t3 - 2.5*t4  # Derivative of second derivative at start point
-        H5_prime = 1.5*t2 - 4*t3 + 2.5*t4    # Derivative of second derivative at end point
+        # Derivatives of modified basis functions
+        H0_prime = -30*t2 + 60*t3 - 30*t4
+        H1_prime = 30*t2 - 60*t3 + 30*t4
+        H2_prime = 1 - 18*t2 + 32*t3 - 15*t4
+        H3_prime = -12*t2 + 28*t3 - 15*t4
+        H4_prime = t - 3*t2 + 2*t3  # Modified derivative
+        H5_prime = 1.5*t2 - 4*t3 + 2.5*t4  # Modified derivative
         
         return np.array([H0_prime, H1_prime, H2_prime, H3_prime, H4_prime, H5_prime])
-        
+
     def _get_basis_second_derivatives(self, t: float) -> np.ndarray:
         """
-        Compute the second derivatives of quintic Hermite basis functions at parameter t.
-        
-        The second derivatives of the basis functions are:
-        H₀''(t) = -60t + 180t² - 120t³      # Position at start point
-        H₁''(t) = 60t - 180t² + 120t³       # Position at end point
-        H₂''(t) = -36t + 96t² - 60t³        # First derivative at start point
-        H₃''(t) = -24t + 84t² - 60t³        # First derivative at end point
-        H₄''(t) = 1 - 9t + 18t² - 10t³      # Second derivative at start point
-        H₅''(t) = 3t - 12t² + 10t³          # Second derivative at end point
-        
-        Args:
-            t: Parameter value between 0 and 1
-            
-        Returns:
-            np.ndarray: Array containing the second derivatives of basis functions [H₀'', H₁'', H₂'', H₃'', H₄'', H₅'']
+        Compute second derivatives of the modified basis functions.
         """
-        # Precompute powers of t for efficiency
         t2 = t * t
         t3 = t2 * t
         
-        # Compute the second derivatives of basis functions
-        H0_double_prime = -60*t + 180*t2 - 120*t3    # Second derivative of position at start point
-        H1_double_prime = 60*t - 180*t2 + 120*t3     # Second derivative of position at end point
-        H2_double_prime = -36*t + 96*t2 - 60*t3      # Second derivative of first derivative at start point
-        H3_double_prime = -24*t + 84*t2 - 60*t3      # Second derivative of first derivative at end point
-        H4_double_prime = 1 - 9*t + 18*t2 - 10*t3    # Second derivative of second derivative at start point
-        H5_double_prime = 3*t - 12*t2 + 10*t3        # Second derivative of second derivative at end point
+        # Second derivatives of modified basis functions
+        H0_double_prime = -60*t + 180*t2 - 120*t3
+        H1_double_prime = 60*t - 180*t2 + 120*t3
+        H2_double_prime = -36*t + 96*t2 - 60*t3
+        H3_double_prime = -24*t + 84*t2 - 60*t3
+        H4_double_prime = 1 - 6*t + 6*t2  # Modified second derivative
+        H5_double_prime = 3*t - 12*t2 + 7.5*t3  # Modified second derivative
         
         return np.array([H0_double_prime, H1_double_prime, H2_double_prime, 
-                        H3_double_prime, H4_double_prime, H5_double_prime])        
+                        H3_double_prime, H4_double_prime, H5_double_prime])
+
+        
     def get_point(self, t: float) -> np.ndarray:
         """
         Get point on the quintic Hermite spline at parameter t.

@@ -48,6 +48,10 @@ def forward_backward_pass(
     """
     Performs forward-backward smoothing with proper consideration of all constraints
     """
+    # Derive angular constraints from linear constraints and track width
+    max_angular_vel = 2 * constraints.max_vel / constraints.track_width
+    max_angular_accel = 2 * constraints.max_acc / constraints.track_width
+    
     # Rebuild spline tables
     spline_manager.rebuild_tables()
     velocities = []
@@ -62,7 +66,6 @@ def forward_backward_pass(
         curvature = spline_manager.get_curvature(t)
         curvatures.append(curvature)
         velocities.append(0)  # Initialize velocities
-        print(curvature)
         current_dist += delta_dist
     
     # Add final point
@@ -72,58 +75,68 @@ def forward_backward_pass(
     
     # Forward pass
     velocities[0] = start_vel
-    last_angular_vel = 0
     
     for i in range(len(velocities) - 1):
         current_vel = velocities[i]
         curvature = curvatures[i]
         
-        # Calculate current angular velocity and acceleration
-        print(f"current_vel: {current_vel}, curvature: {curvature}")
-        angular_vel = current_vel * curvature
-        print(f"angular_vel: {angular_vel}, last_angular_vel: {last_angular_vel}, current_vel: {current_vel}, delta_dist: {delta_dist}")
-        # print(angular_vel, last_angular_vel, current_vel, delta_dist)
-        angular_accel = (angular_vel - last_angular_vel) * (current_vel/delta_dist)
-        last_angular_vel = angular_vel
+        if abs(curvature) < 1e-6:
+            max_linear_vel = constraints.max_vel
+            max_accel = constraints.max_acc
+        else:
+            # Using the provided formulas
+            max_vel_ang = max_angular_vel / abs(curvature)
+            max_vel_kin = 2 * constraints.max_vel / (constraints.track_width * abs(curvature) + 2)
+            max_curve_vel = constraints.max_speed_at_curvature(curvature)
+            max_linear_vel = min(max_vel_ang, max_vel_kin, max_curve_vel)
+            
+            max_accel_ang = max_angular_accel / abs(curvature)
+            max_accel_kin = 2 * constraints.max_acc / (constraints.track_width * abs(curvature) + 2)
+            max_accel = min(max_accel_ang, max_accel_kin)
         
-        # Adjust maximum acceleration based on angular component
-        print(f"constraints.max_acc: {constraints.max_acc}, abs(angular_accel): {abs(angular_accel)}, constraints.track_width: {constraints.track_width}")
-        max_accel = constraints.max_acc - abs(angular_accel * constraints.track_width / 2)
+        # Calculate next velocity using the provided formula
+        velocities[i + 1] = min(max_linear_vel, math.sqrt(current_vel**2 + 2 * max_accel * delta_dist))
         
-        # Calculate maximum allowed velocity at this point
-        max_curve_vel = constraints.max_speed_at_curvature(curvature)
-        
-        # Calculate maximum achievable velocity considering acceleration
-        print(f"current_vel: {current_vel}, max_accel: {max_accel}, delta_dist: {delta_dist}")
-        max_achievable_vel = math.sqrt(current_vel**2 + 2 * max_accel * delta_dist)
-        
-        # Take minimum of curve and acceleration limits
-        velocities[i + 1] = min(max_curve_vel, max_achievable_vel)
+        # Optional: verify wheel speeds are within bounds
+        linear_vel = velocities[i + 1]
+        angular_vel = linear_vel * curvature
+        left_vel, right_vel = constraints.get_wheel_speeds(linear_vel, angular_vel)
+        velocities[i + 1] = min(velocities[i + 1], 
+                               abs(constraints.max_vel / (1 + (constraints.track_width * abs(curvature) / 2))))
     
     # Backward pass
-    last_angular_vel = 0
     velocities[-1] = end_vel
     
     for i in range(len(velocities) - 1, 0, -1):
         current_vel = velocities[i]
         curvature = curvatures[i]
         
-        # Calculate current angular velocity and acceleration
-        angular_vel = current_vel * curvature
-        angular_accel = (angular_vel - last_angular_vel) * (delta_dist/current_vel)
-        last_angular_vel = angular_vel
-        
-        # Adjust maximum deceleration based on angular component
-        max_decel = constraints.max_dec - abs(angular_accel * constraints.track_width / 2)
-        
-        # Calculate maximum allowed velocity at this point
-        max_curve_vel = constraints.max_speed_at_curvature(curvature)
+        if abs(curvature) < 1e-6:
+            max_linear_vel = constraints.max_vel
+            max_decel = constraints.max_dec
+        else:
+            # Using the provided formulas again but for deceleration
+            max_vel_ang = max_angular_vel / abs(curvature)
+            max_vel_kin = 2 * constraints.max_vel / (constraints.track_width * abs(curvature) + 2)
+            max_curve_vel = constraints.max_speed_at_curvature(curvature)
+            max_linear_vel = min(max_vel_ang, max_vel_kin, max_curve_vel)
+            
+            max_decel_ang = max_angular_accel / abs(curvature)
+            max_decel_kin = 2 * constraints.max_dec / (constraints.track_width * abs(curvature) + 2)
+            max_decel = min(max_decel_ang, max_decel_kin)
         
         # Calculate maximum achievable velocity considering deceleration
         max_achievable_vel = math.sqrt(current_vel**2 + 2 * max_decel * delta_dist)
         
         # Take minimum of current velocity and new constraints
-        velocities[i - 1] = min(velocities[i - 1], max_achievable_vel, max_curve_vel)
+        velocities[i - 1] = min(velocities[i - 1], max_achievable_vel, max_linear_vel)
+        
+        # Optional: verify wheel speeds are within bounds
+        linear_vel = velocities[i - 1]
+        angular_vel = linear_vel * curvature
+        left_vel, right_vel = constraints.get_wheel_speeds(linear_vel, angular_vel)
+        velocities[i - 1] = min(velocities[i - 1], 
+                               abs(constraints.max_vel / (1 + (constraints.track_width * abs(curvature) / 2))))
 
     return velocities
 
@@ -165,7 +178,7 @@ def generate_motion_profile(
     prev_t = 0
     while current_pos < (total_length):
         t = spline_manager.distance_to_time(current_pos)
-        if (t%1 < prev_t%1 and t < spline_manager.parameters[-1]):
+        if (t%1 < prev_t%1 and t < spline_manager.distance_to_time(total_length)):
             nodes_map.append(len(times))
 
         prev_t = t
