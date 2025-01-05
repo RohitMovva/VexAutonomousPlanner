@@ -171,22 +171,22 @@ class QuinticHermiteSpline(Spline):
                     slope1 = dy1 / dx1
                     slope2 = dy2 / dx2
                     
-                    if slope1 * slope2 <= 0:  # Potential extremum
-                        # Fit quadratic through normalized points
-                        x_width = next_point[0] - prev_point[0]
-                        h = x_width / 2  # half-width
+                    # if slope1 * slope2 <= 0:  # Potential extremum
+                    #     # Fit quadratic through normalized points
+                    #     x_width = next_point[0] - prev_point[0]
+                    #     h = x_width / 2  # half-width
                         
-                        # Compute second derivative from quadratic fit
-                        # For y = ax² + bx + c, second derivative is 2a
-                        a = ((prev_point[1] + next_point[1])/2 - curr_point[1]) / (h * h)
-                        self.second_derivatives[i] = [0, 2 * a]
-                        print(f"Extremum at point {i}, curvature = {2 * a}")
-                    else:
+                    #     # Compute second derivative from quadratic fit
+                    #     # For y = ax² + bx + c, second derivative is 2a
+                    #     a = ((prev_point[1] + next_point[1])/2 - curr_point[1]) / (h * h)
+                    #     self.second_derivatives[i] = [0, 2 * a]
+                    #     print(f"Extremum at point {i}, curvature = {2 * a}")
+                    # else:
                         # Regular case - use central difference
-                        avg_dist = (prev_dist + next_dist) / 2
-                        self.second_derivatives[i] = (
-                            self.first_derivatives[i+1] - self.first_derivatives[i-1]
-                        ) / (2 * avg_dist)
+                    avg_dist = (prev_dist + next_dist) / 2
+                    self.second_derivatives[i] = (
+                        self.first_derivatives[i+1] - self.first_derivatives[i-1]
+                    ) / (0.5*avg_dist)
                 else:
                     # Vertical segments - use central difference
                     avg_dist = (prev_dist + next_dist) / 2

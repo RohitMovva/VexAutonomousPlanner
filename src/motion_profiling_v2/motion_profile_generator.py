@@ -76,6 +76,8 @@ def forward_backward_pass(
     
     # Forward pass
     velocities[0] = start_vel
+    old_left_vel = 0
+    old_right_vel = 0
     
     for i in range(len(velocities) - 1):
         current_vel = velocities[i]
@@ -91,10 +93,11 @@ def forward_backward_pass(
             max_curve_vel = constraints.max_speed_at_curvature(curvature)
             max_linear_vel = min(max_vel_ang, max_vel_kin, max_curve_vel)
             
+
             max_accel_ang = max_angular_accel / abs(curvature)
             max_accel_kin = 2 * constraints.max_acc / (constraints.track_width * abs(curvature) + 2)
             max_accel = min(max_accel_ang, max_accel_kin)
-        
+
         # Calculate next velocity using the provided formula
         velocities[i + 1] = min(max_linear_vel, math.sqrt(current_vel**2 + 2 * max_accel * delta_dist))
         
@@ -102,8 +105,16 @@ def forward_backward_pass(
         linear_vel = velocities[i + 1]
         angular_vel = linear_vel * curvature
         left_vel, right_vel = constraints.get_wheel_speeds(linear_vel, angular_vel)
+        
+        
         velocities[i + 1] = min(velocities[i + 1], 
                                abs(constraints.max_vel / (1 + (constraints.track_width * abs(curvature) / 2))))
+        
+        print(f"Wheel acceleration: {(right_vel - old_right_vel) / (delta_dist/((velocities[i] + velocities[i+1])/2)):.4f}, {(left_vel - old_left_vel) / (delta_dist/((velocities[i] + velocities[i+1])/2)):.4f}")
+        # print(f"Wheel velocities: {left_vel:.4f}, {right_vel:.4f}")
+        
+        old_right_vel = right_vel
+        old_left_vel = left_vel
     
     # Backward pass
     velocities[-1] = end_vel
@@ -169,6 +180,8 @@ def generate_motion_profile(
     current_vel = velocities[0]
     last_heading = 0
     total_length = spline_manager.get_total_arc_length()
+    old_left_vel = 0
+    old_right_vel = 0
     
     # Print initial conditions
     print(f"\nInitial conditions:")
@@ -177,6 +190,7 @@ def generate_motion_profile(
     print(f"Target end velocity: {velocities[-1]:.6f}")
     print(f"Number of velocity points: {len(velocities)}")
     prev_t = 0
+    print(f"Init Distance: {current_pos:.6f}")
     while current_pos < (total_length):
         t = spline_manager.distance_to_time(current_pos)
         if (t%1 < prev_t%1 and t < spline_manager.distance_to_time(total_length)):
@@ -184,6 +198,9 @@ def generate_motion_profile(
 
         prev_t = t
         curvature = spline_manager.get_curvature(t)
+        print(f"Curvature: {curvature:.6f}")
+        print(f"T: {t:.6f}")
+        print(f"Distance: {current_pos:.6f}")
         heading = spline_manager.get_heading(t)
         coord = spline_manager.get_point_at_parameter(t)
         
@@ -223,6 +240,13 @@ def generate_motion_profile(
         # Update velocity and position
         current_vel = current_vel + accel * dt
         current_vel = np.clip(current_vel, 0, target_vel)
+
+        left_vel, right_vel = constraints.get_wheel_speeds(current_vel, angular_vel)
+        left_accel = (left_vel - old_left_vel) / dt
+        right_accel = (right_vel - old_right_vel) / dt
+        print(f"Wheel acceleration: {left_accel:.4f}, {right_accel:.4f}")
+        old_left_vel = left_vel
+        old_right_vel = right_vel
         
         # Update position
         delta_pos = current_vel * dt + 0.5 * accel * dt * dt
