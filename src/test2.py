@@ -7,9 +7,9 @@ def create_test_cases() -> List[Tuple[np.ndarray, np.ndarray]]:
     """Create various test cases for the spline."""
     test_cases = []
     
-    # Test case 1: Straight line with 4 irregular points
-    x1 = np.array([0.0, .1, 2.0, 4.0])
-    y1 = np.array([0.0, 0.0, 0.0, 0.0])
+    # Test case 1: Tall triangle
+    x1 = np.array([0.0, 1.0, 2.0])
+    y1 = np.array([0.0, 10.0, 0.0])
     test_cases.append((x1, y1))
     
     # Test case 2: S-curve
