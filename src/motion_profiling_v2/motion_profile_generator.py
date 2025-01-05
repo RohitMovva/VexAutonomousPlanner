@@ -65,6 +65,7 @@ def forward_backward_pass(
         t = spline_manager.distance_to_time(current_dist)
         curvature = spline_manager.get_curvature(t)
         curvatures.append(curvature)
+        print(curvature)
         velocities.append(0)  # Initialize velocities
         current_dist += delta_dist
     
