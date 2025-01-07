@@ -8,7 +8,6 @@ class ProfilePoint:
     dist: float
     vel: float
 
-
 @dataclass
 class Constraints:
     max_vel: float
@@ -18,34 +17,56 @@ class Constraints:
     max_jerk: float
     track_width: float
 
-    def max_speed_at_curvature(self, curvature: float, next_curvature: float, delta_dist: float, max_angular_accel: float) -> float:
-        """Calculate maximum safe speed based on curvature considering turning, friction limits, and angular acceleration"""
+    def max_speed_at_curvature(self, curvature: float) -> float:
+        """Calculate maximum safe speed based on curvature considering both turning and friction limits"""
         if abs(curvature) < 1e-6:
             return self.max_vel
             
         # Calculate maximum speed based on track width (to prevent tipping)
         max_turn_speed = ((2 * self.max_vel / self.track_width) * self.max_vel) / \
                         (abs(curvature) * self.max_vel + (2 * self.max_vel / self.track_width))
+                        
+        return min(max_turn_speed, self.max_vel)
+
+    def max_accel_at_curvature(self, starting_velocity: float, curvature: float, next_curvature: float, delta_dist: float) -> float:
+        """
+        Calculate maximum safe acceleration over a distance considering differential drive constraints.
         
-        # Calculate rate of change of curvature with respect to distance
-        dk_ds = (next_curvature - curvature) / delta_dist
+        Args:
+            starting_velocity (float): Current linear velocity of the robot
+            curvature (float): Current path curvature (1/radius)
+            next_curvature (float): Next path curvature
+            delta_dist (float): Distance over which acceleration occurs
+            
+        Returns:
+            float: Maximum safe acceleration value
+        """
+        # Convert curvature to angular velocity (ω = v * κ)
+        current_angular_vel = starting_velocity * curvature
         
-        # For a given velocity v, the angular acceleration is:
-        # α = v² * dk/ds
-        # Therefore, to limit angular acceleration to max_angular_accel:
-        # v = sqrt(max_angular_accel / |dk/ds|)
+        # Get current wheel speeds
+        left_vel, right_vel = self.get_wheel_speeds(starting_velocity, current_angular_vel)
         
-        if abs(dk_ds) > 1e-6:
-            # Calculate maximum speed based on angular acceleration constraint
-            max_accel_speed = math.sqrt(max_angular_accel / abs(dk_ds))
+        # Calculate maximum possible velocities for each wheel at the next curvature
+        next_angular_vel = starting_velocity * next_curvature
+        next_max_vel = self.max_speed_at_curvature(next_curvature)
+        max_left_vel, max_right_vel = self.get_wheel_speeds(next_max_vel, next_angular_vel)
+        
+        # Calculate maximum acceleration for each wheel
+        # Using v² = v₀² + 2a∆x formula
+        if delta_dist > 0:
+            left_accel = (max_left_vel**2 - left_vel**2) / (2 * delta_dist)
+            right_accel = (max_right_vel**2 - right_vel**2) / (2 * delta_dist)
         else:
-            max_accel_speed = self.max_vel
+            return 0.0
+            
+        # Convert wheel accelerations to robot center acceleration
+        # The limiting acceleration will be the minimum of the two wheels
+        left_limited_accel = min(left_accel, self.max_acc)
+        right_limited_accel = min(right_accel, self.max_acc)
+        center_accel = min(left_limited_accel, right_limited_accel)
         
-        print(f"Curvatures: {curvature:.6f}, {next_curvature:.6f}")
-        print(f"Max acceleration speed: {max_accel_speed:.2f}")
-        # print()
-        # Return the minimum of all constraints
-        return min(max_turn_speed, max_accel_speed, self.max_vel)
+        return max(self.max_acc*-1, center_accel)
 
     def get_wheel_speeds(self, linear_vel: float, angular_vel: float) -> Tuple[float, float]:
         """Calculate differential drive wheel speeds from linear and angular velocity"""
@@ -109,16 +130,25 @@ def forward_backward_pass(
             # Using the provided formulas
             max_vel_ang = max_angular_vel / abs(curvature)
             max_vel_kin = 2 * constraints.max_vel / (constraints.track_width * abs(curvature) + 2)
-            max_curve_vel = constraints.max_speed_at_curvature(curvature, curvatures[i + 1], delta_dist, max_angular_accel)
+            max_curve_vel = constraints.max_speed_at_curvature(curvature)
             max_linear_vel = min(max_vel_ang, max_vel_kin, max_curve_vel)
             
             max_accel_ang = max_angular_accel / abs(curvature)
+            print(f"Components: {max_angular_accel:.2f}, {abs(curvature):.2f}")
             max_accel_kin = 2 * constraints.max_acc / (constraints.track_width * abs(curvature) + 2)
-            max_accel = min(max_accel_ang, max_accel_kin)
+            max_acc_thing = constraints.max_accel_at_curvature(current_vel, curvature, curvatures[i + 1], delta_dist)
+            print(f"Items: {max_accel_ang:.2f}, {max_accel_kin:.2f}, {max_acc_thing:.2f}")
+            max_accel = min(max_accel_ang, max_accel_kin, max_acc_thing)
 
         # Calculate next velocity using the provided formula
         next_vel = min(max_linear_vel, math.sqrt(current_vel**2 + 2 * max_accel * delta_dist))
         
+        velocities[i + 1] = next_vel
+        
+        # Final velocity adjustment for track width
+        velocities[i + 1] = min(velocities[i + 1], 
+                               abs(constraints.max_vel / (1 + (constraints.track_width * abs(curvature) / 2))))
+
         # Calculate actual angular acceleration
         current_angular_vel = current_vel * curvature
         next_angular_vel = next_vel * curvatures[i + 1]
@@ -128,20 +158,18 @@ def forward_backward_pass(
         
         # print(f"\nPoint {i}:")
         # print(f"  Curvature: {curvature:.4f}")
-        # print(f"  Current linear velocity: {current_vel:.2f}")
-        # print(f"  Next linear velocity: {next_vel:.2f}")
-        # print(f"  Current angular velocity: {current_angular_vel:.2f}")
-        # print(f"  Next angular velocity: {next_angular_vel:.2f}")
-        # print(f"  Actual angular acceleration: {actual_angular_accel:.2f}")
+        print(f"  Next lin velo: {next_vel:.5f} Cur lin velo: {current_vel:.5f}")
+        print(f"  Cur ang velo: {current_angular_vel:.2f} Next ang velo: {next_angular_vel:.2f}")
+        print(f"  Actual angular acceleration: {actual_angular_accel:.2f}")
         # print(f"  Max allowed angular acceleration: {max_angular_accel:.2f}")
-        
-        velocities[i + 1] = next_vel
+
         old_angular_vel = next_angular_vel
-        
-        # Final velocity adjustment for track width
-        velocities[i + 1] = min(velocities[i + 1], 
-                               abs(constraints.max_vel / (1 + (constraints.track_width * abs(curvature) / 2))))
-    
+
+
+
+        # print(f"  Final velocity: {velocities[i - 1]:.2f}")
+        print()
+
     # Backward pass
     velocities[-1] = end_vel
     old_angular_vel = end_vel * curvatures[-1]
@@ -159,12 +187,13 @@ def forward_backward_pass(
         else:
             max_vel_ang = max_angular_vel / abs(curvature)
             max_vel_kin = 2 * constraints.max_vel / (constraints.track_width * abs(curvature) + 2)
-            max_curve_vel = constraints.max_speed_at_curvature(curvature, curvatures[i - 1], delta_dist, max_angular_accel)
+            max_curve_vel = constraints.max_speed_at_curvature(curvature)
             max_linear_vel = min(max_vel_ang, max_vel_kin, max_curve_vel)
             
             max_decel_ang = max_angular_accel / abs(curvature)
             max_decel_kin = 2 * constraints.max_dec / (constraints.track_width * abs(curvature) + 2)
-            max_decel = min(max_decel_ang, max_decel_kin)
+            max_decel_thing = constraints.max_accel_at_curvature(current_vel, curvature, curvatures[i - 1], delta_dist)
+            max_decel = min(max_decel_ang, max_decel_kin, max_decel_thing)
         
         # Calculate maximum achievable velocity considering deceleration
         prev_vel = math.sqrt(current_vel**2 + 2 * max_decel * delta_dist)
@@ -183,7 +212,7 @@ def forward_backward_pass(
         # print(f"  Previous linear velocity: {prev_vel:.2f}")
         # print(f"  Current angular velocity: {current_angular_vel:.2f}")
         # print(f"  Previous angular velocity: {prev_angular_vel:.2f}")
-        print(f"  Actual angular acceleration: {actual_angular_accel:.2f}")
+        # print(f"  Actual angular acceleration: {actual_angular_accel:.2f}")
         # print(f"  Max allowed angular acceleration: {max_angular_accel:.2f}")
         
         velocities[i - 1] = prev_vel
@@ -193,8 +222,8 @@ def forward_backward_pass(
         velocities[i - 1] = min(velocities[i - 1], 
                                abs(constraints.max_vel / (1 + (constraints.track_width * abs(curvature) / 2))))
         
-        print(f"  Final velocity: {velocities[i - 1]:.2f}")
-        print()
+        # print(f"  Final velocity: {velocities[i - 1]:.2f}")
+        # print()
     
     return velocities
 
