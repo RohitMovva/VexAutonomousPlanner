@@ -360,7 +360,8 @@ class PathWidget(QGraphicsView):
         # print("Left wheel velocities:", left_wheel_velocities)
         # print("Right wheel velocities:", right_wheel_velocities)
         for i in range(len(left_wheel_accelerations)):
-            print(f"Left wheel acceleration: {positions[i]}, {left_wheel_accelerations[i]}, Right wheel acceleration: {right_wheel_accelerations[i]}")
+            # print(f"Left wheel acceleration: {positions[i]}, {left_wheel_accelerations[i]}, Right wheel acceleration: {right_wheel_accelerations[i]}")
+            print(i*.025, left_wheel_accelerations[i], right_wheel_accelerations[i])
         return (
             self.all_time_intervals,
             self.all_positions,
