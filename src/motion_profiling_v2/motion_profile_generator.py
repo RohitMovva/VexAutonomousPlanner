@@ -145,7 +145,7 @@ def forward_backward_pass(
         # Final velocity adjustment for track width
         velocities[i + 1] = min(velocities[i + 1], 
                                abs(constraints.max_vel / (1 + (constraints.track_width * abs(curvature) / 2))))
-        print("Fin vel:", velocities)
+        # print("Fin vel:", velocities[i+1])
 
         print()
 
