@@ -39,13 +39,19 @@ class Constraints:
         # print(f"Inputs: {prev_ang_vel}, {angular_accel}, {max_angular_accel}, {delta_theta}, {curvature}")
         lin_vel = math.sqrt(prev_ang_vel**2 + 2 * max_angular_accel * abs(delta_theta)) / abs(curvature)
         # if (angular_accel < 0 and prev_ang_vel**2 - 2 * max_angular_accel * abs(delta_theta) > 0):
+        #     print(f"FInputs: {angular_accel}, {max_angular_accel}, {prev_ang_vel}, {delta_theta}, {curvature}")
         #     lin_vel = math.sqrt(prev_ang_vel**2 - 2 * max_angular_accel * abs(delta_theta)) / abs(curvature)
+        # else:
+        #     print(f"Inputs: {angular_accel}, {max_angular_accel}, {prev_ang_vel}, {delta_theta}, {curvature}")
+
         # print(f"Prev ang vel: {prev_ang_vel}, end ang vel {lin_vel*curvature}")
         return lin_vel
 
     def max_accels_at_turn(self, angular_accel: float):
         """Calculate maximum linear acceleration based on angular acceleration"""
         # print(f"Inputs: {self.max_acc}, {angular_accel}, {self.track_width}")
+        if (angular_accel < 0):
+            return self.max_acc
         left_lin_ac = self.max_acc + angular_accel * self.track_width / 2
         right_lin_ac = self.max_acc - angular_accel * self.track_width / 2
         # print(f"Outputs: {left_lin_ac}, {right_lin_ac}")
@@ -134,7 +140,7 @@ def forward_backward_pass(
             max_curve_vel = constraints.max_speed_at_curvature(abs(curvature))
             max_ang_acc_vel = constraints.limit_velocity_by_ang_accel(ang_vel, accel_ang, max_angular_accel, headings[i+1] - headings[i], curvatures[i+1])
             # max_ang_acc_vel = 1e9
-            # print(f"Velocity limits: {max_vel_ang:.6f}, {max_vel_kin:.6f}, {max_curve_vel:.6f}, {max_ang_acc_vel:.6f}")
+            print(f"Velocity limits: {max_vel_ang:.6f}, {max_vel_kin:.6f}, {max_curve_vel:.6f}, {max_ang_acc_vel:.6f}")
             max_linear_vel = min(max_vel_ang, max_vel_kin, max_curve_vel, max_ang_acc_vel)
             
             max_accel_ang = max_angular_accel / abs(curvature)
@@ -176,7 +182,7 @@ def forward_backward_pass(
         current_vel = velocities[i]
         curvature = curvatures[i]
         ang_vel = velocities[i] * curvature
-        print(f" Dist: {i*delta_dist:.6f}")
+        # print(f" Dist: {i*delta_dist:.6f}")
         max_ang_acc_vel = constraints.max_vel
         
         if abs(curvature) < 1e-6:
@@ -219,8 +225,8 @@ def forward_backward_pass(
         # Final velocity adjustment for track width
         velocities[i - 1] = min(velocities[i - 1], 
                                abs(constraints.max_vel / (1 + (constraints.track_width * abs(curvature) / 2))))
-        print("Fin vel:", velocities[i-1], max_ang_acc_vel)
-        print()
+        # print("Fin vel:", velocities[i-1], max_ang_acc_vel)
+        # print()
 
     return velocities
 
@@ -322,7 +328,7 @@ def generate_motion_profile(
         left_vel, right_vel = constraints.get_wheel_speeds(current_vel, angular_vel)
         left_accel = (left_vel - old_left_vel) / dt
         right_accel = (right_vel - old_right_vel) / dt
-        print(f"Wheel acceleration: {current_time/dt}, {left_accel:.4f}, {right_accel:.4f}")
+        # print(f"Wheel acceleration: {current_time/dt}, {left_accel:.4f}, {right_accel:.4f}")
         old_left_vel = left_vel
         old_right_vel = right_vel
         
