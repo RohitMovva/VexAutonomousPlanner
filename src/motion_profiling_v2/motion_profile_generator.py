@@ -33,18 +33,25 @@ class Constraints:
                               dkappads: float, delta_s: float, 
                               max_angular_accel: float) -> float:
         if abs(curvature) < 1e-6 and abs(dkappads) < 1e-6:
+            print()
             return self.max_vel
+        print(f"v_prev: {v_prev}, curvature: {curvature}, dkappads: {dkappads}, delta_s: {delta_s}, max_angular_accel: {max_angular_accel}")
         
         numerator = (v_prev**2 * abs(curvature)) + (2 * delta_s * max_angular_accel)
         denominator = abs(curvature) + (2 * delta_s * abs(dkappads))
         
+        print(f"numerator: {numerator}, denominator: {denominator}")
         if abs(denominator) < 1e-6:
+            print()
             return self.max_vel  # Avoid division by zero
         
         u = numerator / denominator
         if u < 0:
+            print()
             return self.max_vel
         
+        print(f"u: {u}")
+        print()
         return min(math.sqrt(u), self.max_vel)
 
     def max_accels_at_turn(self, angular_accel: float):
@@ -137,6 +144,7 @@ def forward_backward_pass(
             # Using the provided formulas
             delta_theta = headings[i+1] - headings[i]
             accel_ang = (ang_vel**2 - prev_ang_vel**2) / (2*abs(delta_theta))
+            print(f"accel_ang: {accel_ang}")
             max_vel_ang = max_angular_vel / abs(curvature)
             max_vel_kin = 2 * constraints.max_vel / (constraints.track_width * abs(curvature) + 2)
             max_curve_vel = constraints.max_speed_at_curvature(abs(curvature))
@@ -152,7 +160,7 @@ def forward_backward_pass(
             max_accel_ang = max_angular_accel / abs(curvature)
             max_accel_kin = 2 * constraints.max_acc / (constraints.track_width * abs(curvature) + 2)
 
-            max_accel_wheel = constraints.max_accels_at_turn(accel_ang)
+            max_accel_wheel = constraints.max_accels_at_turn(abs(accel_ang))
             if (max_accel_wheel < 0):
                 max_accel_wheel = 0
 
@@ -168,23 +176,16 @@ def forward_backward_pass(
         velocities[i + 1] = min(velocities[i + 1], 
                                abs(constraints.max_vel / (1 + (constraints.track_width * abs(curvature) / 2))))
 
-        # accel_ang = ((velocities[i+1]*curvatures[i+1])**2 - ang_vel**2) / (2*delta_theta) * np.sign(abs(curvatures[i+1]) - abs(curvatures[i]))
-
-        # if (max_ang_acc_vel != constraints.max_vel):
-        #     velocities[i + 1] = max_ang_acc_vel
-
 
     # Backward pass
     velocities[-1] = end_vel
-    prev_heading = headings[-1]
     prev_ang_vel = 0
-    old_angular_vel = end_vel * curvatures[-1]
     
     
     for i in range(len(velocities) - 1, 0, -1):
         current_vel = velocities[i]
         curvature = curvatures[i]
-        ang_vel = velocities[i] * curvature
+        ang_vel = velocities[i] * abs(curvature)
         max_ang_acc_vel = constraints.max_vel
         
         if abs(curvature) < 1e-6:
@@ -193,6 +194,7 @@ def forward_backward_pass(
         else:
             delta_theta = headings[i-1] - headings[i]
             accel_ang = (ang_vel**2 - prev_ang_vel**2) / (2*abs(delta_theta))
+            print(f"accel_ang: {accel_ang}")
 
             max_vel_ang = max_angular_vel / abs(curvature)
             max_vel_kin = 2 * constraints.max_vel / (constraints.track_width * abs(curvature) + 2)
@@ -204,6 +206,7 @@ def forward_backward_pass(
                 delta_dist,
                 max_angular_accel
             )
+            print(f"max_vel_ang: {max_vel_ang}, max_vel_kin: {max_vel_kin}, max_curve_vel: {max_curve_vel}, max_ang_acc_vel: {max_ang_acc_vel}")
             max_linear_vel = min(max_vel_ang, max_vel_kin, max_curve_vel, max_ang_acc_vel)
             
             max_decel_ang = max_angular_accel / abs(curvature)
@@ -213,19 +216,21 @@ def forward_backward_pass(
             max_accel_wheel = constraints.max_accels_at_turn(accel_ang)
             if (max_accel_wheel < 0):
                 max_accel_wheel = 0
+            print(f"max_decel_ang: {max_decel_ang}, max_decel_kin: {max_decel_kin}, max_accel_wheel: {max_accel_wheel}")
             max_decel = min(max_decel_ang, max_decel_kin, max_accel_wheel)
         
         # Calculate maximum achievable velocity considering deceleration
         prev_vel = math.sqrt(current_vel**2 + 2 * max_decel * delta_dist)
         
+        print(f"prev_vel: {prev_vel}, velocities[i - 1]: {velocities[i - 1]}, max_linear_vel: {max_linear_vel}")    
         prev_vel = min(prev_vel, velocities[i - 1], max_linear_vel)
             
         velocities[i - 1] = prev_vel
 
-        prev_heading = headings[i-1]
         prev_ang_vel = ang_vel
         
         # Final velocity adjustment for track width
+        print(f"velocities[i - 1]: {velocities[i - 1]}, adjusted: {abs(constraints.max_vel / (1 + (constraints.track_width * abs(curvature) / 2)))}")
         velocities[i - 1] = min(velocities[i - 1], 
                                abs(constraints.max_vel / (1 + (constraints.track_width * abs(curvature) / 2))))
 
