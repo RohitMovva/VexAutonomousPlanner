@@ -382,32 +382,17 @@ class QuinticHermiteSpline(Spline):
 
     def get_second_derivative(self, t: float, debug: bool = False) -> np.ndarray:
         """Enhanced get_second_derivative with optional logging"""
-        if debug:
-            print(f"\n=== Computing Second Derivative at t={t} ===")
         
         if not self.segments:
             raise ValueError("Spline has not been fitted yet")
         
         local_t, segment_idx = self._normalize_parameter(t)
-        if debug:
-            print(f"Local t: {local_t}, Segment: {segment_idx}")
         
         basis_second_derivatives = self._get_basis_second_derivatives(local_t)
-        if debug:
-            print(f"Basis second derivatives: {basis_second_derivatives}")
-            print(f"Segment data:\n{self.segments[segment_idx]}")
         
         second_derivative = np.zeros(2)
-        if debug:
-            print("\nComputing second derivative contributions:")
-            for i in range(6):
-                contribution = basis_second_derivatives[i] * self.segments[segment_idx][i]
-                print(f"Basis[{i}] * segment[{i}] = {basis_second_derivatives[i]:.6f} * {self.segments[segment_idx][i]} = {contribution}")
-                second_derivative += contribution
-            print(f"Final second derivative: {second_derivative}")
-        else:
-            for i in range(6):
-                second_derivative += basis_second_derivatives[i] * self.segments[segment_idx][i]
+        for i in range(6):
+            second_derivative += basis_second_derivatives[i] * self.segments[segment_idx][i]
         
         return second_derivative
         
