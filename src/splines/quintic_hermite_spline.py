@@ -321,7 +321,40 @@ class QuinticHermiteSpline(Spline):
         H5_double_prime = 3*t - 12*t2 + 10*t3        # Second derivative of second derivative at end point
         
         return np.array([H0_double_prime, H1_double_prime, H2_double_prime, 
-                        H3_double_prime, H4_double_prime, H5_double_prime])       
+                        H3_double_prime, H4_double_prime, H5_double_prime])
+    
+    def _get_basis_third_derivatives(self, t: float) -> np.ndarray:
+        """
+        Compute the third derivatives of quintic Hermite basis functions at parameter t.
+        
+        The third derivatives of the basis functions are:
+        H₀'''(t) = -60 + 360t - 360t²      # Position at start point
+        H₁'''(t) = 60 - 360t + 360t²       # Position at end point
+        H₂'''(t) = -36 + 192t - 180t²      # First derivative at start point
+        H₃'''(t) = -24 + 168t - 180t²      # First derivative at end point
+        H₄'''(t) = -9 + 36t - 30t²         # Second derivative at start point
+        H₅'''(t) = 3 - 24t + 30t²          # Second derivative at end point
+        
+        Args:
+            t: Parameter value between 0 and 1
+            
+        Returns:
+            np.ndarray: Array containing the third derivatives of basis functions 
+                    [H₀''', H₁''', H₂''', H₃''', H₄''', H₅''']
+        """
+        # Precompute power of t for efficiency
+        t2 = t * t
+        
+        # Compute the third derivatives of basis functions
+        H0_triple_prime = -60 + 360*t - 360*t2    # Third derivative of position at start point
+        H1_triple_prime = 60 - 360*t + 360*t2     # Third derivative of position at end point
+        H2_triple_prime = -36 + 192*t - 180*t2    # Third derivative of first derivative at start point
+        H3_triple_prime = -24 + 168*t - 180*t2    # Third derivative of first derivative at end point
+        H4_triple_prime = -9 + 36*t - 30*t2       # Third derivative of second derivative at start point
+        H5_triple_prime = 3 - 24*t + 30*t2        # Third derivative of second derivative at end point
+        
+        return np.array([H0_triple_prime, H1_triple_prime, H2_triple_prime, 
+                        H3_triple_prime, H4_triple_prime, H5_triple_prime])
      
     def get_point(self, t: float) -> np.ndarray:
         if not self.segments:
@@ -351,65 +384,61 @@ class QuinticHermiteSpline(Spline):
         
     def get_derivative(self, t: float, debug: bool = False) -> np.ndarray:
         """Enhanced get_derivative with optional logging"""
-        if debug:
-            print(f"\n=== Computing First Derivative at t={t} ===")
-        
         if not self.segments:
             raise ValueError("Spline has not been fitted yet")
         
         local_t, segment_idx = self._normalize_parameter(t)
-        if debug:
-            print(f"Local t: {local_t}, Segment: {segment_idx}")
         
         basis_derivatives = self._get_basis_derivatives(local_t)
-        if debug:
-            print(f"Basis derivatives: {basis_derivatives}")
-            print(f"Segment data:\n{self.segments[segment_idx]}")
         
         derivative = np.zeros(2)
-        if debug:
-            print("\nComputing derivative contributions:")
-            for i in range(6):
-                contribution = basis_derivatives[i] * self.segments[segment_idx][i]
-                print(f"Basis[{i}] * segment[{i}] = {basis_derivatives[i]:.6f} * {self.segments[segment_idx][i]} = {contribution}")
-                derivative += contribution
-            print(f"Final derivative: {derivative}")
-        else:
-            for i in range(6):
-                derivative += basis_derivatives[i] * self.segments[segment_idx][i]
+        for i in range(6):
+            derivative += basis_derivatives[i] * self.segments[segment_idx][i]
         
         return derivative
 
     def get_second_derivative(self, t: float, debug: bool = False) -> np.ndarray:
         """Enhanced get_second_derivative with optional logging"""
-        if debug:
-            print(f"\n=== Computing Second Derivative at t={t} ===")
         
         if not self.segments:
             raise ValueError("Spline has not been fitted yet")
         
         local_t, segment_idx = self._normalize_parameter(t)
-        if debug:
-            print(f"Local t: {local_t}, Segment: {segment_idx}")
         
         basis_second_derivatives = self._get_basis_second_derivatives(local_t)
-        if debug:
-            print(f"Basis second derivatives: {basis_second_derivatives}")
-            print(f"Segment data:\n{self.segments[segment_idx]}")
         
         second_derivative = np.zeros(2)
-        if debug:
-            print("\nComputing second derivative contributions:")
-            for i in range(6):
-                contribution = basis_second_derivatives[i] * self.segments[segment_idx][i]
-                print(f"Basis[{i}] * segment[{i}] = {basis_second_derivatives[i]:.6f} * {self.segments[segment_idx][i]} = {contribution}")
-                second_derivative += contribution
-            print(f"Final second derivative: {second_derivative}")
-        else:
-            for i in range(6):
-                second_derivative += basis_second_derivatives[i] * self.segments[segment_idx][i]
+        for i in range(6):
+            second_derivative += basis_second_derivatives[i] * self.segments[segment_idx][i]
         
         return second_derivative
+    
+    def get_third_derivative(self, t: float, debug: bool = False) -> np.ndarray:
+        """
+        Get the third derivative of the spline at parameter t.
+        
+        Args:
+            t: Parameter value normalized to the entire path length
+            debug: Optional flag for debugging output
+            
+        Returns:
+            np.ndarray: Third derivative vector [x''', y''']
+            
+        Raises:
+            ValueError: If spline has not been fitted yet
+        """
+        if not self.segments:
+            raise ValueError("Spline has not been fitted yet")
+        
+        local_t, segment_idx = self._normalize_parameter(t)
+        
+        basis_third_derivatives = self._get_basis_third_derivatives(local_t)
+        
+        third_derivative = np.zeros(2)
+        for i in range(6):
+            third_derivative += basis_third_derivatives[i] * self.segments[segment_idx][i]
+        
+        return third_derivative
         
     def _normalize_parameter(self, t: float) -> Tuple[float, int]:
         """

@@ -16,8 +16,12 @@ from PyQt6.QtWidgets import (
 
 import utilities
 from gui import node
+import sys
+import io
 from motion_profiling_v2 import motion_profile_generator
 
+# sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
+# sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
 
 class StyledRectItem(QGraphicsRectItem):
     def __init__(self, rect: QRectF = None, parent=None):

@@ -140,6 +140,24 @@ class QuinticHermiteSplineManager:
             second_derivative = -second_derivative
             
         return second_derivative
+    
+    def get_third_derivative_at_parameter(self, t: float) -> np.ndarray:
+        """
+        Get third derivative on the complete path at parameter t.
+        Handles direction changes at reverse nodes.
+        """
+        if not self.splines:
+            raise ValueError("No splines have been initialized")
+            
+        spline_idx, local_t = self._map_parameter_to_spline(t)
+        third_derivative = self.splines[spline_idx].get_third_derivative(local_t)
+        
+        # Check if we're in a reverse segment
+        reverse_count = sum(1 for node in self.nodes[:spline_idx+1] if node.is_reverse_node)
+        if reverse_count % 2 == 1:
+            third_derivative = -third_derivative
+
+        return third_derivative
         
     def _map_parameter_to_spline(self, t: float) -> Tuple[int, float]:
         """
@@ -252,6 +270,14 @@ class QuinticHermiteSplineManager:
             self.precompute_path_properties()
         return self._interpolate_property(t, 'curvatures')
     
+    def get_curvature_derivative(self, t: float) -> float:
+        """
+        Get curvature derivative at parameter t using precomputed values and interpolation.
+        """
+        if self._precomputed_properties is None:
+            self.precompute_path_properties()
+        return self._interpolate_property(t, 'curvature_derivatives')
+    
     def _get_heading(self, t: float) -> float:
         """
         Get the heading (angle in radians) at parameter t on the complete path.
@@ -324,6 +350,58 @@ class QuinticHermiteSplineManager:
         curvature = (x_prime * y_double_prime - y_prime * x_double_prime) / (speed_squared ** 1.5)
         
         return curvature
+    
+    def _get_curvature_derivative(self, t: float) -> float:
+        """
+        Calculate the derivative of curvature with respect to arc length at parameter t.
+        
+        The derivative of curvature requires third derivatives since curvature itself
+        involves second derivatives.
+        
+        Args:
+            t: Parameter value normalized to the entire path length
+            
+        Returns:
+            float: Derivative of curvature with respect to arc length
+        """
+        if not self.splines:
+            raise ValueError("No splines have been initialized")
+        
+        # Get derivatives up to third order
+        first_deriv = self.get_derivative_at_parameter(t)
+        second_deriv = self.get_second_derivative_at_parameter(t)
+        third_deriv = self.get_third_derivative_at_parameter(t)
+        
+        x_prime = first_deriv[0]
+        y_prime = first_deriv[1]
+        x_double_prime = second_deriv[0]
+        y_double_prime = second_deriv[1]
+        x_triple_prime = third_deriv[0]
+        y_triple_prime = third_deriv[1]
+        
+        # Calculate speed and its derivative
+        speed_squared = x_prime**2 + y_prime**2
+        speed = np.sqrt(speed_squared)
+        
+        if speed < 1e-10:
+            return 0.0
+        
+        # Calculate numerator terms for d/dt of (x'y'' - y'x'')
+        numerator_derivative = (x_prime * y_triple_prime + x_triple_prime * y_prime 
+                            - y_prime * x_triple_prime - y_triple_prime * x_prime)
+        
+        # Calculate the derivative of the denominator (speed_squared^(3/2))
+        speed_derivative = (x_prime * x_double_prime + y_prime * y_double_prime) / speed
+        
+        # Apply quotient rule and chain rule
+        dkappa_dt = (numerator_derivative * speed_squared**1.5 - 
+                    3 * (x_prime * y_double_prime - y_prime * x_double_prime) * 
+                    speed_squared**0.5 * speed_derivative) / (speed_squared**3)
+        
+        # Convert from dκ/dt to dκ/ds
+        dkappa_ds = dkappa_dt / speed
+        
+        return dkappa_ds
         
     def validate_path_continuity(self) -> bool:
         """
@@ -332,6 +410,7 @@ class QuinticHermiteSplineManager:
         pass
 
     def build_lookup_table(self, min_samples=1000, max_samples=20000, tolerance=1e-6) -> None:
+        """Build lookup table for parameter to distance mapping."""
         if not self.splines:
             raise ValueError("No splines initialized")
         
@@ -377,10 +456,10 @@ class QuinticHermiteSplineManager:
             parameters=all_parameters,
             total_length=current_dist
         )
-        
+
     def precompute_path_properties(self, num_samples: int = 10000) -> None:
         """
-        Precompute curvature and heading at regular intervals for faster lookup.
+        Precompute curvature, curvature derivative, and heading at regular intervals for faster lookup.
         """
         if not self.splines:
             raise ValueError("No splines initialized")
@@ -389,18 +468,20 @@ class QuinticHermiteSplineManager:
         
         # Precompute properties
         curvatures = np.zeros(num_samples)
+        curvature_derivatives = np.zeros(num_samples)  # Added this line
         headings = np.zeros(num_samples)
         
         for i, t in enumerate(parameters):
             curvatures[i] = self._get_curvature(t)
+            curvature_derivatives[i] = self._get_curvature_derivative(t)  # Added this line
             headings[i] = self._get_heading(t)
             
         self._precomputed_properties = {
             'parameters': parameters,
             'curvatures': curvatures,
+            'curvature_derivatives': curvature_derivatives,  # Added this line
             'headings': headings
         }
-
 
     def _interpolate_property(self, t: float, property_name: str) -> float:
         """
@@ -423,7 +504,7 @@ class QuinticHermiteSplineManager:
         v1 = values[idx]
         
         return v0 + (v1 - v0) * (t - t0) / (t1 - t0)
-    
+
     def rebuild_tables(self):
         """
         Rebuild the spline tables after modifying control points or constraints.

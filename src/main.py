@@ -8,6 +8,12 @@ from PyQt6.QtWidgets import QApplication
 
 import utilities
 from gui import gui_manager
+import sys
+import io
+
+# Set stdout and stderr to use UTF-8
+sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
+sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
 
 if __name__ == "__main__":
     if sys.platform.startswith('win'):
