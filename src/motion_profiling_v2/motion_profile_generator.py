@@ -29,30 +29,14 @@ class Constraints:
                         
         return min(max_turn_speed, self.max_vel)
     
-    def limit_velocity_by_ang_accel(self, v_prev: float, curvature: float, 
-                              dkappads: float, delta_s: float, 
-                              max_angular_accel: float) -> float:
-        if abs(curvature) < 1e-6 and abs(dkappads) < 1e-6:
-            print()
+    def limit_velocity_by_ang_accel(self, dkappads: float, max_angular_accel: float) -> float:
+        """Calculate maximum velocity based on angular acceleration and rate of change of curvature."""
+        if abs(dkappads) < 1e-9: # Avoid division by zero if dkappads is very small
             return self.max_vel
-        print(f"v_prev: {v_prev}, curvature: {curvature}, dkappads: {dkappads}, delta_s: {delta_s}, max_angular_accel: {max_angular_accel}")
-        
-        numerator = (v_prev**2 * abs(curvature)) + (2 * delta_s * max_angular_accel)
-        denominator = abs(curvature) + (2 * delta_s * abs(dkappads))
-        
-        print(f"numerator: {numerator}, denominator: {denominator}")
-        if abs(denominator) < 1e-6:
-            print()
-            return self.max_vel  # Avoid division by zero
-        
-        u = numerator / denominator
-        if u < 0:
-            print()
-            return self.max_vel
-        
-        print(f"u: {u}")
-        print()
-        return min(math.sqrt(u), self.max_vel)
+        max_v_sq = max_angular_accel / abs(dkappads)
+        if max_v_sq < 0:
+            return 0.0
+        return min(math.sqrt(max_v_sq), self.max_vel)
 
     def max_accels_at_turn(self, angular_accel: float):
         """Calculate maximum linear acceleration based on angular acceleration"""
@@ -149,12 +133,9 @@ def forward_backward_pass(
             max_vel_kin = 2 * constraints.max_vel / (constraints.track_width * abs(curvature) + 2)
             max_curve_vel = constraints.max_speed_at_curvature(abs(curvature))
             max_ang_acc_vel = constraints.limit_velocity_by_ang_accel(
-                velocities[i], 
-                curvatures[i], 
-                curvature_derivs[i], 
-                delta_dist,
+                curvature_derivs[i],
                 max_angular_accel
-            )            # max_ang_acc_vel = 1e9
+            )
             max_linear_vel = min(max_vel_ang, max_vel_kin, max_curve_vel, max_ang_acc_vel)
             
             max_accel_ang = max_angular_accel / abs(curvature)
@@ -200,10 +181,7 @@ def forward_backward_pass(
             max_vel_kin = 2 * constraints.max_vel / (constraints.track_width * abs(curvature) + 2)
             max_curve_vel = constraints.max_speed_at_curvature(curvature)
             max_ang_acc_vel = constraints.limit_velocity_by_ang_accel(
-                velocities[i], 
-                curvatures[i], 
-                curvature_derivs[i], 
-                delta_dist,
+                curvature_derivs[i],
                 max_angular_accel
             )
             print(f"max_vel_ang: {max_vel_ang}, max_vel_kin: {max_vel_kin}, max_curve_vel: {max_curve_vel}, max_ang_acc_vel: {max_ang_acc_vel}")
