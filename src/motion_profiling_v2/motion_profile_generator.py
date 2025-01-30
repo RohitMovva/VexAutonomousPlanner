@@ -270,16 +270,29 @@ def generate_motion_profile(
     current_pos = 0
     current_vel = velocities[0]
     total_length = spline_manager.get_total_arc_length()
+    is_reversed = False
+    node_idx = 0
 
     prev_t = 0
     while current_pos < (total_length):
+        # print(f"p: {current_pos}")
         t = spline_manager.distance_to_time(current_pos)
         if t % 1 < prev_t % 1 and t < spline_manager.distance_to_time(total_length):
             nodes_map.append(len(times))
+            node_idx += 1
+            if (spline_manager.nodes[node_idx].is_reverse_node):
+                is_reversed = not is_reversed
+
+        # print(is_reversed)
+        # print(f"t: {t}")
 
         prev_t = t
         curvature = spline_manager.get_curvature(t)
-        heading = spline_manager.get_heading(t)
+        heading = spline_manager.get_heading(t) + (math.pi if is_reversed else 0)
+        while (heading > math.pi):
+            heading -= 2 * math.pi
+
+        heading *= -1
         coord = spline_manager.get_point_at_parameter(t)
 
         # Get interpolated target velocity

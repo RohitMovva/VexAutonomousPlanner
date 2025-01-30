@@ -142,6 +142,7 @@ class QuinticHermiteSpline(Spline):
                 forward_tangent = self.first_derivatives[1]
                 current_tangent = self.first_derivatives[0]
                 self.second_derivatives[i] = (forward_tangent - current_tangent) / distances[0]
+                self.second_derivatives[i] = 0.0  # Corrected scaling
                 print(f"First point: {self.second_derivatives[i]}")
                 
             elif i == num_points - 1:
@@ -149,6 +150,7 @@ class QuinticHermiteSpline(Spline):
                 backward_tangent = self.first_derivatives[-2]
                 current_tangent = self.first_derivatives[-1]
                 self.second_derivatives[i] = (current_tangent - backward_tangent) / distances[-1]
+                self.second_derivatives[i] = 0.0  # Corrected scaling
                 print(f"Last point: {self.second_derivatives[i]}")
                 
             else:
@@ -164,25 +166,8 @@ class QuinticHermiteSpline(Spline):
                 # Compute slopes
                 dx1 = curr_point[0] - prev_point[0]
                 dx2 = next_point[0] - curr_point[0]
-                dy1 = curr_point[1] - prev_point[1]
-                dy2 = next_point[1] - curr_point[1]
                 
                 if dx1 != 0 and dx2 != 0:
-                    slope1 = dy1 / dx1
-                    slope2 = dy2 / dx2
-                    
-                    # if slope1 * slope2 <= 0:  # Potential extremum
-                    #     # Fit quadratic through normalized points
-                    #     x_width = next_point[0] - prev_point[0]
-                    #     h = x_width / 2  # half-width
-                        
-                    #     # Compute second derivative from quadratic fit
-                    #     # For y = ax² + bx + c, second derivative is 2a
-                    #     a = ((prev_point[1] + next_point[1])/2 - curr_point[1]) / (h * h)
-                    #     self.second_derivatives[i] = [0, 2 * a]
-                    #     print(f"Extremum at point {i}, curvature = {2 * a}")
-                    # else:
-                        # Regular case - use central difference
                     avg_dist = (prev_dist + next_dist) / 2
                     self.second_derivatives[i] = (
                         self.first_derivatives[i+1] - self.first_derivatives[i-1]
@@ -356,31 +341,31 @@ class QuinticHermiteSpline(Spline):
         return np.array([H0_triple_prime, H1_triple_prime, H2_triple_prime, 
                         H3_triple_prime, H4_triple_prime, H5_triple_prime])
      
-    def get_point(self, t: float) -> np.ndarray:
-        if not self.segments:
-            raise ValueError("Spline has not been fitted yet")
+    # def get_point(self, t: float) -> np.ndarray:
+    #     if not self.segments:
+    #         raise ValueError("Spline has not been fitted yet")
             
-        local_t, segment_idx = self._normalize_parameter(t)
-        basis = self._get_basis_functions(local_t)
+    #     local_t, segment_idx = self._normalize_parameter(t)
+    #     basis = self._get_basis_functions(local_t)
         
-        # Debug logging for specific parameter values
-        if abs(local_t - 0.0) < 1e-6 or abs(local_t - 1.0) < 1e-6 or abs(local_t - 0.5) < 1e-6:
-            print(f"\n=== Computing point at t={t} (local_t={local_t}) ===")
-            print(f"Segment index: {segment_idx}")
-            print(f"Basis functions: {basis}")
+    #     # Debug logging for specific parameter values
+    #     if abs(local_t - 0.0) < 1e-6 or abs(local_t - 1.0) < 1e-6 or abs(local_t - 0.5) < 1e-6:
+    #         print(f"\n=== Computing point at t={t} (local_t={local_t}) ===")
+    #         print(f"Segment index: {segment_idx}")
+    #         print(f"Basis functions: {basis}")
             
-        segment = self.segments[segment_idx]
-        point = np.zeros(2)
-        for i in range(6):
-            contribution = basis[i] * segment[i]
-            if abs(local_t - 0.5) < 1e-6:  # Log details at midpoint
-                print(f"  Basis[{i}] * segment[{i}] = {basis[i]} * {segment[i]} = {contribution}")
-            point += contribution
+    #     segment = self.segments[segment_idx]
+    #     point = np.zeros(2)
+    #     for i in range(6):
+    #         contribution = basis[i] * segment[i]
+    #         if abs(local_t - 0.5) < 1e-6:  # Log details at midpoint
+    #             print(f"  Basis[{i}] * segment[{i}] = {basis[i]} * {segment[i]} = {contribution}")
+    #         point += contribution
             
-        if abs(local_t - 0.5) < 1e-6:
-            print(f"Final point: {point}")
+    #     if abs(local_t - 0.5) < 1e-6:
+    #         print(f"Final point: {point}")
             
-        return point
+    #     return point
         
     def get_derivative(self, t: float, debug: bool = False) -> np.ndarray:
         """Enhanced get_derivative with optional logging"""
@@ -388,6 +373,9 @@ class QuinticHermiteSpline(Spline):
             raise ValueError("Spline has not been fitted yet")
         
         local_t, segment_idx = self._normalize_parameter(t)
+        # print("Parameter range: ", self.parameters[0], self.parameters[-1])
+
+        print(f"Local t: {local_t}, Segment index: {segment_idx}")
         
         basis_derivatives = self._get_basis_derivatives(local_t)
         

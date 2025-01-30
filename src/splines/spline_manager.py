@@ -115,12 +115,7 @@ class QuinticHermiteSplineManager:
             
         spline_idx, local_t = self._map_parameter_to_spline(t)
         derivative = self.splines[spline_idx].get_derivative(local_t)
-        
-        # Check if we're in a reverse segment
-        reverse_count = sum(1 for node in self.nodes[:spline_idx+1] if node.is_reverse_node)
-        if reverse_count % 2 == 1:  # Odd number of reversals means we're going backwards
-            derivative = -derivative
-            
+                    
         return derivative
         
     def get_second_derivative_at_parameter(self, t: float) -> np.ndarray:
@@ -135,9 +130,9 @@ class QuinticHermiteSplineManager:
         second_derivative = self.splines[spline_idx].get_second_derivative(local_t)
         
         # Check if we're in a reverse segment
-        reverse_count = sum(1 for node in self.nodes[:spline_idx+1] if node.is_reverse_node)
-        if reverse_count % 2 == 1:  # Odd number of reversals means we're going backwards
-            second_derivative = -second_derivative
+        # reverse_count = sum(1 for node in self.nodes[:spline_idx+1] if node.is_reverse_node)
+        # if reverse_count % 2 == 1:  # Odd number of reversals means we're going backwards
+        #     second_derivative = -second_derivative
             
         return second_derivative
     
@@ -153,9 +148,9 @@ class QuinticHermiteSplineManager:
         third_derivative = self.splines[spline_idx].get_third_derivative(local_t)
         
         # Check if we're in a reverse segment
-        reverse_count = sum(1 for node in self.nodes[:spline_idx+1] if node.is_reverse_node)
-        if reverse_count % 2 == 1:
-            third_derivative = -third_derivative
+        # reverse_count = sum(1 for node in self.nodes[:spline_idx+1] if node.is_reverse_node)
+        # if reverse_count % 2 == 1:
+        #     third_derivative = -third_derivative
 
         return third_derivative
         
@@ -224,7 +219,6 @@ class QuinticHermiteSplineManager:
         if distance <= 0:
             return 0
         if distance >= self.lookup_table.total_length:
-            # print("Distance exceeds total length")
             return len(self.nodes) - 1
             
         # Find closest indices in lookup table
@@ -260,6 +254,7 @@ class QuinticHermiteSplineManager:
         """
         if self._precomputed_properties is None:
             self.precompute_path_properties()
+        # print("tang", t, self._interpolate_property(t, 'headings'))
         return self._interpolate_property(t, 'headings')
     
     def get_curvature(self, t: float) -> float:
@@ -297,11 +292,15 @@ class QuinticHermiteSplineManager:
             raise ValueError("No splines have been initialized")
             
         # Get first derivative at parameter t
+        spline_idx, local_t = self._map_parameter_to_spline(t)
+
+        # print(f"t: {t}, spline_idx: {spline_idx}, local_t: {local_t}")
         derivative = self.get_derivative_at_parameter(t)
         
         # Calculate heading angle using arctan2
         # arctan2(y, x) returns angle in range [-π, π]
         heading = np.arctan2(derivative[1], derivative[0])
+        # print(t, heading)
         
         return heading
 
@@ -418,6 +417,14 @@ class QuinticHermiteSplineManager:
         all_parameters = []
         all_distances = []
         current_dist = 0.0
+        prev_param = 0.0
+        # d1 = self.splines[0].get_point(1.0)
+        # d2 = self.splines[-1].get_point(0.0)
+        # d1 = self.splines[0].get_derivative(1.0)
+        # d2 = self.splines[-1].get_derivative(0.0)
+        # Find headings
+        # print(f"hai {d1}, {d2}")
+        # print(f"hai {np.arctan2(d1[1], d1[0])}, {np.arctan2(d2[1], d2[0])}")
         
         for spline_idx, spline in enumerate(self.splines):
             # Get parameter range for this spline
@@ -443,8 +450,12 @@ class QuinticHermiteSplineManager:
             current_dist = spline_distances[-1]
             
             # Store results
-            all_parameters.extend(local_params)
+            all_parameters.extend(local_params + prev_param)
             all_distances.extend(spline_distances)
+
+            prev_param += param_end - param_start
+
+
         
         # Convert to numpy arrays
         all_parameters = np.array(all_parameters)
@@ -475,6 +486,7 @@ class QuinticHermiteSplineManager:
             curvatures[i] = self._get_curvature(t)
             curvature_derivatives[i] = self._get_curvature_derivative(t)  # Added this line
             headings[i] = self._get_heading(t)
+            # print(f"{t}: {headings[i]}")
             
         self._precomputed_properties = {
             'parameters': parameters,
@@ -496,12 +508,14 @@ class QuinticHermiteSplineManager:
             return values[0]
         if idx >= len(parameters):
             return values[-1]
+        # print("t, v", t, values[idx])
             
         # Linear interpolation
         t0 = parameters[idx-1]
         t1 = parameters[idx]
         v0 = values[idx-1]
         v1 = values[idx]
+        # print("t0, t1, v0, v1", t0, t1, v0, v1)
         
         return v0 + (v1 - v0) * (t - t0) / (t1 - t0)
 
