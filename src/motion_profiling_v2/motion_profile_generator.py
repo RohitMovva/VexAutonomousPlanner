@@ -88,16 +88,25 @@ def forward_backward_pass(
     total_dist = spline_manager.get_total_arc_length()
     current_dist = 0
 
+    prev_t = 0
+    node_num = 0
     while current_dist < total_dist:
         t = spline_manager.distance_to_time(current_dist)
+
         curvature = spline_manager.get_curvature(t)
         heading = spline_manager.get_heading(t)
 
         headings.append(heading)
         curvatures.append(curvature)
 
-        velocities.append(0)  # Initialize velocities
+        velocities.append(1e9)  # Initialize velocities
         current_dist += delta_dist
+
+        if (prev_t % 1) > (t % 1) and t < spline_manager.distance_to_time(total_dist):
+            node_num += 1
+            if (spline_manager.nodes[node_num].stop):
+                velocities[-1] = 0.01
+        prev_t = t
 
     for i in range(len(curvatures)):
         if i == 0:
@@ -163,7 +172,7 @@ def forward_backward_pass(
             max_linear_vel, math.sqrt(current_vel**2 + 2 * max_accel * delta_dist)
         )
 
-        velocities[i + 1] = next_vel
+        velocities[i + 1] = min(velocities[i + 1], next_vel)
         prev_ang_vel = ang_vel
 
         # Final velocity adjustment for track width

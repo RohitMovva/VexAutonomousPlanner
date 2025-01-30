@@ -508,8 +508,8 @@ class AutonomousPlannerGUIManager(QMainWindow):
         )
 
         utilities.create_mpl_plot(
-            self.central_widget.all_time_intervals,
-            self.central_widget.all_positions,
+            self.central_widget.time_intervals,
+            self.central_widget.positions,
             12,
             8,
             "Position Profile",
@@ -523,8 +523,8 @@ class AutonomousPlannerGUIManager(QMainWindow):
         )
 
         utilities.create_mpl_plot(
-            self.central_widget.all_time_intervals,
-            self.central_widget.all_velocities,
+            self.central_widget.time_intervals,
+            self.central_widget.velocities,
             12,
             8,
             "Velocity Profile",
@@ -538,8 +538,8 @@ class AutonomousPlannerGUIManager(QMainWindow):
         )
 
         utilities.create_mpl_plot(
-            self.central_widget.all_time_intervals,
-            self.central_widget.all_accelerations,
+            self.central_widget.time_intervals,
+            self.central_widget.accelerations,
             12,
             8,
             "Acceleration Profile",
@@ -556,8 +556,8 @@ class AutonomousPlannerGUIManager(QMainWindow):
         # print()
 
         utilities.create_mpl_plot(
-            self.central_widget.all_time_intervals,
-            self.central_widget.all_headings,
+            self.central_widget.time_intervals,
+            self.central_widget.headings,
             12,
             8,
             "Heading Profile",
@@ -575,8 +575,8 @@ class AutonomousPlannerGUIManager(QMainWindow):
         # print(self.central_widget.all_angular_velocities)
 
         utilities.create_mpl_plot(
-            self.central_widget.all_time_intervals,
-            self.central_widget.all_angular_velocities,
+            self.central_widget.time_intervals,
+            self.central_widget.angular_velocities,
             12,
             8,
             "Angular Velocity Profile",
@@ -589,7 +589,7 @@ class AutonomousPlannerGUIManager(QMainWindow):
             self.max_velocity, self.max_acceleration, self.max_jerk, self.track_width
         )
 
-        x, y = zip(*self.central_widget.all_coords)
+        x, y = zip(*self.central_widget.coords)
 
         utilities.create_mpl_plot(
             x,

@@ -1,27 +1,37 @@
 import json
 import math
 from typing import List
+
 import numpy as np
-from splines.spline_manager import QuinticHermiteSplineManager
-from PyQt6.QtCore import QPointF, QSize, Qt, QSizeF, QRectF
-from PyQt6.QtGui import QColor, QMouseEvent, QPainter, QPainterPath, QPen, QPixmap, QVector2D, QTransform, QBrush
+from PyQt6.QtCore import QPointF, QRectF, QSize, QSizeF, Qt
+from PyQt6.QtGui import (
+    QBrush,
+    QColor,
+    QMouseEvent,
+    QPainter,
+    QPainterPath,
+    QPen,
+    QPixmap,
+    QTransform,
+    QVector2D,
+)
 from PyQt6.QtWidgets import (
     QApplication,
     QGraphicsPathItem,
     QGraphicsPixmapItem,
+    QGraphicsRectItem,
     QGraphicsScene,
     QGraphicsView,
-    QGraphicsRectItem
 )
 
 import utilities
 from gui import node
-import sys
-import io
 from motion_profiling_v2 import motion_profile_generator
+from splines.spline_manager import QuinticHermiteSplineManager
 
 # sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
 # sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
+
 
 class StyledRectItem(QGraphicsRectItem):
     def __init__(self, rect: QRectF = None, parent=None):
@@ -30,17 +40,18 @@ class StyledRectItem(QGraphicsRectItem):
         # Dark blue color
         self._color = QColor("#152238")
         self._setup_style()
-        
+
     def _setup_style(self):
         # Set up the pen (outline)
         pen = QPen(self._color)
         pen.setWidth(2)
         self.setPen(pen)
-        
+
         # Set up the brush (fill)
         fill_color = QColor(self._color)
         fill_color.setAlpha(40)  # Very transparent fill (0-255)
         self.setBrush(QBrush(fill_color))
+
 
 class PathWidget(QGraphicsView):
     def __init__(
@@ -80,12 +91,12 @@ class PathWidget(QGraphicsView):
         # Store the initial transform for limiting zoom out
         self.initial_transform = self.transform()
 
-        self.all_time_intervals = []
-        self.all_positions = []
-        self.all_velocities = []
-        self.all_accelerations = []
-        self.all_headings = []
-        self.all_nodes_map = []  # Represents index of node n in any of the above lists
+        self.time_intervals = []
+        self.positions = []
+        self.velocities = []
+        self.accelerations = []
+        self.headings = []
+        self.nodes_map = []  # Represents index of node n in any of the above lists
 
         self.nodes: List[node.Node] = []
         self.start_node = None
@@ -108,7 +119,7 @@ class PathWidget(QGraphicsView):
         self.mouseDown = False
 
         self.visualize = False
-        
+
         self.path = QPainterPath()
         self.spline_manager = QuinticHermiteSplineManager()
 
@@ -227,7 +238,7 @@ class PathWidget(QGraphicsView):
             self.parent.update_coords(scene_pos)
         else:
             QApplication.setOverrideCursor(Qt.CursorShape.OpenHandCursor)
-            if (self.visualize):
+            if self.visualize:
                 self.draw_rect(scene_pos)
             self.parent.update_coords(scene_pos)
 
@@ -265,116 +276,66 @@ class PathWidget(QGraphicsView):
         self, v_max: float, a_max: float, j_max: float, track_width: float
     ):
         # Clear lists
-        self.all_time_intervals: List[float] = []
-        self.all_positions: List[float] = []
-        self.all_velocities: List[float] = []
-        self.all_accelerations: List[float] = []
-        self.all_headings: List[float] = []
-        self.all_angular_velocities: List[float] = []
-        self.all_nodes_map: List[int] = []
-        self.all_coords: List[float] = []
+        self.time_intervals: List[float] = []
+        self.positions: List[float] = []
+        self.velocities: List[float] = []
+        self.accelerations: List[float] = []
+        self.headings: List[float] = []
+        self.angular_velocities: List[float] = []
+        self.nodes_map: List[int] = []
+        self.coords: List[float] = []
 
-        current_position: int = 0
-        # segment_data: List[List[List[float]]] = [[], []]
-        # segment_length: int = 0
-        turn_values: List[float] = []
-        reverse_values: List[bool] = []
-        wait_times: List[float] = []
-        is_reversed: bool = False
         constraints = motion_profile_generator.Constraints(
-            max_vel=v_max,        # Maximum velocity in meters/second
-            max_acc=a_max,        # Maximum acceleration in meters/second^2
-            max_dec=a_max,        # Maximum deceleration in meters/second^2
+            max_vel=v_max,  # Maximum velocity in meters/second
+            max_acc=a_max,  # Maximum acceleration in meters/second^2
+            max_dec=a_max,  # Maximum deceleration in meters/second^2
             friction_coef=0.8,  # Coefficient of friction (typical rubber wheels on concrete)
-            max_jerk=j_max,       # Maximum jerk (rate of change of acceleration) in meters/second^3
-            track_width=track_width     # Distance between wheels in meters
+            max_jerk=j_max,  # Maximum jerk (rate of change of acceleration) in meters/second^3
+            track_width=track_width,  # Distance between wheels in meters
         )
 
+        (
+            self.time_intervals,
+            self.positions,
+            self.velocities,
+            self.accelerations,
+            self.headings,
+            self.angular_velocities,
+            self.nodes_map,
+            self.coords,
+        ) = motion_profile_generator.generate_motion_profile(
+            self.spline_manager, constraints
+        )
 
-        for i in range(0, len(self.nodes)-1):
-            if (self.nodes[i].is_reverse_node):
-                is_reversed = not is_reversed
-
-            turn_values.append(self.nodes[i].turn)
-            reverse_values.append(is_reversed)
-            wait_times.append(self.nodes[i].wait_time)
-
-            if (not self.nodes[i + 1].is_end_node) and (
-                not self.nodes[i + 1].is_stop_node()
-            ):
-                continue
-            (
-                time_intervals,
-                positions,
-                velocities,
-                accelerations,
-                headings,
-                angular_velocities,
-                nodes_map,
-                coords,
-            ) = motion_profile_generator.generate_motion_profile(
-                self.spline_manager, constraints
-            )
-
-            if self.all_time_intervals != []:
-                self.all_time_intervals.extend(
-                    [time + self.all_time_intervals[-1] for time in time_intervals]
-                )
-            else:
-                self.all_time_intervals = time_intervals
-            self.all_positions.extend([p + current_position for p in positions])
-            self.all_velocities.extend(velocities)
-            self.all_accelerations.extend(accelerations)
-            self.all_headings.extend(headings)
-            self.all_angular_velocities.extend(angular_velocities)
-            self.all_nodes_map.extend(
-                (mapping + len(self.all_time_intervals) - len(time_intervals))
-                for mapping in nodes_map
-            )
-            self.all_coords.extend(coords)
-
-            # current_position += segment_length
-            # segment_data = [[], []]
-            turn_values = []
-            wait_times = []
-            reverse_values = []
-            # segment_length = 0
-
-
-        print("Accumulated value", self.all_positions[-1])
+        print("Accumulated value", self.positions[-1])
         print("Goal value:", self.spline_manager.get_total_arc_length())
-        print("Error:", self.spline_manager.get_total_arc_length()-self.all_positions[-1])
-        self.all_nodes_map.append(len(self.all_time_intervals))
+        print("Error:", self.spline_manager.get_total_arc_length() - self.positions[-1])
+        self.nodes_map.append(len(self.time_intervals))
 
-        left_wheel_velocities = []
-        right_wheel_velocities = []
-        left_wheel_accelerations = []
-        right_wheel_accelerations = []
+        # left_wheel_velocities = []
+        # right_wheel_velocities = []
+        # left_wheel_accelerations = []
+        # right_wheel_accelerations = []
 
-        for i in range(len(self.all_velocities)):
-            left_wheel_velocities.append(self.all_velocities[i] - self.all_angular_velocities[i] * track_width / 2)
-            right_wheel_velocities.append(self.all_velocities[i] + self.all_angular_velocities[i] * track_width / 2)
+        # for i in range(len(self.velocities)):
+        #     left_wheel_velocities.append(self.velocities[i] - self.angular_velocities[i] * track_width / 2)
+        #     right_wheel_velocities.append(self.velocities[i] + self.angular_velocities[i] * track_width / 2)
 
-        left_wheel_accelerations = [(left_wheel_velocities[i] - left_wheel_velocities[i - 1])/.025 for i in range(1, len(left_wheel_velocities))]
-        right_wheel_accelerations = [(right_wheel_velocities[i] - right_wheel_velocities[i - 1])/.025 for i in range(1, len(right_wheel_velocities))]
+        # left_wheel_accelerations = [(left_wheel_velocities[i] - left_wheel_velocities[i - 1])/.025 for i in range(1, len(left_wheel_velocities))]
+        # right_wheel_accelerations = [(right_wheel_velocities[i] - right_wheel_velocities[i - 1])/.025 for i in range(1, len(right_wheel_velocities))]
 
-        print(f"Max velocities: {max(left_wheel_velocities), max(right_wheel_velocities)}")
-        # print(f"Max accelerations: {max(left_wheel_accelerations), max(right_wheel_accelerations)}")
-        # print(left_wheel_accelerations)
-        # print("Left wheel velocities:", left_wheel_velocities)
-        # print("Right wheel velocities:", right_wheel_velocities)
-        for i in range(len(left_wheel_accelerations)):
-            # print(f"Left wheel acceleration: {positions[i]}, {left_wheel_accelerations[i]}, Right wheel acceleration: {right_wheel_accelerations[i]}")
-            print(i*.025, left_wheel_accelerations[i], right_wheel_accelerations[i])
+        # for i in range(len(left_wheel_accelerations)):
+        #     print(i*.025, left_wheel_accelerations[i], right_wheel_accelerations[i])
+
         return (
-            self.all_time_intervals,
-            self.all_positions,
-            self.all_velocities,
-            self.all_accelerations,
-            self.all_headings,
-            self.all_angular_velocities,
-            self.all_nodes_map,
-            self.all_coords,
+            self.time_intervals,
+            self.positions,
+            self.velocities,
+            self.accelerations,
+            self.headings,
+            self.angular_velocities,
+            self.nodes_map,
+            self.coords,
         )
 
     def update_spline(self, points: List[QPointF], nodes: List[node.Node]):
@@ -387,21 +348,27 @@ class PathWidget(QGraphicsView):
 
         self.spline_manager.build_path(points, nodes)
         t_values = np.linspace(0, len(points) - 1, 200)
-        spline_points = np.array([self.spline_manager.get_point_at_parameter(t) for t in t_values])
+        spline_points = np.array(
+            [self.spline_manager.get_point_at_parameter(t) for t in t_values]
+        )
 
         if len(spline_points) > 0:
             self.path = QPainterPath()
             for i in range(len(spline_points)):
-                spline_points[i][0] = (spline_points[i][0] / (12.3266567842) + 0.5) * 2000
-                spline_points[i][1] = (spline_points[i][1] / (12.3266567842) + 0.5) * 2000
+                spline_points[i][0] = (
+                    spline_points[i][0] / (12.3266567842) + 0.5
+                ) * 2000
+                spline_points[i][1] = (
+                    spline_points[i][1] / (12.3266567842) + 0.5
+                ) * 2000
             self.path.moveTo(spline_points[0][0], spline_points[0][1])
             for p in spline_points[1:]:
                 self.path.lineTo(p[0], p[1])
         else:
             self.path = QPainterPath()
-            
+
         return spline_points
-    
+
     def update_path(self):
         # Should update with any new, moved, modified, or removed nodes
         if self.start_node and self.end_node and len(self.nodes) > 1:
@@ -525,7 +492,7 @@ class PathWidget(QGraphicsView):
         point.setY((point.y() / (12.3266567842 * 12) + 0.5) * 2000)
 
         return point
-    
+
     def mirror_nodes(self):
         for n in self.nodes:
             n.setPos(QPointF(2000 - n.x(), n.y()))
@@ -544,7 +511,7 @@ class PathWidget(QGraphicsView):
                 node.is_start_node = bool(node_data[2])
                 self.end_node = node if bool(node_data[3]) else self.end_node
                 node.is_end_node = bool(node_data[3])
-                node.spin_intake = (node_data[4])
+                node.spin_intake = node_data[4]
                 node.clamp_goal = bool(node_data[5])
                 node.doink = bool(node_data[6])
                 node.is_reverse_node = bool(node_data[7])
@@ -572,11 +539,11 @@ class PathWidget(QGraphicsView):
     def find_closest_point_on_path(self, path: QPainterPath, point: QPointF) -> QPointF:
         """
         Find the closest point on a QPainterPath to a given point.
-        
+
         Args:
             path (QPainterPath): The path to search on
             point (QPointF): The reference point to find the closest point to
-            
+
         Returns:
             QPointF: The closest point on the path
         """
@@ -586,60 +553,62 @@ class PathWidget(QGraphicsView):
         path_length = path.length()
         if path_length == 0:
             return QPointF()
-        
+
         # Binary search parameters
-        min_dist = float('inf')
+        min_dist = float("inf")
         closest_point = QPointF()
         closest_percent = 0.0
-        
+
         # First pass: coarse search with larger steps
         num_steps = 100
         for i in range(num_steps + 1):
             percent = i / num_steps
             path_point = path.pointAtPercent(percent)
             dist = math.hypot(path_point.x() - point.x(), path_point.y() - point.y())
-            
+
             if dist < min_dist:
                 min_dist = dist
                 closest_point = path_point
                 closest_percent = percent
-        
+
         # Second pass: fine search around the closest point found
         # Search within ±2% of the closest point found
         search_range = 0.02
         start_percent = max(0.0, closest_percent - search_range)
         end_percent = min(1.0, closest_percent + search_range)
-        
+
         fine_steps = 20
         percent_step = (end_percent - start_percent) / fine_steps
-        
+
         for i in range(fine_steps + 1):
             percent = start_percent + (i * percent_step)
             path_point = path.pointAtPercent(percent)
             dist = math.hypot(path_point.x() - point.x(), path_point.y() - point.y())
-            
+
             if dist < min_dist:
                 min_dist = dist
                 closest_point = path_point
-        
+
         return closest_point
 
-    def find_path_angle_at_point(self, path: QPainterPath, point: QPointF, delta: float = 0.01) -> float:
+    def find_path_angle_at_point(
+        self, path: QPainterPath, point: QPointF, delta: float = 0.01
+    ) -> float:
         """
         Calculate the angle of the path at the given point by sampling nearby points.
-        
+
         Args:
             path: QPainterPath to calculate angle on
             point: Point to find the closest position on path
             delta: Small offset for calculating tangent
-            
+
         Returns:
             Angle in radians
         """
         # Find the percentage along the path for the given point
-        min_dist = float('inf')
+        min_dist = float("inf")
         closest_percent = 0.0
-        
+
         for i in range(101):
             percent = i / 100
             path_point = path.pointAtPercent(percent)
@@ -647,11 +616,11 @@ class PathWidget(QGraphicsView):
             if dist < min_dist:
                 min_dist = dist
                 closest_percent = percent
-        
+
         # Get points slightly before and after to calculate tangent
         p1 = path.pointAtPercent(max(0, closest_percent - delta))
         p2 = path.pointAtPercent(min(1, closest_percent + delta))
-        
+
         # Calculate angle from vector between points
         dx = p2.x() - p1.x()
         dy = p2.y() - p1.y()
@@ -659,41 +628,44 @@ class PathWidget(QGraphicsView):
 
     def draw_rect(self, pt):
         # Create the styled rect item if it doesn't exist
-        if not hasattr(self, 'rect_item'):
+        if not hasattr(self, "rect_item"):
             self.rect_item = StyledRectItem()
             self.scene().addItem(self.rect_item)
-        
+
         path_point = self.find_closest_point_on_path(self.path, pt)
         if path_point is None:
             self.rect_item.hide()
             return
-        
+
         dist = QVector2D(pt - path_point).length()
         if dist > 100:
             self.rect_item.hide()
             return
-        
+
         # Calculate angle at the path point
         angle = self.find_path_angle_at_point(self.path, path_point)
-        
+
         # Create rectangle centered at path point
-        rect_size = QSizeF(1.47916666667 * (2000 / 12.3266567842), 1.33333333333 * (2000 / 12.3266567842))
-        center_rect = QRectF(
-            path_point.x() - rect_size.width()/2,
-            path_point.y() - rect_size.height()/2,
-            rect_size.width(),
-            rect_size.height()
+        rect_size = QSizeF(
+            1.47916666667 * (2000 / 12.3266567842),
+            1.33333333333 * (2000 / 12.3266567842),
         )
-        
+        center_rect = QRectF(
+            path_point.x() - rect_size.width() / 2,
+            path_point.y() - rect_size.height() / 2,
+            rect_size.width(),
+            rect_size.height(),
+        )
+
         # Create transform for rotation around rectangle center
         transform = QTransform()
         transform.translate(path_point.x(), path_point.y())
         transform.rotate(math.degrees(angle))
         transform.translate(-path_point.x(), -path_point.y())
-        
+
         # Apply transform to rectangle
         self.rect_item.setTransform(transform)
         self.rect_item.setRect(center_rect)
         self.rect_item.show()
-        
+
         self.viewport().update()
