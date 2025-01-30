@@ -508,14 +508,14 @@ class QuinticHermiteSplineManager:
             return values[0]
         if idx >= len(parameters):
             return values[-1]
-        # print("t, v", t, values[idx])
             
         # Linear interpolation
         t0 = parameters[idx-1]
         t1 = parameters[idx]
+        if (t0%1 != t1%1): # Holy guacamole this worked first try
+            return values[idx]
         v0 = values[idx-1]
         v1 = values[idx]
-        # print("t0, t1, v0, v1", t0, t1, v0, v1)
         
         return v0 + (v1 - v0) * (t - t0) / (t1 - t0)
 

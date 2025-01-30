@@ -375,7 +375,7 @@ class QuinticHermiteSpline(Spline):
         local_t, segment_idx = self._normalize_parameter(t)
         # print("Parameter range: ", self.parameters[0], self.parameters[-1])
 
-        print(f"Local t: {local_t}, Segment index: {segment_idx}")
+        # print(f"Local t: {local_t}, Segment index: {segment_idx}")
         
         basis_derivatives = self._get_basis_derivatives(local_t)
         
