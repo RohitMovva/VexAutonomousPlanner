@@ -1,15 +1,16 @@
 from PyQt6.QtWidgets import (
     QComboBox,
     QDockWidget,
+    QDoubleSpinBox,
     QFormLayout,
     QLabel,
+    QPushButton,  # Added for the Mirror button
     QSizePolicy,
     QSpacerItem,
-    QDoubleSpinBox,
     QVBoxLayout,
     QWidget,
-    QPushButton,  # Added for the Mirror button
 )
+
 
 class SettingsDockWidget(QDockWidget):
     def __init__(self, max_velocity, max_acceleration, max_jerk, parent=None):
@@ -20,7 +21,7 @@ class SettingsDockWidget(QDockWidget):
         settings_widget = QWidget()
         main_layout = QVBoxLayout()
         settings_layout = QFormLayout()
-        
+
         # Add Field Type drop-down menu
         self.field_type_combo = QComboBox()
         self.field_type_combo.addItems(["High Stakes Match", "High Stakes Skills"])
@@ -52,7 +53,9 @@ class SettingsDockWidget(QDockWidget):
         self.robot_visualization_toggle.addItems(["On", "Off"])
         self.robot_visualization_toggle.setCurrentIndex(1)
         settings_layout.addRow("Robot Visualization:", self.robot_visualization_toggle)
-        self.robot_visualization_toggle.currentIndexChanged.connect(self.on_robot_visualization_change)
+        self.robot_visualization_toggle.currentIndexChanged.connect(
+            self.on_robot_visualization_change
+        )
 
         # Add the Mirror button
         self.mirror_button = QPushButton("Mirror")

@@ -1,7 +1,6 @@
 import json
 import os
 from pathlib import Path
-import math
 
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QAction, QIcon
@@ -264,13 +263,21 @@ class AutonomousPlannerGUIManager(QMainWindow):
                 self.track_width,
             )
             for i in range(0, len(time_intervals), 1):  # Every 25ms save data
-                # nodes_data.append([coords[i][0], coords[i][1], headings[i]])
-                nodes_data.append([0, time_intervals[i], coords[i][0]*12, coords[i][1]*12, headings[i], velocities[i]*12, angular_velocities[i]])
-                # nodes_data.append([velocities[i], headings[i]])
+                nodes_data.append(
+                    [
+                        0,
+                        time_intervals[i],
+                        coords[i][0] * 12,
+                        coords[i][1] * 12,
+                        headings[i],
+                        velocities[i] * 12,
+                        angular_velocities[i],
+                    ]
+                )
         print(nodes_map, len(nodes_data))
         nodes_actions = [
             [
-                1, 
+                1,
                 int(cur_node.spin_intake),
                 int(cur_node.clamp_goal),
                 int(cur_node.doink),
@@ -454,7 +461,10 @@ class AutonomousPlannerGUIManager(QMainWindow):
                 "#endif\n",
             ]
 
-        if not os.path.exists(self.routes_header_path) or os.stat(self.routes_header_path).st_size == 0:
+        if (
+            not os.path.exists(self.routes_header_path)
+            or os.stat(self.routes_header_path).st_size == 0
+        ):
             # If the file is empty, write the content
             content = [
                 "#ifndef ROUTES_H\n",
@@ -469,7 +479,6 @@ class AutonomousPlannerGUIManager(QMainWindow):
         print("Saving motion profile to " + self.routes_header_path)
         with open(self.routes_header_path, "w") as routes_file:
             routes_file.writelines(content)
-
 
     def switch_field(self, fieldType: str):
         if fieldType == "High Stakes Match":
@@ -508,8 +517,8 @@ class AutonomousPlannerGUIManager(QMainWindow):
         )
 
         utilities.create_mpl_plot(
-            self.central_widget.all_time_intervals,
-            self.central_widget.all_positions,
+            self.central_widget.time_intervals,
+            self.central_widget.positions,
             12,
             8,
             "Position Profile",
@@ -523,8 +532,8 @@ class AutonomousPlannerGUIManager(QMainWindow):
         )
 
         utilities.create_mpl_plot(
-            self.central_widget.all_time_intervals,
-            self.central_widget.all_velocities,
+            self.central_widget.time_intervals,
+            self.central_widget.velocities,
             12,
             8,
             "Velocity Profile",
@@ -538,8 +547,8 @@ class AutonomousPlannerGUIManager(QMainWindow):
         )
 
         utilities.create_mpl_plot(
-            self.central_widget.all_time_intervals,
-            self.central_widget.all_accelerations,
+            self.central_widget.time_intervals,
+            self.central_widget.accelerations,
             12,
             8,
             "Acceleration Profile",
@@ -556,8 +565,8 @@ class AutonomousPlannerGUIManager(QMainWindow):
         # print()
 
         utilities.create_mpl_plot(
-            self.central_widget.all_time_intervals,
-            self.central_widget.all_headings,
+            self.central_widget.time_intervals,
+            self.central_widget.headings,
             12,
             8,
             "Heading Profile",
@@ -575,21 +584,21 @@ class AutonomousPlannerGUIManager(QMainWindow):
         # print(self.central_widget.all_angular_velocities)
 
         utilities.create_mpl_plot(
-            self.central_widget.all_time_intervals,
-            self.central_widget.all_angular_velocities,
+            self.central_widget.time_intervals,
+            self.central_widget.angular_velocities,
             12,
             8,
             "Angular Velocity Profile",
             "Time (s)",
             "Angular Velocity (radians/s)",
-        ) 
+        )
 
     def coords_graph(self):
         self.central_widget.generate_motion_profile_lists(
             self.max_velocity, self.max_acceleration, self.max_jerk, self.track_width
         )
 
-        x, y = zip(*self.central_widget.all_coords)
+        x, y = zip(*self.central_widget.coords)
 
         utilities.create_mpl_plot(
             x,

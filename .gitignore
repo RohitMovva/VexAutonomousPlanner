@@ -3,3 +3,5 @@ dist/
 __pycache__/
 env/
 test.py
+log.txt
+test*[0-9]*.py
