@@ -260,15 +260,12 @@ def motion_profile_angle(angle: int, constraints: Constraints, dt: float = 0.025
 
         accum_arc_length += velocities[i] * dt
 
-    velocities = [0 for _ in headings]
-    accelerations = [0 for _ in headings]
-
     # Differentiate to get angular velocities
     angular_velocities = [0]
     for i in range(1, len(headings)):
         angular_velocities.append((headings[i] - headings[i-1]) / dt)
     
-    return velocities, accelerations, headings, angular_velocities, [], []
+    return headings, angular_velocities
     
 
 def generate_motion_profile(
@@ -313,18 +310,18 @@ def generate_motion_profile(
                 is_reversed = not is_reversed
             
             if (spline_manager.nodes[node_idx].turn != 0):
-                ins_vels, ins_accels, ins_headings, ins_ang_vels, ins_nodes_map, ins_coords = motion_profile_angle(spline_manager.nodes[node_idx].turn, constraints, dt)
+                ins_headings, ins_ang_vels = motion_profile_angle(spline_manager.nodes[node_idx].turn, constraints, dt)
                 start_heading = headings[-1]
 
-                positions.extend(positions[-1] for _ in ins_vels)
-                linear_vels.extend(ins_vels)
-                accelerations.extend(ins_accels)
+                positions.extend(positions[-1] for _ in ins_headings)
+                linear_vels.extend(0 for _ in ins_headings)
+                accelerations.extend(0 for _ in ins_headings)
                 headings.extend(start_heading + ins_headings[i] for i in range(len(ins_headings)))
                 angular_vels.extend(ins_ang_vels)
-                coords.extend(coords[-1] for _ in ins_vels)
-                times.extend(current_time + i * dt for i in range(len(ins_vels)))
+                coords.extend(coords[-1] for _ in ins_headings)
+                times.extend(current_time + i * dt for i in range(len(ins_headings)))
 
-                current_time += len(ins_vels) * dt
+                current_time += len(ins_headings) * dt
 
         prev_t = t
         curvature = spline_manager.get_curvature(t)
@@ -374,7 +371,7 @@ def generate_motion_profile(
         coords.append(coord)
 
         current_time += dt
-        
+
     return (
         times,
         positions,
