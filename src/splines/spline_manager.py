@@ -31,12 +31,12 @@ class QuinticHermiteSplineManager:
     def build_path(self, points: np.ndarray, nodes: List[Node]) -> bool:
         """
         Build a complete path through the given points and nodes.
-        Handles reverse nodes by creating separate spline segments with appropriate tangent handling.
+        Handles reverse nodes and turn angles by creating separate spline segments 
+        with appropriate tangent handling.
         """
-
         if len(points) != len(nodes) or len(points) < 2:
             return False
-   
+
         self.splines = []
         self.nodes = nodes
         
@@ -44,7 +44,7 @@ class QuinticHermiteSplineManager:
         start_tangent = None
         
         for i in range(1, len(points)):
-            if nodes[i].is_reverse_node or i == len(points) - 1:
+            if nodes[i].is_reverse_node or nodes[i].turn != 0 or i == len(points) - 1:
                 # Create spline segment
                 current_points = points[current_start_idx:i+1]
                 spline = QuinticHermiteSpline()
@@ -52,13 +52,12 @@ class QuinticHermiteSplineManager:
                 if not spline.fit(current_points[:, 0], current_points[:, 1]):
                     return False
                 
-                if (start_tangent is not None):
+                if start_tangent is not None:
                     spline.set_starting_tangent(start_tangent)
                     start_tangent = None
                     
-                # Handle tangent continuity at reverse nodes
-                if nodes[i].is_reverse_node:
-
+                # Handle tangent continuity at split points
+                if nodes[i].is_reverse_node or nodes[i].turn != 0:
                     # Calculate segment lengths
                     prev_length = np.linalg.norm(points[i] - points[i-1])
                     next_length = np.linalg.norm(points[i+1] - points[i]) if i < len(points)-1 else prev_length
@@ -67,25 +66,45 @@ class QuinticHermiteSplineManager:
                     prev_vector = (points[i] - points[i-1]) * (1.0 / prev_length if prev_length > 0 else 1.0)
                     next_vector = (points[i+1] - points[i]) * (1.0 / next_length if next_length > 0 else 1.0)
                     
-                    # Calculate difference vector and normalize
-                    dif_vector = prev_vector - next_vector
-                    dif_norm = np.linalg.norm(dif_vector)
-                    
-                    if dif_norm > 0:
-                        dif_vector = dif_vector / dif_norm
-                    
-                    # Scale the difference vector by the minimum segment length
                     min_length = min(prev_length, next_length)
-                    dif_vector = dif_vector * min_length
-                    
-                    # Set end tangent for current spline
-                    spline.set_ending_tangent(dif_vector)
-                    start_tangent = -1*dif_vector
 
+                    if nodes[i].is_reverse_node:
+                        # Calculate difference vector and normalize for reverse nodes
+                        dif_vector = prev_vector - next_vector
+                        dif_norm = np.linalg.norm(dif_vector)
+                        
+                        if dif_norm > 0:
+                            dif_vector = dif_vector / dif_norm
+                        
+                        # Scale the difference vector by the minimum segment length
+                        min_length = min(prev_length, next_length)
+                        dif_vector = dif_vector * min_length
+                        
+                        # Set end tangent for current spline
+                        spline.set_ending_tangent(dif_vector)
+                        start_tangent = -1 * dif_vector
+                        
+                    else:  # Handle turn angle
+                        # Apply the turn angle directly (convert to radians)
+                        target_angle_rad = np.radians(nodes[i].turn)
+                        
+                        # Create rotation matrix for the target angle
+                        rotation_matrix = np.array([
+                            [np.cos(target_angle_rad), -np.sin(target_angle_rad)],
+                            [np.sin(target_angle_rad), np.cos(target_angle_rad)]
+                        ])
+                        
+                        # Apply rotation to the previous vector to get the next tangent
+                        next_tangent = rotation_matrix @ prev_vector
+                        next_tangent = next_tangent * min_length
+                        
+                        # Set end tangent for current spline and start tangent for next spline
+                        spline.set_ending_tangent(prev_vector * min_length)
+                        start_tangent = next_tangent
 
                 self.splines.append(spline)
                 
-                if nodes[i].is_reverse_node and i < len(points) - 1:
+                if (nodes[i].is_reverse_node or nodes[i].turn != 0) and i < len(points) - 1:
                     current_start_idx = i
 
         self.arc_length = None
@@ -512,6 +531,8 @@ class QuinticHermiteSplineManager:
         # Linear interpolation
         t0 = parameters[idx-1]
         t1 = parameters[idx]
+
+        # If we're in between two spline segments, return the value of the next segment
         if (t0%1 != t1%1): # Holy guacamole this worked first try
             return values[idx]
         v0 = values[idx-1]
