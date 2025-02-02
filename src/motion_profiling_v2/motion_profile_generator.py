@@ -1,9 +1,10 @@
 import math
 from dataclasses import dataclass
 from typing import List, Tuple
-import motion_profiling_v2.one_dim_mp_generator as one_dim_mp_generator
 
 import numpy as np
+
+import motion_profiling_v2.one_dim_mp_generator as one_dim_mp_generator
 
 
 @dataclass
@@ -105,7 +106,7 @@ def forward_backward_pass(
 
         if (prev_t % 1) > (t % 1) and t < spline_manager.distance_to_time(total_dist):
             node_num += 1
-            if (spline_manager.nodes[node_num].stop):
+            if spline_manager.nodes[node_num].stop:
                 velocities[-1] = 0.01
         prev_t = t
 
@@ -244,18 +245,25 @@ def forward_backward_pass(
 
     return velocities
 
-def motion_profile_angle(angle: int, constraints: Constraints, dt: float = 0.025) -> Tuple[List[float], List[float], List[float], List[float], List[float], List[float]]:
+
+def motion_profile_angle(
+    angle: int, constraints: Constraints, dt: float = 0.025
+) -> Tuple[
+    List[float], List[float], List[float], List[float], List[float], List[float]
+]:
     angle = math.radians(angle)
 
     arc_length = abs(angle) * constraints.track_width / 2
 
-    velocities = one_dim_mp_generator.generate_trapezoidal_profile(constraints.max_vel, constraints.max_acc, arc_length, dt)
+    velocities = one_dim_mp_generator.generate_trapezoidal_profile(
+        constraints.max_vel, constraints.max_acc, arc_length, dt
+    )
 
     headings = []
 
     accum_arc_length = 0
     for i in range(len(velocities)):
-        current_angle = accum_arc_length / (constraints.track_width/2)
+        current_angle = accum_arc_length / (constraints.track_width / 2)
         headings.append(current_angle * (-1 if angle > 0 else 1))
 
         accum_arc_length += velocities[i] * dt
@@ -263,10 +271,10 @@ def motion_profile_angle(angle: int, constraints: Constraints, dt: float = 0.025
     # Differentiate to get angular velocities
     angular_velocities = [0]
     for i in range(1, len(headings)):
-        angular_velocities.append((headings[i] - headings[i-1]) / dt)
-    
+        angular_velocities.append((headings[i] - headings[i - 1]) / dt)
+
     return headings, angular_velocities
-    
+
 
 def generate_motion_profile(
     spline_manager, constraints: Constraints, dt: float = 0.025, dd: float = 0.005
@@ -295,7 +303,7 @@ def generate_motion_profile(
     current_vel = velocities[0]
     total_length = spline_manager.get_total_arc_length()
     is_reversed = False
-    if (spline_manager.nodes[0].is_reverse_node):
+    if spline_manager.nodes[0].is_reverse_node:
         is_reversed = True
     node_idx = 0
 
@@ -306,17 +314,21 @@ def generate_motion_profile(
         if t % 1 < prev_t % 1 and t < spline_manager.distance_to_time(total_length):
             nodes_map.append(len(times))
             node_idx += 1
-            if (spline_manager.nodes[node_idx].is_reverse_node):
+            if spline_manager.nodes[node_idx].is_reverse_node:
                 is_reversed = not is_reversed
-            
-            if (spline_manager.nodes[node_idx].turn != 0):
-                ins_headings, ins_ang_vels = motion_profile_angle(spline_manager.nodes[node_idx].turn, constraints, dt)
+
+            if spline_manager.nodes[node_idx].turn != 0:
+                ins_headings, ins_ang_vels = motion_profile_angle(
+                    spline_manager.nodes[node_idx].turn, constraints, dt
+                )
                 start_heading = headings[-1]
 
                 positions.extend(positions[-1] for _ in ins_headings)
                 linear_vels.extend(0 for _ in ins_headings)
                 accelerations.extend(0 for _ in ins_headings)
-                headings.extend(start_heading + ins_headings[i] for i in range(len(ins_headings)))
+                headings.extend(
+                    start_heading + ins_headings[i] for i in range(len(ins_headings))
+                )
                 angular_vels.extend(ins_ang_vels)
                 coords.extend(coords[-1] for _ in ins_headings)
                 times.extend(current_time + i * dt for i in range(len(ins_headings)))
@@ -326,7 +338,7 @@ def generate_motion_profile(
         prev_t = t
         curvature = spline_manager.get_curvature(t)
         heading = spline_manager.get_heading(t) + (math.pi if is_reversed else 0)
-        while (heading > math.pi):
+        while heading > math.pi:
             heading -= 2 * math.pi
 
         heading *= -1

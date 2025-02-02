@@ -1,5 +1,5 @@
 from PyQt6.QtCore import QPoint, QPointF, QRectF, Qt
-from PyQt6.QtGui import QAction, QColor, QPainter, QActionGroup
+from PyQt6.QtGui import QAction, QActionGroup, QColor, QPainter
 from PyQt6.QtWidgets import QGraphicsItem, QInputDialog, QMenu, QWidget
 
 
@@ -135,7 +135,7 @@ class Node(QGraphicsItem):
         spin_options = {
             "Don't spin intake": 0,
             "Spin intake": 1,
-            "Spin intake in reverse": -1
+            "Spin intake in reverse": -1,
         }
 
         spin_action_group = QActionGroup(spin_menu)
@@ -149,7 +149,7 @@ class Node(QGraphicsItem):
             spin_menu.addAction(action)
 
         spin_action_group.triggered.connect(self.set_spin_intake)
-        
+
         clamp_action = QAction("Clamp Goal", checkable=True)
         clamp_action.setChecked(self.clamp_goal)
         clamp_action.triggered.connect(self.toggle_clamp_goal)
@@ -235,7 +235,7 @@ class Node(QGraphicsItem):
             or self.lb != 0
             or self.wait_time != 0
         )
-    
+
     def is_stop_node(self):
         return self.stop
 
