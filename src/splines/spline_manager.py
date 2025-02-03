@@ -565,8 +565,11 @@ class QuinticHermiteSplineManager:
         t1 = parameters[idx]
 
         # If we're in between two spline segments, return the value of the next segment
-        if t0 % 1 != t1 % 1:  # Holy guacamole this worked first try
-            return values[idx]
+        if t0 % 1 != t1 % 1:  # Holy guacamole this worked first try (I lied)
+            if t % 1 > 0.5:
+                return values[idx - 1]
+            else:
+                return values[idx]
         v0 = values[idx - 1]
         v1 = values[idx]
 

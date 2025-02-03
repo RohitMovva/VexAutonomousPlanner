@@ -294,7 +294,7 @@ def generate_motion_profile(
     angular_vels = []
     accelerations = []
     headings = []
-    nodes_map = []
+    nodes_map = [0]
     coords = []
 
     # Initialize tracking variables
@@ -321,7 +321,9 @@ def generate_motion_profile(
                 ins_headings, ins_ang_vels = motion_profile_angle(
                     spline_manager.nodes[node_idx].turn, constraints, dt
                 )
+                # print("INS HEADINGS: ", ins_headings)
                 start_heading = headings[-1]
+                # print("START HEADING: ", start_heading)
 
                 positions.extend(positions[-1] for _ in ins_headings)
                 linear_vels.extend(0 for _ in ins_headings)
@@ -361,7 +363,7 @@ def generate_motion_profile(
 
         # Calculate acceleration
         accel = (target_vel - current_vel) / dt
-        angular_vel = target_vel * curvature
+        angular_vel = target_vel * curvature * -1
         # Apply acceleration limits
         accel = np.clip(accel, -constraints.max_dec, constraints.max_acc)
 
