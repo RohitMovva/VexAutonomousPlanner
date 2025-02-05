@@ -321,9 +321,7 @@ def generate_motion_profile(
                 ins_headings, ins_ang_vels = motion_profile_angle(
                     spline_manager.nodes[node_idx].turn, constraints, dt
                 )
-                # print("INS HEADINGS: ", ins_headings)
                 start_heading = headings[-1]
-                # print("START HEADING: ", start_heading)
 
                 positions.extend(positions[-1] for _ in ins_headings)
                 linear_vels.extend(0 for _ in ins_headings)
@@ -336,6 +334,19 @@ def generate_motion_profile(
                 times.extend(current_time + i * dt for i in range(len(ins_headings)))
 
                 current_time += len(ins_headings) * dt
+            print(f"Wait time: {spline_manager.nodes[node_idx].wait_time}")
+            if spline_manager.nodes[node_idx].wait_time > 0:
+                steps = int(spline_manager.nodes[node_idx].wait_time / dt)
+                print(f"wait: {steps}")
+                positions.extend(positions[-1] for _ in range(steps))
+                linear_vels.extend(0 for _ in range(steps))
+                accelerations.extend(0 for _ in range(steps))
+                headings.extend(headings[-1] for _ in range(steps))
+                angular_vels.extend(0 for _ in range(steps))
+                coords.extend(coords[-1] for _ in range(steps))
+                times.extend(current_time + i * dt for i in range(steps))
+
+                current_time += steps * dt
 
         prev_t = t
         curvature = spline_manager.get_curvature(t)
