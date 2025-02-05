@@ -268,12 +268,13 @@ class AutonomousPlannerGUIManager(QMainWindow):
                         0,
                         time_intervals[i],
                         coords[i][0] * 12,
-                        coords[i][1] * 12,
+                        coords[i][1] * -12,
                         headings[i],
                         velocities[i] * 12,
                         angular_velocities[i],
                     ]
                 )
+        print("NM")
         print(nodes_map, len(nodes_data))
         nodes_actions = [
             [

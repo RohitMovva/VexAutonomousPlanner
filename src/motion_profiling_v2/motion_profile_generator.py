@@ -294,7 +294,7 @@ def generate_motion_profile(
     angular_vels = []
     accelerations = []
     headings = []
-    nodes_map = []
+    nodes_map = [0]
     coords = []
 
     # Initialize tracking variables
@@ -334,6 +334,19 @@ def generate_motion_profile(
                 times.extend(current_time + i * dt for i in range(len(ins_headings)))
 
                 current_time += len(ins_headings) * dt
+            print(f"Wait time: {spline_manager.nodes[node_idx].wait_time}")
+            if spline_manager.nodes[node_idx].wait_time > 0:
+                steps = int(spline_manager.nodes[node_idx].wait_time / dt)
+                print(f"wait: {steps}")
+                positions.extend(positions[-1] for _ in range(steps))
+                linear_vels.extend(0 for _ in range(steps))
+                accelerations.extend(0 for _ in range(steps))
+                headings.extend(headings[-1] for _ in range(steps))
+                angular_vels.extend(0 for _ in range(steps))
+                coords.extend(coords[-1] for _ in range(steps))
+                times.extend(current_time + i * dt for i in range(steps))
+
+                current_time += steps * dt
 
         prev_t = t
         curvature = spline_manager.get_curvature(t)
@@ -361,7 +374,7 @@ def generate_motion_profile(
 
         # Calculate acceleration
         accel = (target_vel - current_vel) / dt
-        angular_vel = target_vel * curvature
+        angular_vel = target_vel * curvature * -1
         # Apply acceleration limits
         accel = np.clip(accel, -constraints.max_dec, constraints.max_acc)
 
