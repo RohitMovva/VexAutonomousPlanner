@@ -81,25 +81,11 @@ class QuinticHermiteSplineManager:
 
                     min_length = min(prev_length, next_length)
 
-                    if nodes[i].is_reverse_node:
-                        # Calculate difference vector and normalize for reverse nodes
-                        dif_vector = prev_vector - next_vector
-                        dif_norm = np.linalg.norm(dif_vector)
-
-                        if dif_norm > 0:
-                            dif_vector = dif_vector / dif_norm
-
-                        # Scale the difference vector by the minimum segment length
-                        min_length = min(prev_length, next_length)
-                        dif_vector = dif_vector * min_length
-
-                        # Set end tangent for current spline
-                        spline.set_ending_tangent(dif_vector)
-                        start_tangent = -1 * dif_vector
-
-                    else:  # Handle turn angle
+                    if nodes[i].turn != 0:
                         # Apply the turn angle directly (convert to radians)
                         target_angle_rad = np.radians(nodes[i].turn)
+                        if (nodes[i].is_reverse_node):
+                            target_angle_rad = -target_angle_rad
 
                         # Create rotation matrix for the target angle
                         rotation_matrix = np.array(
@@ -116,6 +102,22 @@ class QuinticHermiteSplineManager:
                         # Set end tangent for current spline and start tangent for next spline
                         spline.set_ending_tangent(prev_vector * min_length)
                         start_tangent = next_tangent
+
+                    else: # Reverse node
+                        # Calculate difference vector and normalize for reverse nodes
+                        dif_vector = prev_vector - next_vector
+                        dif_norm = np.linalg.norm(dif_vector)
+
+                        if dif_norm > 0:
+                            dif_vector = dif_vector / dif_norm
+
+                        # Scale the difference vector by the minimum segment length
+                        min_length = min(prev_length, next_length)
+                        dif_vector = dif_vector * min_length
+
+                        # Set end tangent for current spline
+                        spline.set_ending_tangent(dif_vector)
+                        start_tangent = -1 * dif_vector
 
                 self.splines.append(spline)
 
