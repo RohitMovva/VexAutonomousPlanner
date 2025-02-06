@@ -1,10 +1,14 @@
+import logging
 import math
+import time
 from dataclasses import dataclass
 from typing import List, Tuple
 
 import numpy as np
 
 import motion_profiling_v2.one_dim_mp_generator as one_dim_mp_generator
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -79,8 +83,6 @@ def forward_backward_pass(
     max_angular_vel = 2 * constraints.max_vel / constraints.track_width
     max_angular_accel = 2 * constraints.max_acc / constraints.track_width
 
-    # Rebuild spline tables
-    spline_manager.rebuild_tables()
     velocities = []
     curvatures = []
     curvature_derivs = []
@@ -284,8 +286,21 @@ def generate_motion_profile(
     """
     Generates a complete motion profile including velocities, accelerations, and angular components
     """
+    logger.info("Generating motion profile")
+    start_time = time.time()
+
+    # Rebuild spline tables
+    sm_start_time = time.time()
+    spline_manager.rebuild_tables()
+    sm_end_time = time.time()
+    logger.info(f"Spline table rebuild took {sm_end_time - sm_start_time} seconds")
+
     # Generate velocity profile
+    fb_start_time = time.time()
     velocities = forward_backward_pass(spline_manager, constraints, dd)
+    fb_end_time = time.time()
+
+    logger.info(f"Forward-backward pass took {fb_end_time - fb_start_time} seconds")
 
     # Initialize result arrays
     times = []
@@ -309,7 +324,6 @@ def generate_motion_profile(
 
     prev_t = 0
     while current_pos < (total_length):
-        # print(f"p: {current_pos}")
         t = spline_manager.distance_to_time(current_pos)
         if t % 1 < prev_t % 1 and t < spline_manager.distance_to_time(total_length):
             nodes_map.append(len(times))
@@ -334,10 +348,9 @@ def generate_motion_profile(
                 times.extend(current_time + i * dt for i in range(len(ins_headings)))
 
                 current_time += len(ins_headings) * dt
-            print(f"Wait time: {spline_manager.nodes[node_idx].wait_time}")
+
             if spline_manager.nodes[node_idx].wait_time > 0:
                 steps = int(spline_manager.nodes[node_idx].wait_time / dt)
-                print(f"wait: {steps}")
                 positions.extend(positions[-1] for _ in range(steps))
                 linear_vels.extend(0 for _ in range(steps))
                 accelerations.extend(0 for _ in range(steps))
@@ -396,6 +409,9 @@ def generate_motion_profile(
         coords.append(coord)
 
         current_time += dt
+
+    end_time = time.time()
+    logger.info(f"Motion profile generation took {end_time - start_time} seconds")
 
     return (
         times,

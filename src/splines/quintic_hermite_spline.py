@@ -1,8 +1,11 @@
+import logging
 from typing import Optional, Tuple
 
 import numpy as np
 
 from splines.spline import Spline  # type: ignore
+
+logger = logging.getLogger(__name__)
 
 
 class QuinticHermiteSpline(Spline):
@@ -35,38 +38,38 @@ class QuinticHermiteSpline(Spline):
         if len(x) < 2:
             return False
 
-        print("\n=== Fitting Spline ===")
-        print(f"Input points: x={x}, y={y}")
+        logger.debug("\n=== Fitting Spline ===")
+        logger.debug(f"Input points: x={x}, y={y}")
 
         self.control_points = np.column_stack((x, y))
 
         try:
             self.parameters = self._compute_parameters(self.control_points)
-            print(f"Computed parameters: {self.parameters}")
+            logger.debug(f"Computed parameters: {self.parameters}")
 
             # Calculate and log segment lengths
             diffs = np.diff(self.control_points, axis=0)
             segment_lengths = np.linalg.norm(diffs, axis=1)
-            print(f"Segment lengths: {segment_lengths}")
-            print(f"Average segment length: {np.mean(segment_lengths)}")
+            logger.debug(f"Segment lengths: {segment_lengths}")
+            logger.debug(f"Average segment length: {np.mean(segment_lengths)}")
 
             if first_derivatives is not None:
                 if len(first_derivatives) != len(x):
                     return False
                 self.first_derivatives = first_derivatives
-                print(f"Using provided first derivatives: {first_derivatives}")
+                logger.debug(f"Using provided first derivatives: {first_derivatives}")
 
             if second_derivatives is not None:
                 if len(second_derivatives) != len(x):
                     return False
                 self.second_derivatives = second_derivatives
-                print(f"Using provided second derivatives: {second_derivatives}")
+                logger.debug(f"Using provided second derivatives: {second_derivatives}")
 
             if self.first_derivatives is None or self.second_derivatives is None:
                 self._compute_derivatives()
 
             self.segments = []
-            print("\n=== Computing Segments ===")
+            logger.debug("\n=== Computing Segments ===")
             for i in range(len(x) - 1):
                 p0 = self.control_points[i]
                 p1 = self.control_points[i + 1]
@@ -76,10 +79,10 @@ class QuinticHermiteSpline(Spline):
                 dd1 = self.second_derivatives[i + 1]
 
                 segment_length = np.linalg.norm(p1 - p0)
-                print(f"\nSegment {i}:")
-                print(f"  Points: p0={p0}, p1={p1}")
-                print(f"  Original derivatives: d0={d0}, d1={d1}")
-                print(f"  Original second derivatives: dd0={dd0}, dd1={dd1}")
+                logger.debug(f"\nSegment {i}:")
+                logger.debug(f"  Points: p0={p0}, p1={p1}")
+                logger.debug(f"  Original derivatives: d0={d0}, d1={d1}")
+                logger.debug(f"  Original second derivatives: dd0={dd0}, dd1={dd1}")
 
                 if segment_length > 0:
                     # Scale derivatives by segment length
@@ -88,8 +91,8 @@ class QuinticHermiteSpline(Spline):
                     dd0_scaled = dd0 * (segment_length**2)
                     dd1_scaled = dd1 * (segment_length**2)
 
-                    print(f"  Scaled derivatives: d0={d0_scaled}, d1={d1_scaled}")
-                    print(
+                    logger.debug(f"  Scaled derivatives: d0={d0_scaled}, d1={d1_scaled}")
+                    logger.debug(
                         f"  Scaled second derivatives: dd0={dd0_scaled}, dd1={dd1_scaled}"
                     )
 
@@ -97,7 +100,7 @@ class QuinticHermiteSpline(Spline):
                         [p0, p1, d0_scaled, d1_scaled, dd0_scaled, dd1_scaled]
                     )
                 else:
-                    print("  Warning: Zero segment length detected")
+                    logger.debug("  Warning: Zero segment length detected")
                     segment = np.vstack([p0, p1, d0, d1, dd0, dd1])
 
                 self.segments.append(segment)
@@ -110,12 +113,12 @@ class QuinticHermiteSpline(Spline):
             return True
 
         except Exception as e:
-            print(f"Error during fitting: {str(e)}")
+            logger.error(f"Error during fitting: {str(e)}")
             return False
 
     def _compute_derivatives(self) -> None:
         """Modified version with corrected second derivative scaling"""
-        print("\n=== Computing Derivatives ===")
+        logger.debug("\n=== Computing Derivatives ===")
         num_points = len(self.control_points)
 
         if self.first_derivatives is None:
@@ -125,32 +128,32 @@ class QuinticHermiteSpline(Spline):
 
         diffs = np.diff(self.control_points, axis=0)
         distances = np.linalg.norm(diffs, axis=1)
-        print(f"Segment distances: {distances}")
+        logger.debug(f"Segment distances: {distances}")
 
         # First derivatives calculation remains the same
         chords = diffs.copy()
         scale_factor = 1.0
 
-        print("\nComputing first derivatives:")
+        logger.debug("\nComputing first derivatives:")
         for i in range(num_points):
             if i == 0:
                 self.first_derivatives[i] = chords[0] * scale_factor / distances[0]
-                print(
+                logger.debug(
                     f"First point: {self.first_derivatives[i]} (using distance {distances[0]})"
                 )
             elif i == num_points - 1:
                 self.first_derivatives[i] = chords[-1] * scale_factor / distances[-1]
-                print(
+                logger.debug(
                     f"Last point: {self.first_derivatives[i]} (using distance {distances[-1]})"
                 )
             else:
                 prev_chord = chords[i - 1] / distances[i - 1]
                 next_chord = chords[i] / distances[i]
                 self.first_derivatives[i] = (prev_chord + next_chord) * scale_factor / 2
-                print(f"Interior point {i}: {self.first_derivatives[i]}")
+                logger.debug(f"Interior point {i}: {self.first_derivatives[i]}")
 
         # Modified second derivatives computation
-        print("\nComputing second derivatives:")
+        logger.debug("\nComputing second derivatives:")
         for i in range(num_points):
             if i == 0:
                 # For the first point, use forward difference
@@ -160,7 +163,7 @@ class QuinticHermiteSpline(Spline):
                     forward_tangent - current_tangent
                 ) / distances[0]
                 self.second_derivatives[i] = 0.0  # Corrected scaling
-                print(f"First point: {self.second_derivatives[i]}")
+                logger.debug(f"First point: {self.second_derivatives[i]}")
 
             elif i == num_points - 1:
                 # For the last point, use backward difference
@@ -170,7 +173,7 @@ class QuinticHermiteSpline(Spline):
                     current_tangent - backward_tangent
                 ) / distances[-1]
                 self.second_derivatives[i] = 0.0  # Corrected scaling
-                print(f"Last point: {self.second_derivatives[i]}")
+                logger.debug(f"Last point: {self.second_derivatives[i]}")
 
             else:
                 # For interior points
@@ -198,7 +201,7 @@ class QuinticHermiteSpline(Spline):
                         self.first_derivatives[i + 1] - self.first_derivatives[i - 1]
                     ) / (2 * avg_dist)
 
-                print(f"Interior point {i}: {self.second_derivatives[i]}")
+                logger.debug(f"Interior point {i}: {self.second_derivatives[i]}")
 
     def get_point(self, t: float) -> np.ndarray:
         if not self.segments:
@@ -213,22 +216,22 @@ class QuinticHermiteSpline(Spline):
             or abs(local_t - 1.0) < 1e-6
             or abs(local_t - 0.5) < 1e-6
         ):
-            print(f"\n=== Computing point at t={t} (local_t={local_t}) ===")
-            print(f"Segment index: {segment_idx}")
-            print(f"Basis functions: {basis}")
+            logger.debug(f"\n=== Computing point at t={t} (local_t={local_t}) ===")
+            logger.debug(f"Segment index: {segment_idx}")
+            logger.debug(f"Basis functions: {basis}")
 
         segment = self.segments[segment_idx]
         point = np.zeros(2)
         for i in range(6):
             contribution = basis[i] * segment[i]
             if abs(local_t - 0.5) < 1e-6:  # Log details at midpoint
-                print(
+                logger.debug(
                     f"  Basis[{i}] * segment[{i}] = {basis[i]} * {segment[i]} = {contribution}"
                 )
             point += contribution
 
         if abs(local_t - 0.5) < 1e-6:
-            print(f"Final point: {point}")
+            logger.debug(f"Final point: {point}")
 
         return point
 

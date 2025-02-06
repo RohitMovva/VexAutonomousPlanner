@@ -1,4 +1,5 @@
 import json
+import logging
 import math
 from typing import List
 
@@ -24,13 +25,12 @@ from PyQt6.QtWidgets import (
     QGraphicsView,
 )
 
-import utilities
+import utilities.file_management
 from gui import node
 from motion_profiling_v2 import motion_profile_generator
 from splines.spline_manager import QuinticHermiteSplineManager
 
-# sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
-# sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
+logger = logging.getLogger(__name__)
 
 
 class StyledRectItem(QGraphicsRectItem):
@@ -57,7 +57,7 @@ class PathWidget(QGraphicsView):
     def __init__(
         self,
         parent=None,
-        image_path=utilities.resource_path(
+        image_path=utilities.file_management.resource_path(
             "../assets/V5RC-HighStakes-Match-2000x2000.png"
         ),
         size=QSize(250, 250),
@@ -198,7 +198,7 @@ class PathWidget(QGraphicsView):
             scene_pos = self.mapToScene(event.position().toPoint())
             self.add_node(scene_pos)
 
-            print(f"Mouse clicked at ({scene_pos.x()}, {scene_pos.y()})")
+            logger.info(f"Mouse clicked at ({scene_pos.x()}, {scene_pos.y()})")
 
         # Call the parent class mousePressEvent to maintain drag functionality
         else:
@@ -307,25 +307,12 @@ class PathWidget(QGraphicsView):
             self.spline_manager, constraints
         )
 
-        print("Accumulated value", self.positions[-1])
-        print("Goal value:", self.spline_manager.get_total_arc_length())
-        print("Error:", self.spline_manager.get_total_arc_length() - self.positions[-1])
+        logger.info(f"Accumulated value: {self.positions[-1]}")
+        logger.info(f"Goal value: {self.spline_manager.get_total_arc_length()}")
+        logger.info(
+            f"Error: {self.spline_manager.get_total_arc_length() - self.positions[-1]}"
+        )
         self.nodes_map.append(len(self.time_intervals))
-
-        # left_wheel_velocities = []
-        # right_wheel_velocities = []
-        # left_wheel_accelerations = []
-        # right_wheel_accelerations = []
-
-        # for i in range(len(self.velocities)):
-        #     left_wheel_velocities.append(self.velocities[i] - self.angular_velocities[i] * track_width / 2)
-        #     right_wheel_velocities.append(self.velocities[i] + self.angular_velocities[i] * track_width / 2)
-
-        # left_wheel_accelerations = [(left_wheel_velocities[i] - left_wheel_velocities[i - 1])/.025 for i in range(1, len(left_wheel_velocities))]
-        # right_wheel_accelerations = [(right_wheel_velocities[i] - right_wheel_velocities[i - 1])/.025 for i in range(1, len(right_wheel_velocities))]
-
-        # for i in range(len(left_wheel_accelerations)):
-        #     print(i*.025, left_wheel_accelerations[i], right_wheel_accelerations[i])
 
         return (
             self.time_intervals,
@@ -417,7 +404,7 @@ class PathWidget(QGraphicsView):
         self.update_path()
         self.auto_save()
 
-        print(f"Node created at ({new_node.abs_x}, {new_node.abs_y})")
+        logger.info(f"Node created at ({new_node.abs_x}, {new_node.abs_y})")
         return new_node
 
     def remove_node(self, remove_node):
@@ -532,7 +519,7 @@ class PathWidget(QGraphicsView):
             self.parent.auto_save()
 
     def toggle_visualization(self, state: bool) -> None:
-        print("Visualizing:", state)
+        logger.info("Visualizing:", state)
         self.visualize = state
         self.update()
 

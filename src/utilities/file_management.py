@@ -1,9 +1,12 @@
+import logging
 import os
 import sys
 
 import matplotlib.pyplot as plt
 import yaml
 from PyQt6.QtGui import QFontDatabase
+
+logger = logging.getLogger(__name__)
 
 
 def load_fonts():
@@ -22,7 +25,7 @@ def create_files():
     for file in files:
         if not os.path.exists(file):
             os.makedirs(file)
-            print(f"Created file: {file}")
+            logger.info(f"Created file: {file}")
 
 
 def resource_path(relative_path):
@@ -31,7 +34,7 @@ def resource_path(relative_path):
         relative_path = relative_path[3:]
     except Exception:
         base_path = os.path.abspath(".")
-    print(os.path.join(base_path, relative_path))
+    logger.info(f"Full resource path {os.path.join(base_path, relative_path)}")
     return os.path.join(base_path, relative_path)
 
 
