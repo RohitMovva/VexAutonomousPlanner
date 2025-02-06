@@ -295,7 +295,6 @@ class QuinticHermiteSplineManager:
         """
         if self._precomputed_properties is None:
             self.precompute_path_properties()
-        # print("tang", t, self._interpolate_property(t, 'headings'))
         return self._interpolate_property(t, "headings")
 
     def get_curvature(self, t: float) -> float:
@@ -333,15 +332,11 @@ class QuinticHermiteSplineManager:
             raise ValueError("No splines have been initialized")
 
         # Get first derivative at parameter t
-        spline_idx, local_t = self._map_parameter_to_spline(t)
-
-        # print(f"t: {t}, spline_idx: {spline_idx}, local_t: {local_t}")
         derivative = self.get_derivative_at_parameter(t)
 
         # Calculate heading angle using arctan2
         # arctan2(y, x) returns angle in range [-π, π]
         heading = np.arctan2(derivative[1], derivative[0])
-        # print(t, heading)
 
         return heading
 
@@ -382,9 +377,6 @@ class QuinticHermiteSplineManager:
         # Handle special case where speed is zero (singular point)
         if speed_squared < 1e-10:  # Small threshold to avoid division by zero
             return 0.0
-
-        # Calculate numerator (cross product of first and second derivatives)
-        numerator = abs(x_prime * y_double_prime - y_prime * x_double_prime)
 
         # Calculate curvature
         curvature = (x_prime * y_double_prime - y_prime * x_double_prime) / (
@@ -466,19 +458,10 @@ class QuinticHermiteSplineManager:
         if not self.splines:
             raise ValueError("No splines initialized")
 
-        total_param_length = len(self.nodes) - 1
         all_parameters = []
         all_distances = []
         current_dist = 0.0
         prev_param = 0.0
-        # d1 = self.splines[0].get_point(1.0)
-        # d2 = self.splines[-1].get_point(0.0)
-        # d1 = self.splines[0].get_derivative(1.0)
-        # d2 = self.splines[-1].get_derivative(0.0)
-        # Find headings
-        # print(f"hai {d1}, {d2}")
-        # print(f"hai {np.arctan2(d1[1], d1[0])}, {np.arctan2(d2[1], d2[0])}")
-
         for spline_idx, spline in enumerate(self.splines):
             # Get parameter range for this spline
             param_start = spline.parameters[0]
@@ -539,7 +522,6 @@ class QuinticHermiteSplineManager:
                 t
             )  # Added this line
             headings[i] = self._get_heading(t)
-            # print(f"{t}: {headings[i]}")
 
         self._precomputed_properties = {
             "parameters": parameters,

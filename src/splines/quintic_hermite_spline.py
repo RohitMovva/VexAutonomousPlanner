@@ -415,41 +415,12 @@ class QuinticHermiteSpline(Spline):
             ]
         )
 
-    # def get_point(self, t: float) -> np.ndarray:
-    #     if not self.segments:
-    #         raise ValueError("Spline has not been fitted yet")
-
-    #     local_t, segment_idx = self._normalize_parameter(t)
-    #     basis = self._get_basis_functions(local_t)
-
-    #     # Debug logging for specific parameter values
-    #     if abs(local_t - 0.0) < 1e-6 or abs(local_t - 1.0) < 1e-6 or abs(local_t - 0.5) < 1e-6:
-    #         print(f"\n=== Computing point at t={t} (local_t={local_t}) ===")
-    #         print(f"Segment index: {segment_idx}")
-    #         print(f"Basis functions: {basis}")
-
-    #     segment = self.segments[segment_idx]
-    #     point = np.zeros(2)
-    #     for i in range(6):
-    #         contribution = basis[i] * segment[i]
-    #         if abs(local_t - 0.5) < 1e-6:  # Log details at midpoint
-    #             print(f"  Basis[{i}] * segment[{i}] = {basis[i]} * {segment[i]} = {contribution}")
-    #         point += contribution
-
-    #     if abs(local_t - 0.5) < 1e-6:
-    #         print(f"Final point: {point}")
-
-    #     return point
-
     def get_derivative(self, t: float, debug: bool = False) -> np.ndarray:
         """Enhanced get_derivative with optional logging"""
         if not self.segments:
             raise ValueError("Spline has not been fitted yet")
 
         local_t, segment_idx = self._normalize_parameter(t)
-        # print("Parameter range: ", self.parameters[0], self.parameters[-1])
-
-        # print(f"Local t: {local_t}, Segment index: {segment_idx}")
 
         basis_derivatives = self._get_basis_derivatives(local_t)
 
