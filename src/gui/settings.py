@@ -1,3 +1,5 @@
+import logging
+
 from PyQt6.QtWidgets import (
     QComboBox,
     QDockWidget,
@@ -10,6 +12,8 @@ from PyQt6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class SettingsDockWidget(QDockWidget):
@@ -92,30 +96,30 @@ class SettingsDockWidget(QDockWidget):
 
     def on_field_type_changed(self):
         field_type = self.field_type_combo.currentText()
-        print(f"Field Type changed: {field_type}")
+        logger.info(f"Field Type changed: {field_type}")
         self.parent.switch_field(field_type)
 
     def on_velocity_changed(self):
         max_velocity = self.velocity_input.value()
-        print(f"Max Velocity changed: {max_velocity} ft/s")
+        logger.info(f"Max Velocity changed: {max_velocity} ft/s")
         self.parent.set_velocity(max_velocity)
 
     def on_acceleration_changed(self):
         max_acceleration = self.acceleration_input.value()
-        print(f"Max Acceleration changed: {max_acceleration} ft/s^2")
+        logger.info(f"Max Acceleration changed: {max_acceleration} ft/s^2")
         self.parent.set_acceleration(max_acceleration)
 
     def on_jerk_changed(self):
         max_jerk = self.jerk_input.value()
-        print(f"Max Jerk changed: {max_jerk} ft/s^3")
+        logger.info(f"Max Jerk changed: {max_jerk} ft/s^3")
         self.parent.set_jerk(max_jerk)
 
     def on_robot_visualization_change(self):
         visualization_state = self.robot_visualization_toggle.currentText()
-        print(f"Robot Visualization changed: {visualization_state}")
+        logger.info(f"Robot Visualization changed: {visualization_state}")
         self.parent.toggle_robot_visualization(visualization_state == "On")
 
     def on_mirror_clicked(self):
-        print("Mirror button clicked")
+        logger.info("Mirror button clicked")
         self.parent.mirror_nodes()
-        # You can implement the functionality here later
+        

@@ -1,6 +1,10 @@
+import logging
+
 from PyQt6.QtCore import QPoint, QPointF, QRectF, Qt
 from PyQt6.QtGui import QAction, QActionGroup, QColor, QPainter
 from PyQt6.QtWidgets import QGraphicsItem, QInputDialog, QMenu, QWidget
+
+logger = logging.getLogger(__name__)
 
 
 # Node that stores data for auton route
@@ -210,7 +214,7 @@ class Node(QGraphicsItem):
             self.parent.clear_start_node()
 
         self.parent.update_path()
-        print(f"Start Node: {self.is_start_node}")
+        logger.info(f"Start Node: {self.is_start_node}")
 
     def toggle_end_node(self):
         self.is_end_node = not self.is_end_node
@@ -223,7 +227,7 @@ class Node(QGraphicsItem):
             self.parent.clear_end_node()
         self.update()
         self.parent.update_path()
-        print(f"End Node: {self.is_end_node}")
+        logger.info(f"End Node: {self.is_end_node}")
 
     def has_action(self):
         return (
@@ -241,20 +245,20 @@ class Node(QGraphicsItem):
 
     def set_spin_intake(self, action):
         self.spin_intake = action.data()
-        print(f"Spin Intake: {self.spin_intake}")
+        logger.info(f"Spin Intake: {self.spin_intake}")
 
     def toggle_clamp_goal(self):
         self.clamp_goal = not self.clamp_goal
-        print(f"Clamp Goal: {self.clamp_goal}")
+        logger.info(f"Clamp Goal: {self.clamp_goal}")
 
     def toggle_doinker(self):
         self.doink = not self.doink
-        print(f"Doinker: {self.doink}")
+        logger.info(f"Doinker: {self.doink}")
 
     def toggle_reverse(self):
         self.is_reverse_node = not self.is_reverse_node
         self.parent.update_path()
-        print(f"Reverse Node: {self.is_reverse_node}")
+        logger.info(f"Reverse Node: {self.is_reverse_node}")
 
     def set_turn(self):
         # Get the position of the node in screen coordinates
@@ -278,7 +282,7 @@ class Node(QGraphicsItem):
         if dialog.exec() == QInputDialog.DialogCode.Accepted:
             self.turn = dialog.intValue()
             self.parent.update_path()
-            print(f"Turn set to: {self.turn}")
+            logger.info(f"Turn set to: {self.turn}")
 
     def set_lb(self):
         # Get the position of the node in screen coordinates
@@ -302,7 +306,7 @@ class Node(QGraphicsItem):
         if dialog.exec() == QInputDialog.DialogCode.Accepted:
             self.lb = dialog.intValue()
             self.parent.update_path()
-            print(f"LB value set to: {self.lb}")
+            logger.info(f"LB value set to: {self.lb}")
 
     def set_wait(self):
         # Get the position of the node in screen coordinates
@@ -326,23 +330,24 @@ class Node(QGraphicsItem):
         # Show the dialog and get the result
         if dialog.exec() == QInputDialog.DialogCode.Accepted:
             self.wait_time = dialog.doubleValue()
-            print(f"Wait time set to: {self.wait_time}")
+            logger.info(f"Wait time set to: {self.wait_time}")
 
     def delete_node(self):
         self.parent.remove_node(self)
         self.scene().removeItem(self)
-        print(f"Node at ({self.abs_x}, {self.abs_y}) deleted")
+        logger.info(f"Node at ({self.abs_x}, {self.abs_y}) deleted")
 
     def toggle_stop(self):
         self.stop = not self.stop
-        print(f"Stop at Node: {self.stop}")
+        logger.info(f"Stop at Node: {self.stop}")
 
     def insert_node_before(self):
+        logger.info(f"Inserting node before at {self.pos()}")
         new_point = QPointF(self.pos().x() + 5, self.pos().y() + 5)
         self.parent.add_node(new_point, self.parent.index_of(self))
 
     def insert_node_after(self):
-        print(self.pos())
+        logger.info(f"Inserting node after at {self.pos()}")
         new_point = QPointF(self.pos().x() + 5, self.pos().y() + 5)
         self.parent.add_node(new_point, self.parent.index_of(self) + 1)
 
