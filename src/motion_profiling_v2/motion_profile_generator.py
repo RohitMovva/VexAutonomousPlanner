@@ -254,7 +254,7 @@ def motion_profile_angle(
 ) -> Tuple[
     List[float], List[float], List[float], List[float], List[float], List[float]
 ]:
-    angle = math.radians(angle)
+    # angle = math.radians(angle)
 
     arc_length = abs(angle) * constraints.track_width / 2
 
@@ -319,24 +319,86 @@ def generate_motion_profile(
     current_vel = velocities[0]
     total_length = spline_manager.get_total_arc_length()
     is_reversed = False
-    if spline_manager.nodes[0].is_reverse_node:
-        is_reversed = True
+    # if spline_manager.nodes[0].is_reverse_node:
+        # is_reversed = True
     node_idx = 0
+    if spline_manager.nodes[node_idx].is_reverse_node:
+        is_reversed = not is_reversed
+    
+    if spline_manager.nodes[0].turn != 0:
+        angle = np.radians(spline_manager.nodes[0].turn)
+
+        ins_headings, ins_ang_vels = motion_profile_angle(
+            angle, constraints, dt
+        )
+        
+        # if (is_reversed):
+        start_heading = headings[-1]
+        for i in range(len(ins_headings)):
+            while ins_headings[i] + start_heading > math.pi:
+                ins_headings[i] -= 2 * math.pi
+            while ins_headings[i] + start_heading < -math.pi:
+                ins_headings[i] += 2 * math.pi
+
+        positions.extend(0 for _ in ins_headings)
+        linear_vels.extend(0 for _ in ins_headings)
+        accelerations.extend(0 for _ in ins_headings)
+        headings.extend(
+            start_heading + ins_headings[i] for i in range(len(ins_headings))
+        )
+        angular_vels.extend(ins_ang_vels)
+        coords.extend(coords[-1] for _ in ins_headings)
+        times.extend(current_time + i * dt for i in range(len(ins_headings)))
+
+        current_time += len(ins_headings) * dt
+
+    if spline_manager.nodes[node_idx].wait_time > 0:
+        steps = int(spline_manager.nodes[node_idx].wait_time / dt)
+        h = -1*spline_manager.get_heading(0)
+        if (is_reversed):
+            h -= (math.pi if is_reversed else 0)
+        if (h > np.pi):
+            h -= 2*np.pi
+        if (h < -np.pi):
+            h += 2*np.pi
+        positions.extend(0 for _ in range(steps))
+        linear_vels.extend(0 for _ in range(steps))
+        accelerations.extend(0 for _ in range(steps))
+        headings.extend(h for _ in range(steps))
+        angular_vels.extend(0 for _ in range(steps))
+        coords.extend(spline_manager.get_point_at_parameter(0) for _ in range(steps))
+        times.extend(current_time + i * dt for i in range(steps))
+
+        current_time += steps * dt
 
     prev_t = 0
     while current_pos < (total_length):
         t = spline_manager.distance_to_time(current_pos)
         if t % 1 < prev_t % 1 and t < spline_manager.distance_to_time(total_length):
+            # if (t > 0):
             nodes_map.append(len(times))
             node_idx += 1
-            if spline_manager.nodes[node_idx].is_reverse_node:
-                is_reversed = not is_reversed
 
             if spline_manager.nodes[node_idx].turn != 0:
+                coeff = 1 if is_reversed else -1
+                angle = np.radians(spline_manager.nodes[node_idx].turn)
+                # if (is_reversed):
+                    # angle = -angle
+                    # angle = angle
+                    # if (angle > np.pi):
+                    #     angle -= 2*np.pi
+                    # else:
+                    #     angle += 2*np.pi
                 ins_headings, ins_ang_vels = motion_profile_angle(
-                    spline_manager.nodes[node_idx].turn, constraints, dt
+                    angle, constraints, dt
                 )
+                
                 start_heading = headings[-1]
+                for i in range(len(ins_headings)):
+                    while ins_headings[i] + start_heading > math.pi:
+                        ins_headings[i] -= 2 * math.pi
+                    while ins_headings[i] + start_heading < -math.pi:
+                        ins_headings[i] += 2 * math.pi
 
                 positions.extend(positions[-1] for _ in ins_headings)
                 linear_vels.extend(0 for _ in ins_headings)
@@ -345,28 +407,33 @@ def generate_motion_profile(
                     start_heading + ins_headings[i] for i in range(len(ins_headings))
                 )
                 angular_vels.extend(ins_ang_vels)
-                coords.extend(coords[-1] for _ in ins_headings)
+                coords.extend(spline_manager.get_point_at_parameter(0) for _ in ins_headings)
                 times.extend(current_time + i * dt for i in range(len(ins_headings)))
 
                 current_time += len(ins_headings) * dt
 
+            if spline_manager.nodes[node_idx].is_reverse_node:
+                is_reversed = not is_reversed
+
             if spline_manager.nodes[node_idx].wait_time > 0:
-                steps = int(spline_manager.nodes[node_idx].wait_time / dt)
-                positions.extend(positions[-1] for _ in range(steps))
+                steps = int(spline_manager.nodes[0].wait_time / dt)
+                positions.extend(0 for _ in range(steps))
                 linear_vels.extend(0 for _ in range(steps))
                 accelerations.extend(0 for _ in range(steps))
                 headings.extend(headings[-1] for _ in range(steps))
                 angular_vels.extend(0 for _ in range(steps))
-                coords.extend(coords[-1] for _ in range(steps))
+                coords.extend(spline_manager.get_point_at_parameter(0) for _ in range(steps))
                 times.extend(current_time + i * dt for i in range(steps))
 
                 current_time += steps * dt
 
         prev_t = t
         curvature = spline_manager.get_curvature(t)
-        heading = spline_manager.get_heading(t) + (math.pi if is_reversed else 0)
+        heading = spline_manager.get_heading(t) - (math.pi if is_reversed else 0)
         while heading > math.pi:
             heading -= 2 * math.pi
+        while heading < -math.pi:
+            heading += 2 * math.pi
 
         heading *= -1
         coord = spline_manager.get_point_at_parameter(t)
@@ -413,6 +480,9 @@ def generate_motion_profile(
 
     end_time = time.time()
     logger.info(f"Motion profile generation took {end_time - start_time} seconds")
+    logger.info(f"Generated {len(times)} points")
+    logger.info(f"headings: {headings}")
+    logger.info(f"angular_vels: {angular_vels}")
 
     return (
         times,

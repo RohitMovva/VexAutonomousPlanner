@@ -85,7 +85,12 @@ class QuinticHermiteSplineManager:
                         # Apply the turn angle directly (convert to radians)
                         target_angle_rad = np.radians(nodes[i].turn)
                         if (nodes[i].is_reverse_node):
-                            target_angle_rad = -target_angle_rad
+                            target_angle_rad = target_angle_rad + np.pi
+                            # target_angle_rad = 2*np.pi - target_angle_rad
+                            # while target_angle_rad > np.pi:
+                            #     target_angle_rad -= 2 * np.pi
+                            # while target_angle_rad < -np.pi:
+                            #     target_angle_rad += 2 * np.pi
 
                         # Create rotation matrix for the target angle
                         rotation_matrix = np.array(
