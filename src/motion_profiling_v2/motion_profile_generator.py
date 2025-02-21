@@ -380,7 +380,6 @@ def generate_motion_profile(
             node_idx += 1
 
             if spline_manager.nodes[node_idx].turn != 0:
-                coeff = 1 if is_reversed else -1
                 angle = np.radians(spline_manager.nodes[node_idx].turn)
                 # if (is_reversed):
                     # angle = -angle
@@ -407,7 +406,7 @@ def generate_motion_profile(
                     start_heading + ins_headings[i] for i in range(len(ins_headings))
                 )
                 angular_vels.extend(ins_ang_vels)
-                coords.extend(spline_manager.get_point_at_parameter(0) for _ in ins_headings)
+                coords.extend(coords[-1] for _ in ins_headings)
                 times.extend(current_time + i * dt for i in range(len(ins_headings)))
 
                 current_time += len(ins_headings) * dt
@@ -422,13 +421,14 @@ def generate_motion_profile(
                 accelerations.extend(0 for _ in range(steps))
                 headings.extend(headings[-1] for _ in range(steps))
                 angular_vels.extend(0 for _ in range(steps))
-                coords.extend(spline_manager.get_point_at_parameter(0) for _ in range(steps))
+                coords.extend(coords[-1] for _ in range(steps))
                 times.extend(current_time + i * dt for i in range(steps))
 
                 current_time += steps * dt
 
         prev_t = t
         curvature = spline_manager.get_curvature(t)
+        logger.debug(f"{curvature}")
         heading = spline_manager.get_heading(t) - (math.pi if is_reversed else 0)
         while heading > math.pi:
             heading -= 2 * math.pi
