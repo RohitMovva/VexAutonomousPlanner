@@ -106,7 +106,6 @@ def forward_backward_pass(
         velocities.append(1e9)  # Initialize velocities
         current_dist += delta_dist
 
-        print(t, curvature)
         if (prev_t % 1) > (t % 1) and t < spline_manager.distance_to_time(total_dist):
             node_num += 1
             if spline_manager.nodes[node_num].stop:
@@ -481,8 +480,8 @@ def generate_motion_profile(
     end_time = time.time()
     logger.info(f"Motion profile generation took {end_time - start_time} seconds")
     logger.info(f"Generated {len(times)} points")
-    logger.info(f"headings: {headings}")
-    logger.info(f"angular_vels: {angular_vels}")
+    logger.debug(f"headings: {headings}")
+    logger.debug(f"angular_vels: {angular_vels}")
 
     return (
         times,

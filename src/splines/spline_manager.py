@@ -1,3 +1,6 @@
+import logging
+import time
+
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple
 
@@ -6,6 +9,7 @@ import numpy as np
 from gui.node import Node
 from splines.quintic_hermite_spline import QuinticHermiteSpline
 
+logger = logging.getLogger(__name__)
 
 @dataclass
 class PathLookupTable:
@@ -507,31 +511,33 @@ class QuinticHermiteSplineManager:
             total_length=current_dist,
         )
 
-    def precompute_path_properties(self, num_samples: int = 10000) -> None:
+    def precompute_path_properties(self, samples_per_node: int = 100) -> None:
         """
         Precompute curvature, curvature derivative, and heading at regular intervals for faster lookup.
         """
         if not self.splines:
             raise ValueError("No splines initialized")
 
+        num_samples = samples_per_node*(len(self.nodes) - 1)
+
         parameters = np.linspace(0, len(self.nodes) - 1, num_samples)
 
         # Precompute properties
         curvatures = np.zeros(num_samples)
-        curvature_derivatives = np.zeros(num_samples)  # Added this line
+        curvature_derivatives = np.zeros(num_samples)
         headings = np.zeros(num_samples)
 
         for i, t in enumerate(parameters):
             curvatures[i] = self._get_curvature(t)
             curvature_derivatives[i] = self._get_curvature_derivative(
                 t
-            )  # Added this line
+            )
             headings[i] = self._get_heading(t)
 
         self._precomputed_properties = {
             "parameters": parameters,
             "curvatures": curvatures,
-            "curvature_derivatives": curvature_derivatives,  # Added this line
+            "curvature_derivatives": curvature_derivatives,
             "headings": headings,
         }
 
@@ -568,5 +574,12 @@ class QuinticHermiteSplineManager:
         """
         Rebuild the spline tables after modifying control points or constraints.
         """
+        lt_start_time = time.time()
         self.build_lookup_table()
+        lt_end_time = time.time()
+        logger.info(f"Rebuilt lookup table in {lt_end_time - lt_start_time:.2f} s")
+
+        pc_start_time = time.time()
         self.precompute_path_properties()
+        pc_end_time = time.time()
+        logger.info(f"Precomputed path properties in {pc_end_time - pc_start_time:.2f} s")
