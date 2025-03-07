@@ -28,6 +28,24 @@ This application acts a path planner through which you can draw out paths for th
 - Save and acess paths locally
 - Convert path to string to easily send to others
 
+<p align="center">
+  <img src="https://github.com/RohitMovva/VexAutonomousPlanner/blob/main/assets/demo_images/full_view.png?raw=true" alt="Full Application Mockup" width="700">
+  <br>
+  <em>The main interface showing the path planning workspace</em>
+</p>
+
+<p align="center">
+  <img src="https://github.com/RohitMovva/VexAutonomousPlanner/blob/main/assets/demo_images/node_settings.png?raw=true" alt="Node Creation" width="300">
+  <br>
+  <em>Creating and connecting nodes with auto-generated splines</em>
+</p>
+
+<p align="center">
+  <img src="https://github.com/RohitMovva/VexAutonomousPlanner/blob/main/assets/demo_images/velocity_profile.png?raw=true" alt="Motion Profile" width="700">
+  <br>
+  <em>Visualizing the generated motion profile</em>
+</p>
+
 
 ## Installation
 The project can be accessed either by cloning or by downloading the latest excecutable from the Releases tab on the side. (Project is still in heavy development)
