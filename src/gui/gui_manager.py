@@ -18,6 +18,7 @@ from PyQt6.QtWidgets import (
 
 import utilities.file_management
 from gui import node, path, settings
+from utilities import config_manager
 
 logger = logging.getLogger(__name__)
 
@@ -58,7 +59,6 @@ class AutonomousPlannerGUIManager(QMainWindow):
         )
         self.layout = QVBoxLayout()
 
-        # self.nodes = []
         self.start_node = None
         self.end_node = None
 
@@ -68,61 +68,40 @@ class AutonomousPlannerGUIManager(QMainWindow):
 
         self.clearing_nodes = False
 
-        autonomous_path = utilities.file_management.get_config_value(
-            "autonomous_repository_path"
+        # Get parent of current working directory
+        config_file_path = os.path.join(os.getcwd(), "..", "config.yaml")
+        self.config_manager = config_manager.ConfigManager(config_file_path)
+
+        autonomous_path = self.config_manager.get_value(
+            "files", "autonomous_repository_file"
         )
-        if autonomous_path is None:
-            autonomous_path = QFileDialog.getExistingDirectory(
-                self,
-                "Select Autonomous Program Directory",
-                str(Path(os.getcwd()).parent.parent.absolute()),
-            )
-
-            utilities.file_management.set_config_value(
-                "autonomous_repository_path", autonomous_path + "/routes.h"
-            )
-            logger.info(f"Added autonomous repository path: {autonomous_path}/routes.h")
-
-        routes_path = utilities.file_management.get_config_value("routes_folder_path")
-        if routes_path is None:
-            routes_path = QFileDialog.getExistingDirectory(
-                self,
-                "Select Routes Folder",
-                str(Path(os.getcwd()).parent.parent.absolute()),
-            )
-
-            utilities.file_management.set_config_value(
-                "routes_folder_path", routes_path
-            )
-            logger.info(f"Added routes folder path: {routes_path}")
+        routes_path = self.config_manager.get_value("files", "routes_folder")
 
         self.routes_header_path = autonomous_path
         self.routes_folder_path = routes_path
 
-        self.max_velocity = utilities.file_management.get_config_value("max_velocity")
-        self.max_acceleration = utilities.file_management.get_config_value(
-            "max_acceleration"
+        self.max_velocity = self.config_manager.get_value("motion", "max_velocity")
+        self.max_acceleration = self.config_manager.get_value(
+            "motion", "max_acceleration"
         )
-        self.max_jerk = utilities.file_management.get_config_value("max_jerk")
+        self.max_jerk = self.config_manager.get_value("motion", "max_jerk")
 
-        self.track_width = utilities.file_management.get_config_value("track_width")
+        self.track_width = self.config_manager.get_value("robot", "track_width")
 
         # Image and path widget
-        self.central_widget = path.PathWidget(self)
+        self.central_widget = path.PathWidget(self.config_manager, self)
 
         self.setCentralWidget(self.central_widget)
         self.central_widget.show()
 
         # Settings Dock Widget
         self.settings_dock_widget = settings.SettingsDockWidget(
-            self.max_velocity, self.max_acceleration, self.max_jerk, self
+            self.config_manager, self
         )
 
         # Add widgets to layout
         self.central_widget.setLayout(self.layout)
         self.setCentralWidget(self.central_widget)
-
-        # self.layout.addWidget(self.label)
 
         self.addDockWidget(
             Qt.DockWidgetArea.RightDockWidgetArea, self.settings_dock_widget
@@ -191,9 +170,6 @@ class AutonomousPlannerGUIManager(QMainWindow):
         show_coords_graph = QAction("Show Coords Graph", self)
         show_coords_graph.triggered.connect(self.coords_graph)
         tools_menu.addAction(show_coords_graph)
-
-    # def index_of(self, node):
-    #     return (self.nodes.index(node))
 
     def update_coordinate_display(self, x, y):
         self.settings_dock_widget.set_current_coordinates(x, y)

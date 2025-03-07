@@ -29,6 +29,7 @@ import utilities.file_management
 from gui import node
 from motion_profiling_v2 import motion_profile_generator
 from splines.spline_manager import QuinticHermiteSplineManager
+from utilities import config_manager
 
 logger = logging.getLogger(__name__)
 
@@ -56,6 +57,7 @@ class StyledRectItem(QGraphicsRectItem):
 class PathWidget(QGraphicsView):
     def __init__(
         self,
+        config_manager: config_manager.ConfigManager,
         parent=None,
         image_path=utilities.file_management.resource_path(
             "../assets/V5RC-HighStakes-Match-2000x2000.png"
@@ -64,7 +66,7 @@ class PathWidget(QGraphicsView):
     ):
         super().__init__(parent)
         self.parent = parent
-        # self.setGeometry(0, 0, 700, 700)
+        self.config_manager = config_manager
         self.image = QPixmap(image_path) if image_path else None
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
 
@@ -119,6 +121,9 @@ class PathWidget(QGraphicsView):
         self.mouseDown = False
 
         self.visualize = False
+
+        self.robot_width = self.config_manager.get_value("robot", "width")
+        self.robot_length = self.config_manager.get_value("robot", "length")
 
         self.path = QPainterPath()
         self.spline_manager = QuinticHermiteSplineManager()
@@ -289,7 +294,7 @@ class PathWidget(QGraphicsView):
             max_vel=v_max,  # Maximum velocity in meters/second
             max_acc=a_max,  # Maximum acceleration in meters/second^2
             max_dec=a_max,  # Maximum deceleration in meters/second^2
-            friction_coef=0.8,  # Coefficient of friction (typical rubber wheels on concrete)
+            friction_coef=0.8,  # Coefficient of friction
             max_jerk=j_max,  # Maximum jerk (rate of change of acceleration) in meters/second^3
             track_width=track_width,  # Distance between wheels in meters
         )
@@ -334,7 +339,7 @@ class PathWidget(QGraphicsView):
             points[i][1] = (points[i][1] / (2000) - 0.5) * 12.3266567842
 
         self.spline_manager.build_path(points, nodes)
-        t_values = np.linspace(0, len(points) - 1, 200)
+        t_values = np.linspace(0, len(points) - 1, 25 * len(self.nodes))
         spline_points = np.array(
             [self.spline_manager.get_point_at_parameter(t) for t in t_values]
         )
@@ -519,7 +524,7 @@ class PathWidget(QGraphicsView):
             self.parent.auto_save()
 
     def toggle_visualization(self, state: bool) -> None:
-        logger.info("Visualizing:", state)
+        logger.info(f"Visualizing toggled to : {state}")
         self.visualize = state
         self.update()
 
@@ -634,8 +639,8 @@ class PathWidget(QGraphicsView):
 
         # Create rectangle centered at path point
         rect_size = QSizeF(
-            1.47916666667 * (2000 / 12.3266567842),
-            1.33333333333 * (2000 / 12.3266567842),
+            self.robot_width * (2000 / 12.3266567842 / 12),
+            self.robot_length * (2000 / 12.3266567842 / 12),
         )
         center_rect = QRectF(
             path_point.x() - rect_size.width() / 2,
