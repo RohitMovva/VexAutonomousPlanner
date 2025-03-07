@@ -1,6 +1,16 @@
-autonomous_repository_path: C:/Users/tihor/Projects/HighStakesAutonomous/include/routes/routes.h
-max_acceleration: 4.55
-max_jerk: 45.0
+field:
+  type: High Stakes Match
+files:
+  autonomous_repository_file: routes.h
+  header_folder: C:/Users/tihor/Projects/HighStakesAutonomous/include/routes
+  routes_folder: C:/Users/tihor/Projects/VexAutonomousPlanner/routes
 max_velocity: 4.5
-routes_folder_path: C:/Users/tihor/Projects/VexAutonomousPlanner/routes
-track_width: 1.08333333333
+motion:
+  max_acceleration: 4.55
+  max_jerk: 45.0
+  max_velocity: 4.5
+robot:
+  length: 18.0
+  track_width: 1.08333333333
+  visualization: true
+  width: 18.0

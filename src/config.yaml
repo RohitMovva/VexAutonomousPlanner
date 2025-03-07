@@ -1,0 +1,14 @@
+field:
+  type: High Stakes Match
+files:
+  header_folder: ''
+  routes_folder: ''
+motion:
+  max_acceleration: 8.0
+  max_jerk: 16.0
+  max_velocity: 4.0
+robot:
+  length: 18.0
+  track_width: 12.5
+  visualization: false
+  width: 18.0
