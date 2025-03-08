@@ -57,8 +57,9 @@ class AutonomousPlannerGUIManager(QMainWindow):
         self.setWindowIcon(
             QIcon(utilities.file_management.resource_path("../assets/flip_logo.ico"))
         )
+        # Set default window size
+        self.resize(700, 400)  # Width: 1280px, Height: 720px
         self.layout = QVBoxLayout()
-
         self.start_node = None
         self.end_node = None
 
@@ -106,6 +107,11 @@ class AutonomousPlannerGUIManager(QMainWindow):
         self.addDockWidget(
             Qt.DockWidgetArea.RightDockWidgetArea, self.settings_dock_widget
         )
+
+        # Optional: you can also set it to a specific height on the screen
+        # This will position the dock at its preferred size
+        self.resizeDocks([self.settings_dock_widget], [300], Qt.Orientation.Horizontal)
+        self.resizeDocks([self.settings_dock_widget], [400], Qt.Orientation.Vertical)
 
         self.update()
         self.create_menu_bar()

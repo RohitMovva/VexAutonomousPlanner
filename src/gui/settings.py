@@ -15,7 +15,9 @@ from PyQt6.QtWidgets import (
     QHBoxLayout,
     QLineEdit,
     QFileDialog,
+    QScrollArea,  # Added QScrollArea
 )
+from PyQt6.QtCore import Qt  # Added Qt for alignment
 
 logger = logging.getLogger(__name__)
 
@@ -25,10 +27,16 @@ class SettingsDockWidget(QDockWidget):
         super().__init__("Settings", parent)
         self.parent = parent
         self.config_manager = config_manager
-
-        # Create the settings widget
+        
+        # Create a scroll area to contain all the settings
+        scroll_area = QScrollArea()
+        scroll_area.setWidgetResizable(True)  # Important to make the scroll area resize its widget
+        scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)  # Hide horizontal scrollbar
+        
+        # Create the settings widget that will be inside the scroll area
         settings_widget = QWidget()
-        main_layout = QVBoxLayout()
+        main_layout = QVBoxLayout(settings_widget)
+        main_layout.setSpacing(10)  # Add some spacing between elements
 
         # Field Settings Group
         field_group = QGroupBox("Field Settings")
@@ -41,6 +49,7 @@ class SettingsDockWidget(QDockWidget):
         index = self.field_type_combo.findText(current_field_type)
         self.field_type_combo.setCurrentIndex(index if index >= 0 else 0)
         field_layout.addRow("Field Type:", self.field_type_combo)
+        self.on_field_type_changed()
         self.field_type_combo.currentIndexChanged.connect(self.on_field_type_changed)
         
         # Mirror button (moved to field settings)
@@ -155,14 +164,14 @@ class SettingsDockWidget(QDockWidget):
         
         file_group.setLayout(file_layout)
         main_layout.addWidget(file_group)
-        
-        # Add a spacer to push the following widgets to the bottom
+
+        # Spacer to push coordinate display to the bottom
         main_layout.addItem(
             QSpacerItem(
-                20, 40, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Expanding
+                20, 20, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Expanding
             )
         )
-
+        
         # Coordinates Display Group
         coord_group = QGroupBox("Current Position")
         coord_layout = QFormLayout()
@@ -175,9 +184,18 @@ class SettingsDockWidget(QDockWidget):
         coord_group.setLayout(coord_layout)
         main_layout.addWidget(coord_group)
 
-        # Set the main layout for the settings widget
-        settings_widget.setLayout(main_layout)
-        self.setWidget(settings_widget)
+        # Add the settings widget to the scroll area
+        scroll_area.setWidget(settings_widget)
+        
+        # Set up the dock widget with the scroll area
+        self.setWidget(scroll_area)
+        
+        # Set a reasonable minimum width for the dock widget
+        # self.setMinimumWidth(300)
+        
+        # # Set a fixed height that fits well with most applications
+        # # This prevents the dock from expanding too much
+        # self.setMinimumHeight(400)
 
     def set_current_coordinates(self, x, y):
         self.current_x_label.setText(str(x))
