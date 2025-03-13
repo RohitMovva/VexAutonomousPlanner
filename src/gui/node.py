@@ -89,7 +89,7 @@ class Node(QGraphicsItem):
             self.abs_x = ((self.x() / (self.image_size)) - 0.5) * 12.3266567842 * 12
             self.abs_y = ((self.y() / (self.image_size)) - 0.5) * 12.3266567842 * 12
             self.parent.update_path()
-            self.parent.save()
+            # self.parent.save()
         super().mouseReleaseEvent(event)
 
     def itemChange(self, change, value: QPointF):

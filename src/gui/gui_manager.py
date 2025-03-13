@@ -73,8 +73,8 @@ class AutonomousPlannerGUIManager(QMainWindow):
         config_file_path = os.path.join(os.getcwd(), "..", "config.yaml")
         self.config_manager = config_manager.ConfigManager(config_file_path)
 
-        autonomous_path = self.config_manager.get_value(
-            "files", "autonomous_repository_file"
+        autonomous_path = (
+            self.config_manager.get_value("files", "header_folder") + "/routes.h"
         )
         routes_path = self.config_manager.get_value("files", "routes_folder")
 
@@ -87,7 +87,7 @@ class AutonomousPlannerGUIManager(QMainWindow):
         )
         self.max_jerk = self.config_manager.get_value("motion", "max_jerk")
 
-        self.track_width = self.config_manager.get_value("robot", "track_width")
+        self.track_width = self.config_manager.get_value("robot", "track_width") / 12
 
         # Image and path widget
         self.central_widget = path.PathWidget(self.config_manager, self)

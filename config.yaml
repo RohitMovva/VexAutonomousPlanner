@@ -1,15 +1,17 @@
 field:
-  type: High Stakes Match
+  type: High Stakes Skills
 files:
   autonomous_repository_file: routes.h
   header_folder: C:/Users/tihor/Projects/HighStakesAutonomous/include/routes
   routes_folder: C:/Users/tihor/Projects/VexAutonomousPlanner/routes
+max_acceleration: 4.55
 motion:
   max_acceleration: 4.55
   max_jerk: 43.0
   max_velocity: 4.0
 robot:
-  length: 18.0
-  track_width: 1.08333333333
-  visualization: false
+  length: 15.0
+  track_width: 11.5
+  visualization: true
   width: 18.0
+track_width: 1.125

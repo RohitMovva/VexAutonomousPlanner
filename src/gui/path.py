@@ -382,6 +382,7 @@ class PathWidget(QGraphicsView):
         self.viewport().update()  # Request a repaint of the viewport
 
     def save(self):
+        # pass
         self.parent.auto_save()
 
     def update_lines(self):
@@ -407,7 +408,7 @@ class PathWidget(QGraphicsView):
 
         new_node.show()
         self.update_path()
-        self.auto_save()
+        # self.auto_save()
 
         logger.info(f"Node created at ({new_node.abs_x}, {new_node.abs_y})")
         return new_node
@@ -477,7 +478,7 @@ class PathWidget(QGraphicsView):
 
         self.update_path()
         self.update()
-        self.auto_save()
+        # self.auto_save()
 
     def convert_point(self, point: QPointF):
         point.setX((point.x() / (12.3266567842 * 12) + 0.5) * 2000)

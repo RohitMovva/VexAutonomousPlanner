@@ -189,13 +189,6 @@ class SettingsDockWidget(QDockWidget):
         
         # Set up the dock widget with the scroll area
         self.setWidget(scroll_area)
-        
-        # Set a reasonable minimum width for the dock widget
-        # self.setMinimumWidth(300)
-        
-        # # Set a fixed height that fits well with most applications
-        # # This prevents the dock from expanding too much
-        # self.setMinimumHeight(400)
 
     def set_current_coordinates(self, x, y):
         self.current_x_label.setText(str(x))
@@ -258,7 +251,7 @@ class SettingsDockWidget(QDockWidget):
         self.config_manager.set_value("robot", "track_width", track_width)
         # Implement in parent class if needed
         if hasattr(self.parent, 'set_track_width'):
-            self.parent.set_track_width(track_width)
+            self.parent.set_track_width(track_width / 12.0)
         
     def browse_header_folder(self):
         folder_path = QFileDialog.getExistingDirectory(
