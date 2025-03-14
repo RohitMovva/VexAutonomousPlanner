@@ -352,7 +352,9 @@ def generate_motion_profile(
 
         current_time += len(ins_headings) * dt
 
+    print(f"wait time: {spline_manager.nodes[node_idx].wait_time}")
     if spline_manager.nodes[node_idx].wait_time > 0:
+        print("wait!!")
         steps = int(spline_manager.nodes[node_idx].wait_time / dt)
         h = -1*spline_manager.get_heading(0)
         if (is_reversed):
@@ -415,7 +417,8 @@ def generate_motion_profile(
                 is_reversed = not is_reversed
 
             if spline_manager.nodes[node_idx].wait_time > 0:
-                steps = int(spline_manager.nodes[0].wait_time / dt)
+                print("wait!!")
+                steps = int(spline_manager.nodes[node_idx].wait_time / dt)
                 positions.extend(0 for _ in range(steps))
                 linear_vels.extend(0 for _ in range(steps))
                 accelerations.extend(0 for _ in range(steps))
