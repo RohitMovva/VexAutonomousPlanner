@@ -12,6 +12,6 @@ motion:
 robot:
   length: 15.0
   track_width: 11.5
-  visualization: true
+  visualization: false
   width: 18.0
 track_width: 1.125
