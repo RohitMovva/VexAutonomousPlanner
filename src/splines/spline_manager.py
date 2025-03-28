@@ -4,6 +4,7 @@ from typing import Dict, List, Optional, Tuple
 import numpy as np
 
 from gui.node import Node
+from gui.action_point import ActionPoint
 from splines.quintic_hermite_spline import QuinticHermiteSpline
 
 
@@ -28,12 +29,13 @@ class QuinticHermiteSplineManager:
         """
         self.splines: List[QuinticHermiteSpline] = []
         self.nodes: List[Node] = []
+        self.action_points: List[ActionPoint] = []
         self.path_parameters: Dict = {}  # Store parameter mappings between global and local
         self.arc_length: float = 0.0  # Store the total arc length of the path
         self.lookup_table: Optional[PathLookupTable] = None
         self._precomputed_properties: Optional[Dict] = None
 
-    def build_path(self, points: np.ndarray, nodes: List[Node]) -> bool:
+    def build_path(self, points: np.ndarray, nodes: List[Node], action_points: List[ActionPoint]) -> bool:
         """
         Build a complete path through the given points and nodes.
         Handles reverse nodes and turn angles by creating separate spline segments
@@ -44,6 +46,7 @@ class QuinticHermiteSplineManager:
 
         self.splines = []
         self.nodes = nodes
+        self.action_points = action_points
 
         current_start_idx = 0
         start_tangent = None
@@ -86,11 +89,6 @@ class QuinticHermiteSplineManager:
                         target_angle_rad = np.radians(nodes[i].turn)
                         if (nodes[i].is_reverse_node):
                             target_angle_rad = target_angle_rad + np.pi
-                            # target_angle_rad = 2*np.pi - target_angle_rad
-                            # while target_angle_rad > np.pi:
-                            #     target_angle_rad -= 2 * np.pi
-                            # while target_angle_rad < -np.pi:
-                            #     target_angle_rad += 2 * np.pi
 
                         # Create rotation matrix for the target angle
                         rotation_matrix = np.array(
@@ -252,6 +250,20 @@ class QuinticHermiteSplineManager:
             Tuple of (first_derivative, second_derivative) at transition
         """
         pass
+
+    def percent_to_parameter(self, percent: float) -> np.ndarray:
+        """
+        Convert a percentage to a parameter on the spline.
+        """
+        if not self.splines:
+            raise ValueError("No splines have been initialized")
+        
+        t = 0 + len(self.nodes) * (percent)
+        # Clamp t to the range of the lookup table
+        t = max(t, 0)
+        t = min(t, len(self.nodes) - 1)
+
+        return t
 
     def distance_to_time(self, distance: float) -> float:
         """

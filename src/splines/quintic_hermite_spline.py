@@ -130,7 +130,7 @@ class QuinticHermiteSpline(Spline):
         distances = np.linalg.norm(diffs, axis=1)
         logger.debug(f"Segment distances: {distances}")
 
-        # First derivatives calculation remains the same
+        # First derivative calculation
         chords = diffs.copy()
         scale_factor = 1.0
 
@@ -152,7 +152,7 @@ class QuinticHermiteSpline(Spline):
                 self.first_derivatives[i] = (prev_chord + next_chord) * scale_factor / 2
                 logger.debug(f"Interior point {i}: {self.first_derivatives[i]}")
 
-        # Modified second derivatives computation
+        # Second derivative calculation
         logger.debug("\nComputing second derivatives:")
         for i in range(num_points):
             if i == 0:
@@ -180,26 +180,10 @@ class QuinticHermiteSpline(Spline):
                 prev_dist = distances[i - 1]
                 next_dist = distances[i]
 
-                # Get points for geometric analysis
-                prev_point = self.control_points[i - 1]
-                curr_point = self.control_points[i]
-                next_point = self.control_points[i + 1]
-
-                # Compute slopes
-                dx1 = curr_point[0] - prev_point[0]
-                dx2 = next_point[0] - curr_point[0]
-
-                if dx1 != 0 and dx2 != 0:
-                    avg_dist = (prev_dist + next_dist) / 2
-                    self.second_derivatives[i] = (
-                        self.first_derivatives[i + 1] - self.first_derivatives[i - 1]
-                    ) / (0.5 * avg_dist)
-                else:
-                    # Vertical segments - use central difference
-                    avg_dist = (prev_dist + next_dist) / 2
-                    self.second_derivatives[i] = (
-                        self.first_derivatives[i + 1] - self.first_derivatives[i - 1]
-                    ) / (2 * avg_dist)
+                avg_dist = (prev_dist + next_dist) / 2
+                self.second_derivatives[i] = (
+                    self.first_derivatives[i + 1] - self.first_derivatives[i - 1]
+                ) / (0.5 * avg_dist)
 
                 logger.debug(f"Interior point {i}: {self.second_derivatives[i]}")
 
@@ -234,6 +218,38 @@ class QuinticHermiteSpline(Spline):
             logger.debug(f"Final point: {point}")
 
         return point
+    
+    def percent_to_point(self, percent: float) -> np.ndarray:
+        """
+        Convert a percentage to a point on the spline.
+
+        Args:
+            percent: Percentage to convert (0 to 100)
+
+        Returns:
+            np.ndarray: Point on the spline
+        """
+        if not self.segments:
+            raise ValueError("Spline has not been fitted yet")
+        
+        t = self.parameters[0] + self.parameters[-1] * (percent/100)
+
+        return self.get_point(t)
+    
+    def percent_to_parameter(self, percent: float) -> float:
+        """
+        Convert a percentage to a parameter on the spline.
+
+        Args:
+            percent: Percentage to convert (0 to 100)
+
+        Returns:
+            float: Parameter value between 0 and 1
+        """
+        if not self.segments:
+            raise ValueError("Spline has not been fitted yet")
+
+        return self.parameters[0] + self.parameters[-1] * (percent / 100)
 
     def _get_basis_functions(self, t: float) -> np.ndarray:
         """
