@@ -1,11 +1,15 @@
+import logging
+import time
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 
-from gui.node import Node
 from gui.action_point import ActionPoint
+from gui.node import Node
 from splines.quintic_hermite_spline import QuinticHermiteSpline
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -35,7 +39,9 @@ class QuinticHermiteSplineManager:
         self.lookup_table: Optional[PathLookupTable] = None
         self._precomputed_properties: Optional[Dict] = None
 
-    def build_path(self, points: np.ndarray, nodes: List[Node], action_points: List[ActionPoint]) -> bool:
+    def build_path(
+        self, points: np.ndarray, nodes: List[Node], action_points: List[ActionPoint]
+    ) -> bool:
         """
         Build a complete path through the given points and nodes.
         Handles reverse nodes and turn angles by creating separate spline segments
@@ -87,7 +93,7 @@ class QuinticHermiteSplineManager:
                     if nodes[i].turn != 0:
                         # Apply the turn angle directly (convert to radians)
                         target_angle_rad = np.radians(nodes[i].turn)
-                        if (nodes[i].is_reverse_node):
+                        if nodes[i].is_reverse_node:
                             target_angle_rad = target_angle_rad + np.pi
 
                         # Create rotation matrix for the target angle
@@ -106,7 +112,7 @@ class QuinticHermiteSplineManager:
                         spline.set_ending_tangent(prev_vector * min_length)
                         start_tangent = next_tangent
 
-                    else: # Reverse node
+                    else:  # Reverse node
                         # Calculate difference vector and normalize for reverse nodes
                         dif_vector = prev_vector - next_vector
                         dif_norm = np.linalg.norm(dif_vector)
@@ -169,11 +175,6 @@ class QuinticHermiteSplineManager:
 
         spline_idx, local_t = self._map_parameter_to_spline(t)
         second_derivative = self.splines[spline_idx].get_second_derivative(local_t)
-
-        # Check if we're in a reverse segment
-        # reverse_count = sum(1 for node in self.nodes[:spline_idx+1] if node.is_reverse_node)
-        # if reverse_count % 2 == 1:  # Odd number of reversals means we're going backwards
-        #     second_derivative = -second_derivative
 
         return second_derivative
 
@@ -257,7 +258,7 @@ class QuinticHermiteSplineManager:
         """
         if not self.splines:
             raise ValueError("No splines have been initialized")
-        
+
         t = 0 + len(self.nodes) * (percent)
         # Clamp t to the range of the lookup table
         t = max(t, 0)
@@ -321,14 +322,6 @@ class QuinticHermiteSplineManager:
         if self._precomputed_properties is None:
             self.precompute_path_properties()
         return self._interpolate_property(t, "curvatures")
-
-    def get_curvature_derivative(self, t: float) -> float:
-        """
-        Get curvature derivative at parameter t using precomputed values and interpolation.
-        """
-        if self._precomputed_properties is None:
-            self.precompute_path_properties()
-        return self._interpolate_property(t, "curvature_derivatives")
 
     def _get_heading(self, t: float) -> float:
         """
@@ -402,66 +395,6 @@ class QuinticHermiteSplineManager:
 
         return curvature
 
-    def _get_curvature_derivative(self, t: float) -> float:
-        """
-        Calculate the derivative of curvature with respect to arc length at parameter t.
-
-        The derivative of curvature requires third derivatives since curvature itself
-        involves second derivatives.
-
-        Args:
-            t: Parameter value normalized to the entire path length
-
-        Returns:
-            float: Derivative of curvature with respect to arc length
-        """
-        if not self.splines:
-            raise ValueError("No splines have been initialized")
-
-        # Get derivatives up to third order
-        first_deriv = self.get_derivative_at_parameter(t)
-        second_deriv = self.get_second_derivative_at_parameter(t)
-        third_deriv = self.get_third_derivative_at_parameter(t)
-
-        x_prime = first_deriv[0]
-        y_prime = first_deriv[1]
-        x_double_prime = second_deriv[0]
-        y_double_prime = second_deriv[1]
-        x_triple_prime = third_deriv[0]
-        y_triple_prime = third_deriv[1]
-
-        # Calculate speed and its derivative
-        speed_squared = x_prime**2 + y_prime**2
-        speed = np.sqrt(speed_squared)
-
-        if speed < 1e-10:
-            return 0.0
-
-        # Calculate numerator terms for d/dt of (x'y'' - y'x'')
-        numerator_derivative = (
-            x_prime * y_triple_prime
-            + x_triple_prime * y_prime
-            - y_prime * x_triple_prime
-            - y_triple_prime * x_prime
-        )
-
-        # Calculate the derivative of the denominator (speed_squared^(3/2))
-        speed_derivative = (x_prime * x_double_prime + y_prime * y_double_prime) / speed
-
-        # Apply quotient rule and chain rule
-        dkappa_dt = (
-            numerator_derivative * speed_squared**1.5
-            - 3
-            * (x_prime * y_double_prime - y_prime * x_double_prime)
-            * speed_squared**0.5
-            * speed_derivative
-        ) / (speed_squared**3)
-
-        # Convert from dκ/dt to dκ/ds
-        dkappa_ds = dkappa_dt / speed
-
-        return dkappa_ds
-
     def validate_path_continuity(self) -> bool:
         """
         Validate C2 continuity at all transition points between splines.
@@ -519,31 +452,68 @@ class QuinticHermiteSplineManager:
             total_length=current_dist,
         )
 
-    def precompute_path_properties(self, num_samples: int = 10000) -> None:
+    def precompute_path_properties(self, samples_per_node: int = 2500) -> None:
         """
-        Precompute curvature, curvature derivative, and heading at regular intervals for faster lookup.
+        Precompute curvature and heading at regular intervals for faster lookup.
+        Optimized version with vectorization and reduced redundant calculations.
         """
         if not self.splines:
             raise ValueError("No splines initialized")
 
+        num_samples = len(self.nodes) * samples_per_node
         parameters = np.linspace(0, len(self.nodes) - 1, num_samples)
-
+        
         # Precompute properties
         curvatures = np.zeros(num_samples)
-        curvature_derivatives = np.zeros(num_samples)  # Added this line
         headings = np.zeros(num_samples)
+        
+        # Time measurement variables
+        start_time_total = time.time()
+        
+        # Vectorize the derivative calculations where possible
+        start_time_derivative = time.time()
+        first_derivs = np.array([self.get_derivative_at_parameter(t) for t in parameters])
+        second_derivs = np.array([self.get_second_derivative_at_parameter(t) for t in parameters])
+        end_time_derivative = time.time()
+        logger.info(f"Derivative compute time: {end_time_derivative - start_time_derivative} seconds")
 
-        for i, t in enumerate(parameters):
-            curvatures[i] = self._get_curvature(t)
-            curvature_derivatives[i] = self._get_curvature_derivative(
-                t
-            )  # Added this line
-            headings[i] = self._get_heading(t)
-
+        # Extract components
+        x_primes = first_derivs[:, 0]
+        y_primes = first_derivs[:, 1]
+        x_double_primes = second_derivs[:, 0]
+        y_double_primes = second_derivs[:, 1]
+        
+        # Calculate speed squared (denominator for curvature)
+        speed_squared = x_primes**2 + y_primes**2
+        
+        # Start curvature calculation timing
+        start_time_curvature = time.time()
+        
+        # Vectorized curvature calculation
+        numerator = x_primes * y_double_primes - y_primes * x_double_primes
+        
+        # Handle special case where speed is near zero
+        mask = speed_squared >= 1e-10
+        curvatures[mask] = numerator[mask] / (speed_squared[mask]**1.5)
+        # For points where speed is near zero, curvature remains 0.0
+        
+        total_curvature_compute_time = time.time() - start_time_curvature
+        
+        # Start heading calculation timing
+        start_time_heading = time.time()
+        
+        # Vectorized heading calculation
+        headings = np.arctan2(y_primes, x_primes)
+        
+        total_heading_compute_time = time.time() - start_time_heading
+        
+        logger.info(f"Total compute time: {time.time() - start_time_total} seconds")
+        logger.info(f"Curvature compute time: {total_curvature_compute_time} seconds")
+        logger.info(f"Heading compute time: {total_heading_compute_time} seconds")
+        
         self._precomputed_properties = {
             "parameters": parameters,
             "curvatures": curvatures,
-            "curvature_derivatives": curvature_derivatives,  # Added this line
             "headings": headings,
         }
 
@@ -580,5 +550,11 @@ class QuinticHermiteSplineManager:
         """
         Rebuild the spline tables after modifying control points or constraints.
         """
+        start_time = time.time()
         self.build_lookup_table()
+        build_time = time.time() - start_time
+        logger.info(f"Lookup table build time: {build_time} seconds")
+        start_time = time.time()
         self.precompute_path_properties()
+        precompute_time = time.time() - start_time
+        logger.info(f"Precompute time: {precompute_time} seconds")

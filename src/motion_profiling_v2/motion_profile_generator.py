@@ -123,6 +123,12 @@ def forward_backward_pass(
 
         prev_t = t
 
+    # Add final point
+    velocities.append(end_vel)
+    t = spline_manager.distance_to_time(total_dist)
+    headings.append(spline_manager.get_heading(t))
+    curvatures.append(spline_manager.get_curvature(t))
+
     for i in range(len(curvatures)):
         if i == 0:
             curvature_derivs.append((curvatures[i + 1] + curvatures[i]) / delta_dist)
@@ -132,13 +138,6 @@ def forward_backward_pass(
             curvature_derivs.append(
                 (curvatures[i + 1] - curvatures[i - 1]) / (2 * delta_dist)
             )
-
-    # Add final point
-    velocities.append(end_vel)
-    t = spline_manager.distance_to_time(total_dist)
-    headings.append(spline_manager.get_heading(t))
-    curvatures.append(spline_manager.get_curvature(t))
-    curvature_derivs.append(spline_manager.get_curvature_derivative(t))
 
     # Forward pass
     velocities[0] = start_vel
