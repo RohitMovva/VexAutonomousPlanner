@@ -94,6 +94,7 @@ def forward_backward_pass(
 
     prev_t = 0
     node_num = 0
+    action_idx = 0
     while current_dist < total_dist:
         t = spline_manager.distance_to_time(current_dist)
 
@@ -110,6 +111,16 @@ def forward_backward_pass(
             node_num += 1
             if spline_manager.nodes[node_num].stop:
                 velocities[-1] = 0.01
+
+        if (
+            action_idx < len(spline_manager.action_points)
+            and prev_t < spline_manager.action_points[action_idx].t
+            and t >= spline_manager.action_points[action_idx].t
+        ):
+            if spline_manager.action_points[action_idx].stop:
+                velocities[-1] = 0.01
+            action_idx += 1
+
         prev_t = t
 
     for i in range(len(curvatures)):
@@ -249,7 +260,7 @@ def forward_backward_pass(
 
 
 def motion_profile_angle(
-    angle: int, constraints: Constraints, dt: float = 0.025
+    angle: int, constraints: Constraints, dt: float = 0.01
 ) -> Tuple[
     List[float], List[float], List[float], List[float], List[float], List[float]
 ]:
@@ -279,7 +290,7 @@ def motion_profile_angle(
 
 
 def generate_motion_profile(
-    spline_manager, constraints: Constraints, dt: float = 0.025, dd: float = 0.005
+    spline_manager, constraints: Constraints, dt: float = 0.01, dd: float = 0.005
 ) -> Tuple[
     List[float], List[float], List[float], List[float], List[float], List[float]
 ]:
@@ -310,6 +321,7 @@ def generate_motion_profile(
     accelerations = []
     headings = []
     nodes_map = [0]
+    actions_map = []
     coords = []
 
     # Initialize tracking variables
@@ -319,19 +331,16 @@ def generate_motion_profile(
     total_length = spline_manager.get_total_arc_length()
     is_reversed = False
     # if spline_manager.nodes[0].is_reverse_node:
-        # is_reversed = True
+    # is_reversed = True
     node_idx = 0
     if spline_manager.nodes[node_idx].is_reverse_node:
         is_reversed = not is_reversed
-    
+
     if spline_manager.nodes[0].turn != 0:
         angle = np.radians(spline_manager.nodes[0].turn)
 
-        ins_headings, ins_ang_vels = motion_profile_angle(
-            angle, constraints, dt
-        )
-        
-        # if (is_reversed):
+        ins_headings, ins_ang_vels = motion_profile_angle(angle, constraints, dt)
+
         start_heading = headings[-1]
         for i in range(len(ins_headings)):
             while ins_headings[i] + start_heading > math.pi:
@@ -353,13 +362,13 @@ def generate_motion_profile(
 
     if spline_manager.nodes[node_idx].wait_time > 0:
         steps = int(spline_manager.nodes[node_idx].wait_time / dt)
-        h = -1*spline_manager.get_heading(0)
-        if (is_reversed):
-            h -= (math.pi if is_reversed else 0)
-        if (h > np.pi):
-            h -= 2*np.pi
-        if (h < -np.pi):
-            h += 2*np.pi
+        h = -1 * spline_manager.get_heading(0)
+        if is_reversed:
+            h -= math.pi if is_reversed else 0
+        if h > np.pi:
+            h -= 2 * np.pi
+        if h < -np.pi:
+            h += 2 * np.pi
         positions.extend(0 for _ in range(steps))
         linear_vels.extend(0 for _ in range(steps))
         accelerations.extend(0 for _ in range(steps))
@@ -371,26 +380,19 @@ def generate_motion_profile(
         current_time += steps * dt
 
     prev_t = 0
+    action_idx = 0
     while current_pos < (total_length):
         t = spline_manager.distance_to_time(current_pos)
         if t % 1 < prev_t % 1 and t < spline_manager.distance_to_time(total_length):
-            # if (t > 0):
             nodes_map.append(len(times))
             node_idx += 1
 
             if spline_manager.nodes[node_idx].turn != 0:
                 angle = np.radians(spline_manager.nodes[node_idx].turn)
-                # if (is_reversed):
-                    # angle = -angle
-                    # angle = angle
-                    # if (angle > np.pi):
-                    #     angle -= 2*np.pi
-                    # else:
-                    #     angle += 2*np.pi
                 ins_headings, ins_ang_vels = motion_profile_angle(
                     angle, constraints, dt
                 )
-                
+
                 start_heading = headings[-1]
                 for i in range(len(ins_headings)):
                     while ins_headings[i] + start_heading > math.pi:
@@ -414,7 +416,7 @@ def generate_motion_profile(
                 is_reversed = not is_reversed
 
             if spline_manager.nodes[node_idx].wait_time > 0:
-                steps = int(spline_manager.nodes[0].wait_time / dt)
+                steps = int(spline_manager.nodes[node_idx].wait_time / dt)
                 positions.extend(0 for _ in range(steps))
                 linear_vels.extend(0 for _ in range(steps))
                 accelerations.extend(0 for _ in range(steps))
@@ -424,6 +426,27 @@ def generate_motion_profile(
                 times.extend(current_time + i * dt for i in range(steps))
 
                 current_time += steps * dt
+
+        if action_idx < len(spline_manager.action_points):
+            if (
+                spline_manager.action_points[action_idx].t > prev_t
+                and spline_manager.action_points[action_idx].t < t
+            ):
+                actions_map.append(len(times))
+
+                if spline_manager.action_points[action_idx].wait_time > 0:
+                    steps = int(spline_manager.action_points[action_idx].wait_time / dt)
+                    positions.extend(0 for _ in range(steps))
+                    linear_vels.extend(0 for _ in range(steps))
+                    accelerations.extend(0 for _ in range(steps))
+                    headings.extend(headings[-1] for _ in range(steps))
+                    angular_vels.extend(0 for _ in range(steps))
+                    coords.extend(coords[-1] for _ in range(steps))
+                    times.extend(current_time + i * dt for i in range(steps))
+
+                    current_time += steps * dt
+
+                action_idx += 1
 
         prev_t = t
         curvature = spline_manager.get_curvature(t)
@@ -448,9 +471,9 @@ def generate_motion_profile(
 
         target_vel = (target_vel + next_target_vel) / 2
 
-        target_vel = max(target_vel, 0.001)  # Small minimum velocity
+        target_vel = max(target_vel, 0.001)  # minimum velocity
 
-        target_vel = max(target_vel, 0.001)  # Small minimum velocity
+        target_vel = max(target_vel, 0.001)  # minimum velocity
 
         # Calculate acceleration
         accel = (target_vel - current_vel) / dt
@@ -491,6 +514,7 @@ def generate_motion_profile(
         headings,
         angular_vels,
         nodes_map,
+        actions_map,
         coords,
     )
 

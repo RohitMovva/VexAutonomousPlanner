@@ -7,15 +7,12 @@ from PyQt6.QtWidgets import QGraphicsItem, QInputDialog, QMenu, QWidget
 logger = logging.getLogger(__name__)
 
 
-# Node that stores data for auton route
-class Node(QGraphicsItem):
-    def __init__(self, x: float, y: float, parent=None, radius=15.0):
+class ActionPoint(QGraphicsItem):
+    def __init__(self, x: float, y: float, t: float, parent=None, radius=15.0):
         super().__init__()
         self.widget = QWidget()
 
         self.parent = parent
-        self.is_start_node = False
-        self.is_end_node = False
         self.spin_intake = False
         self.clamp_goal = False
         self.doink = False
@@ -36,6 +33,8 @@ class Node(QGraphicsItem):
         self.abs_x = ((self.x() / (self.image_size)) - 0.5) * 12.3266567842 * 12
         self.abs_y = ((self.y() / (self.image_size)) - 0.5) * 12.3266567842 * 12
 
+        self.t = t
+
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsMovable)
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemSendsGeometryChanges)
         self.drag_start_position = None
@@ -53,15 +52,7 @@ class Node(QGraphicsItem):
 
     def paint(self, painter, option, widget):
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        brushColor = None
-        if self.is_start_node:
-            brushColor = QColor("green")
-        elif self.is_end_node:
-            brushColor = QColor("red")
-        elif self.has_action():
-            brushColor = QColor("#1338BE")
-        else:
-            brushColor = QColor("#1F456E")
+        brushColor = QColor("#0a3533")
 
         brushColor.setAlphaF(0.65)
         painter.setBrush(brushColor)
@@ -76,11 +67,18 @@ class Node(QGraphicsItem):
 
     def mouseMoveEvent(self, event):
         if event.buttons() & Qt.MouseButton.LeftButton and self.drag_start_position:
-            drag_distance = event.pos() - self.drag_start_position
-            self.setPos(self.pos() + drag_distance)
-            self.drag_start_position = event.pos()
+            # Find the closest point on the path to the mouse position
+            closest_point, closest_parameter = self.parent.find_closest_point_on_path(
+                self.parent.path, self.mapToScene(event.pos())
+            )
+
+            self.setPos(closest_point)
+            self.drag_start_position = closest_point
+            self.t = closest_parameter
             self.parent.update_path()
-        super().mouseMoveEvent(event)
+            logger.info(f"Moved action point to ({closest_point})")
+
+        # super().mouseMoveEvent(event)
 
     def mouseReleaseEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
@@ -122,16 +120,6 @@ class Node(QGraphicsItem):
         attributes_menu = QMenu("Attributes")
         node_menu = QMenu("Node Actions")
 
-        start_action = QAction("Start Node", checkable=True)
-        start_action.setChecked(self.is_start_node)
-        start_action.triggered.connect(self.toggle_start_node)
-        attributes_menu.addAction(start_action)
-
-        end_action = QAction("End Node", checkable=True)
-        end_action.setChecked(self.is_end_node)
-        end_action.triggered.connect(self.toggle_end_node)
-        attributes_menu.addAction(end_action)
-
         spin_menu = QMenu("Spin Intake")
         attributes_menu.addMenu(spin_menu)
 
@@ -168,15 +156,6 @@ class Node(QGraphicsItem):
         stop_action.triggered.connect(self.toggle_stop)
         attributes_menu.addAction(stop_action)
 
-        reverse_action = QAction("Reverse", checkable=True)
-        reverse_action.setChecked(self.is_reverse_node)
-        reverse_action.triggered.connect(self.toggle_reverse)
-        attributes_menu.addAction(reverse_action)
-
-        turn_action = QAction("Turn Value: " + str(self.turn))
-        turn_action.triggered.connect(self.set_turn)
-        attributes_menu.addAction(turn_action)
-
         lb_action = QAction("LB Value: " + str(self.lb))
         lb_action.triggered.connect(self.set_lb)
         attributes_menu.addAction(lb_action)
@@ -201,32 +180,6 @@ class Node(QGraphicsItem):
         context_menu.addMenu(node_menu)
 
         context_menu.exec(event.screenPos())
-
-    def toggle_start_node(self):
-        self.is_start_node = not self.is_start_node
-        if self.is_start_node:
-            self.parent.set_start_node(self)
-            if self.is_end_node:
-                self.parent.clear_end_node()
-                self.is_end_node = False
-        else:
-            self.parent.clear_start_node()
-
-        self.parent.update_path()
-        logger.info(f"Start Node: {self.is_start_node}")
-
-    def toggle_end_node(self):
-        self.is_end_node = not self.is_end_node
-        if self.is_end_node:
-            self.parent.set_end_node(self)
-            if self.is_start_node:
-                self.parent.clear_start_node()
-                self.is_start_node = False
-        else:
-            self.parent.clear_end_node()
-        self.update()
-        self.parent.update_path()
-        logger.info(f"End Node: {self.is_end_node}")
 
     def has_action(self):
         return (
@@ -253,35 +206,6 @@ class Node(QGraphicsItem):
     def toggle_doinker(self):
         self.doink = not self.doink
         logger.info(f"Doinker: {self.doink}")
-
-    def toggle_reverse(self):
-        self.is_reverse_node = not self.is_reverse_node
-        self.parent.update_path()
-        logger.info(f"Reverse Node: {self.is_reverse_node}")
-
-    def set_turn(self):
-        # Get the position of the node in screen coordinates
-        scene_pos = self.scenePos()
-        view_pos = self.scene().views()[0].mapFromScene(scene_pos)
-        screen_pos = self.scene().views()[0].viewport().mapToGlobal(view_pos)
-
-        # Create the dialog
-        dialog = QInputDialog(self.scene().views()[0])
-        dialog.setWindowTitle("Set Turn")
-        dialog.setLabelText("Enter turn (-180-180):")
-        dialog.setIntRange(-180, 180)
-        dialog.setIntValue(self.turn)
-
-        # Set the position of the dialog
-        dialog.move(
-            int(screen_pos.x() + self.radius), int(screen_pos.y() + self.radius)
-        )
-
-        # Show the dialog and get the result
-        if dialog.exec() == QInputDialog.DialogCode.Accepted:
-            self.turn = dialog.intValue()
-            self.parent.update_path()
-            logger.info(f"Turn set to: {self.turn}")
 
     def set_lb(self):
         # Get the position of the node in screen coordinates
@@ -350,13 +274,14 @@ class Node(QGraphicsItem):
         new_point = QPointF(self.pos().x() + 5, self.pos().y() + 5)
         self.parent.add_node(new_point, self.parent.index_of(self) + 1)
 
+    def delete_action_point(self):
+        self.parent.remove_action_point(self)
+        self.scene().removeItem(self)
+        logger.info(f"Action point at ({self.abs_x}, {self.abs_y}) deleted")
+
     def __str__(self):
         return (
             "["
-            + str(self.is_start_node)
-            + " "
-            + str(self.is_end_node)
-            + " "
             + str(self.is_reverse_node)
             + " "
             + str(self.turn)

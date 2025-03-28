@@ -26,7 +26,7 @@ from PyQt6.QtWidgets import (
 )
 
 import utilities.file_management
-from gui import node
+from gui import action_point, node
 from motion_profiling_v2 import motion_profile_generator
 from splines.spline_manager import QuinticHermiteSplineManager
 from utilities import config_manager
@@ -34,7 +34,7 @@ from utilities import config_manager
 logger = logging.getLogger(__name__)
 
 
-class StyledRectItem(QGraphicsRectItem):
+class RobotVisualizer(QGraphicsRectItem):
     def __init__(self, rect: QRectF = None, parent=None):
         super().__init__(rect if rect else QRectF(), parent)
         self.setAcceptHoverEvents(True)
@@ -50,7 +50,7 @@ class StyledRectItem(QGraphicsRectItem):
 
         # Set up the brush (fill)
         fill_color = QColor(self._color)
-        fill_color.setAlpha(40)  # Very transparent fill (0-255)
+        fill_color.setAlpha(40)
         self.setBrush(QBrush(fill_color))
 
 
@@ -99,8 +99,10 @@ class PathWidget(QGraphicsView):
         self.accelerations = []
         self.headings = []
         self.nodes_map = []  # Represents index of node n in any of the above lists
+        self.actions_map = []  # Represents index of action point n in any of the above lists
 
         self.nodes: List[node.Node] = []
+        self.action_points: List[action_point.ActionPoint] = []
         self.start_node = None
         self.end_node = None
 
@@ -110,7 +112,7 @@ class PathWidget(QGraphicsView):
         self.path_item = QGraphicsPathItem()
         self.scene.addItem(self.path_item)
 
-        self.rect_item = StyledRectItem()
+        self.rect_item = RobotVisualizer()
         self.scene.addItem(self.rect_item)
 
         self.setMinimumSize(size)
@@ -199,11 +201,25 @@ class PathWidget(QGraphicsView):
         if (
             event.button() == Qt.MouseButton.LeftButton
             and event.modifiers() & Qt.KeyboardModifier.ShiftModifier
+            and not event.modifiers() & Qt.KeyboardModifier.ControlModifier
         ):
             scene_pos = self.mapToScene(event.position().toPoint())
             self.add_node(scene_pos)
 
-            logger.info(f"Mouse clicked at ({scene_pos.x()}, {scene_pos.y()})")
+            logger.info(f"Added node at ({scene_pos.x()}, {scene_pos.y()})")
+
+        elif (
+            event.button() == Qt.MouseButton.LeftButton
+            and event.modifiers() & Qt.KeyboardModifier.ControlModifier
+            and event.modifiers() & Qt.KeyboardModifier.ShiftModifier
+        ):
+            scene_pos = self.mapToScene(event.position().toPoint())
+            path_point, path_param = self.find_closest_point_on_path(
+                self.path, scene_pos
+            )
+            self.add_action_point(path_point, path_param)
+
+            logger.info(f"Added action point at ({path_point.x()}, {path_point.y()})")
 
         # Call the parent class mousePressEvent to maintain drag functionality
         else:
@@ -228,6 +244,11 @@ class PathWidget(QGraphicsView):
         ):
             QApplication.setOverrideCursor(Qt.CursorShape.ArrowCursor)
             self.parent.update_coords(scene_pos)
+        elif isinstance(item, action_point.ActionPoint) or (
+            item and isinstance(item.parentItem(), action_point.ActionPoint)
+        ):
+            QApplication.setOverrideCursor(Qt.CursorShape.ArrowCursor)
+            self.parent.update_coords(scene_pos)
         elif self.shift_pressed:
             QApplication.setOverrideCursor(Qt.CursorShape.ArrowCursor)
             self.parent.update_coords(scene_pos)
@@ -245,6 +266,8 @@ class PathWidget(QGraphicsView):
             QApplication.setOverrideCursor(Qt.CursorShape.OpenHandCursor)
             if self.visualize:
                 self.draw_rect(scene_pos)
+            else:
+                self.rect_item.hide()
             self.parent.update_coords(scene_pos)
 
         super().mouseMoveEvent(event)
@@ -307,6 +330,7 @@ class PathWidget(QGraphicsView):
             self.headings,
             self.angular_velocities,
             self.nodes_map,
+            self.actions_map,
             self.coords,
         ) = motion_profile_generator.generate_motion_profile(
             self.spline_manager, constraints
@@ -327,10 +351,16 @@ class PathWidget(QGraphicsView):
             self.headings,
             self.angular_velocities,
             self.nodes_map,
+            self.actions_map,
             self.coords,
         )
 
-    def update_spline(self, points: List[QPointF], nodes: List[node.Node]):
+    def update_spline(
+        self,
+        points: List[QPointF],
+        nodes: List[node.Node],
+        action_points: List[action_point.ActionPoint],
+    ):
         # convert points to numpy array of floats and from pixels to inches
         points = np.array([[point.x(), point.y()] for point in points])
 
@@ -338,7 +368,7 @@ class PathWidget(QGraphicsView):
             points[i][0] = (points[i][0] / (2000) - 0.5) * 12.3266567842
             points[i][1] = (points[i][1] / (2000) - 0.5) * 12.3266567842
 
-        self.spline_manager.build_path(points, nodes)
+        self.spline_manager.build_path(points, nodes, action_points)
         t_values = np.linspace(0, len(points) - 1, 25 * len(self.nodes))
         spline_points = np.array(
             [self.spline_manager.get_point_at_parameter(t) for t in t_values]
@@ -370,7 +400,7 @@ class PathWidget(QGraphicsView):
                     continue
                 points.append(node.pos())
             points.append(self.end_node.pos())
-            self.update_spline(points, self.nodes)
+            self.update_spline(points, self.nodes, self.action_points)
 
         else:
             self.path = QPainterPath()
@@ -382,6 +412,7 @@ class PathWidget(QGraphicsView):
         self.viewport().update()  # Request a repaint of the viewport
 
     def save(self):
+        # pass
         self.parent.auto_save()
 
     def update_lines(self):
@@ -407,10 +438,22 @@ class PathWidget(QGraphicsView):
 
         new_node.show()
         self.update_path()
-        self.auto_save()
 
         logger.info(f"Node created at ({new_node.abs_x}, {new_node.abs_y})")
         return new_node
+
+    def add_action_point(self, point: QPointF, t: float, pos=-1):
+        new_action_point = action_point.ActionPoint(point.x(), point.y(), t, self)
+
+        self.action_points.append(new_action_point)
+
+        self.scene.addItem(new_action_point)
+        new_action_point.show()
+
+        logger.info(
+            f"Action point created at ({new_action_point.abs_x}, {new_action_point.abs_y})"
+        )
+        return new_action_point
 
     def remove_node(self, remove_node):
         if remove_node in self.nodes:
@@ -419,6 +462,12 @@ class PathWidget(QGraphicsView):
                 self.start_node = None
             if remove_node == self.end_node:
                 self.end_node = None
+
+        self.update_path()
+
+    def remove_action_point(self, remove_action_point):
+        if remove_action_point in self.action_points:
+            self.action_points.remove(remove_action_point)
 
         self.update_path()
 
@@ -471,13 +520,18 @@ class PathWidget(QGraphicsView):
         while self.nodes:
             node = self.nodes.pop()
             node.delete_node()
+
+        while self.action_points:
+            action_point = self.action_points.pop()
+            action_point.delete_action_point()
+
         self.start_node = None
         self.end_node = None
         self.clearing_nodes = False
 
         self.update_path()
         self.update()
-        self.auto_save()
+        # self.auto_save()
 
     def convert_point(self, point: QPointF):
         point.setX((point.x() / (12.3266567842 * 12) + 0.5) * 2000)
@@ -492,7 +546,9 @@ class PathWidget(QGraphicsView):
         self.update_path()
 
     def load_nodes(self, node_str: str) -> None:
-        nodes_data = json.loads(node_str)
+        data = json.loads(node_str)
+        nodes_data = data[0]
+        action_data = data[1]
         self.clear_nodes()
         for node_data in nodes_data:
             if len(node_data) > 4:
@@ -513,6 +569,20 @@ class PathWidget(QGraphicsView):
                 node.wait_time = node_data[11]
 
                 node.show()
+
+        for action_data in action_data:
+            action_point = self.add_action_point(
+                self.convert_point(QPointF(action_data[0], action_data[1])),
+                action_data[2],
+            )
+            action_point.spin_intake = action_data[3]
+            action_point.clamp_goal = action_data[4]
+            action_point.doink = action_data[5]
+            action_point.stop = action_data[6]
+            action_point.lb = action_data[7]
+            action_point.wait_time = action_data[8]
+
+            action_point.show()
 
         self.update_path()
 
@@ -539,29 +609,40 @@ class PathWidget(QGraphicsView):
         Returns:
             QPointF: The closest point on the path
         """
+        logger.info(f"Finding closest point on path to ({point.x()}, {point.y()})")
         if path is None:
+            logger.info("Path is None")
             return QPointF()
+
         # Get the length of the path
         path_length = path.length()
         if path_length == 0:
+            logger.info("Path length is 0")
             return QPointF()
 
         # Binary search parameters
         min_dist = float("inf")
-        closest_point = QPointF()
+        closest_point = np.ndarray([0, 0])
         closest_percent = 0.0
+        closest_parameter = 0.0
+
+        # Convert point to numpy array w/ inches
+        point = np.array([point.x(), point.y()])
+        point = (point / (2000) - 0.5) * 12.3266567842
 
         # First pass: coarse search with larger steps
         num_steps = 100
         for i in range(num_steps + 1):
             percent = i / num_steps
-            path_point = path.pointAtPercent(percent)
-            dist = math.hypot(path_point.x() - point.x(), path_point.y() - point.y())
+            path_param = self.spline_manager.percent_to_parameter(percent)
+            path_point = self.spline_manager.get_point_at_parameter(path_param)
+            dist = math.hypot(path_point[0] - point[0], path_point[1] - point[1])
 
             if dist < min_dist:
                 min_dist = dist
                 closest_point = path_point
                 closest_percent = percent
+                closest_parameter = path_param
 
         # Second pass: fine search around the closest point found
         # Search within ±2% of the closest point found
@@ -574,14 +655,19 @@ class PathWidget(QGraphicsView):
 
         for i in range(fine_steps + 1):
             percent = start_percent + (i * percent_step)
-            path_point = path.pointAtPercent(percent)
-            dist = math.hypot(path_point.x() - point.x(), path_point.y() - point.y())
+            path_param = self.spline_manager.percent_to_parameter(percent)
+            path_point = self.spline_manager.get_point_at_parameter(path_param)
+            dist = math.hypot(path_point[0] - point[0], path_point[1] - point[1])
 
             if dist < min_dist:
                 min_dist = dist
                 closest_point = path_point
+                closest_parameter = path_param
 
-        return closest_point
+        # Convert closest point to QPointF with pixels
+        closest_point = (closest_point / (12.3266567842) + 0.5) * 2000
+
+        return QPointF(closest_point[0], closest_point[1]), closest_parameter
 
     def find_path_angle_at_point(
         self, path: QPainterPath, point: QPointF, delta: float = 0.01
@@ -621,10 +707,10 @@ class PathWidget(QGraphicsView):
     def draw_rect(self, pt):
         # Create the styled rect item if it doesn't exist
         if not hasattr(self, "rect_item"):
-            self.rect_item = StyledRectItem()
+            self.rect_item = RobotVisualizer()
             self.scene().addItem(self.rect_item)
 
-        path_point = self.find_closest_point_on_path(self.path, pt)
+        path_point, _ = self.find_closest_point_on_path(self.path, pt)
         if path_point is None:
             self.rect_item.hide()
             return

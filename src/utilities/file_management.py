@@ -38,6 +38,11 @@ def resource_path(relative_path):
     return os.path.join(base_path, relative_path)
 
 
+def get_paths_files():
+    """Get all files in the routes folder"""
+    return os.listdir(resource_path("../routes/"))
+
+
 def get_config_value(keyname):
     with open(resource_path("../config.yaml"), "r") as file:
         config = yaml.safe_load(file)

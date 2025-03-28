@@ -17,7 +17,7 @@ from PyQt6.QtWidgets import (
 )
 
 import utilities.file_management
-from gui import node, path, settings
+from gui import action_point, dock_widget, node, path
 from utilities import config_manager
 
 logger = logging.getLogger(__name__)
@@ -57,8 +57,9 @@ class AutonomousPlannerGUIManager(QMainWindow):
         self.setWindowIcon(
             QIcon(utilities.file_management.resource_path("../assets/flip_logo.ico"))
         )
+        # Set default window size
+        self.resize(700, 400)  # Width: 1280px, Height: 720px
         self.layout = QVBoxLayout()
-
         self.start_node = None
         self.end_node = None
 
@@ -72,8 +73,8 @@ class AutonomousPlannerGUIManager(QMainWindow):
         config_file_path = os.path.join(os.getcwd(), "..", "config.yaml")
         self.config_manager = config_manager.ConfigManager(config_file_path)
 
-        autonomous_path = self.config_manager.get_value(
-            "files", "autonomous_repository_file"
+        autonomous_path = (
+            self.config_manager.get_value("files", "header_folder") + "/routes.h"
         )
         routes_path = self.config_manager.get_value("files", "routes_folder")
 
@@ -86,7 +87,7 @@ class AutonomousPlannerGUIManager(QMainWindow):
         )
         self.max_jerk = self.config_manager.get_value("motion", "max_jerk")
 
-        self.track_width = self.config_manager.get_value("robot", "track_width")
+        self.track_width = self.config_manager.get_value("robot", "track_width") / 12
 
         # Image and path widget
         self.central_widget = path.PathWidget(self.config_manager, self)
@@ -95,7 +96,7 @@ class AutonomousPlannerGUIManager(QMainWindow):
         self.central_widget.show()
 
         # Settings Dock Widget
-        self.settings_dock_widget = settings.SettingsDockWidget(
+        self.settings_dock_widget = dock_widget.MultiPageDockWidget(
             self.config_manager, self
         )
 
@@ -106,6 +107,11 @@ class AutonomousPlannerGUIManager(QMainWindow):
         self.addDockWidget(
             Qt.DockWidgetArea.RightDockWidgetArea, self.settings_dock_widget
         )
+
+        # Optional: you can also set it to a specific height on the screen
+        # This will position the dock at its preferred size
+        self.resizeDocks([self.settings_dock_widget], [300], Qt.Orientation.Horizontal)
+        self.resizeDocks([self.settings_dock_widget], [400], Qt.Orientation.Vertical)
 
         self.update()
         self.create_menu_bar()
@@ -229,6 +235,7 @@ class AutonomousPlannerGUIManager(QMainWindow):
             )
         nodes_data = []
         nodes_map = []
+        actions_map = []
         if (
             len(self.central_widget.get_nodes()) > 2
             and self.central_widget.start_node
@@ -242,6 +249,7 @@ class AutonomousPlannerGUIManager(QMainWindow):
                 headings,
                 angular_velocities,
                 nodes_map,
+                actions_map,
                 coords,
             ) = self.central_widget.generate_motion_profile_lists(
                 self.max_velocity,
@@ -249,7 +257,7 @@ class AutonomousPlannerGUIManager(QMainWindow):
                 self.max_jerk,
                 self.track_width,
             )
-            for i in range(0, len(time_intervals), 1):  # Every 25ms save data
+            for i in range(0, len(time_intervals), 1):  # Every 10ms save data
                 nodes_data.append(
                     [
                         0,
@@ -268,11 +276,20 @@ class AutonomousPlannerGUIManager(QMainWindow):
                 int(cur_node.spin_intake),
                 int(cur_node.clamp_goal),
                 int(cur_node.doink),
-                int(cur_node.is_reverse_node),
-                cur_node.turn,
                 cur_node.lb,
             ]
             for cur_node in nodes
+        ]
+
+        actions_data = [
+            [
+                1,
+                int(cur_action.spin_intake),
+                int(cur_action.clamp_goal),
+                int(cur_action.doink),
+                cur_action.lb,
+            ]
+            for cur_action in self.central_widget.action_points
         ]
 
         logger.info(
@@ -280,6 +297,9 @@ class AutonomousPlannerGUIManager(QMainWindow):
         )
         for i in range(0, len(nodes_map)):
             nodes_data.insert(int(nodes_map[i] / 1) + i, nodes_actions[i])
+        for i in range(0, len(actions_map)):
+            nodes_data.insert(int(actions_map[i] / 1) + i, actions_data[i])
+
         self.fill_template(nodes_data)
         with open(full_path, "w") as file:
             file.write(nodes_string)
@@ -300,6 +320,16 @@ class AutonomousPlannerGUIManager(QMainWindow):
                 nodes_string = file.read()
             logger.info(f"Route loaded from {file_name}")
             self.central_widget.load_nodes(nodes_string)
+
+    def load_route_file(self, file_path):
+        """Load a route file"""
+        self.current_working_file = file_path[:-4]  # cut off the .txt
+        file_path = os.path.join(self.routes_folder_path, file_path)
+        with open(file_path, "r") as file:
+            nodes_string = file.read()
+
+        logger.info(f"Route loaded from {file_path}")
+        self.central_widget.load_nodes(nodes_string)
 
     def set_working_file(self):
         file_name, ok = QInputDialog.getText(
@@ -337,29 +367,44 @@ class AutonomousPlannerGUIManager(QMainWindow):
         self.central_widget.clear_nodes()
 
     def load_nodes(self, str):
-        nodes_data = json.loads(str)
+        data = json.loads(str)
+        nodes_data = data[0]
+        action_data = data[1]
         self.clear_nodes()
         logger.info("Loading nodes...")
         for node_data in nodes_data:
-            if len(node_data) > 4:
-                logger.debug(f"Nodes data: {node_data}")
-                new_node = node.Node(
-                    node_data[0], node_data[1], self.central_widget, gui_instance=self
-                )
-                self.start_node = new_node if bool(node_data[2]) else self.start_node
-                new_node.is_start_node = bool(node_data[2])
-                self.end_node = new_node if bool(node_data[3]) else self.end_node
-                new_node.is_end_node = bool(node_data[3])
-                new_node.spin_intake = bool(node_data[4])
-                new_node.clamp_goal = bool(node_data[5])
-                new_node.doink = bool(node_data[6])
-                new_node.is_reverse_node = bool(node_data[7])
-                new_node.stop = bool(node_data[8])
-                new_node.turn = node_data[9]
-                new_node.lb = node_data[11]
-                new_node.wait_time = node_data[12]
-                self.nodes.append(new_node)
-                new_node.show()
+            logger.debug(f"Nodes data: {node_data}")
+            new_node = node.Node(
+                node_data[0], node_data[1], self.central_widget, gui_instance=self
+            )
+            self.start_node = new_node if bool(node_data[2]) else self.start_node
+            new_node.is_start_node = bool(node_data[2])
+            self.end_node = new_node if bool(node_data[3]) else self.end_node
+            new_node.is_end_node = bool(node_data[3])
+            new_node.spin_intake = bool(node_data[4])
+            new_node.clamp_goal = bool(node_data[5])
+            new_node.doink = bool(node_data[6])
+            new_node.is_reverse_node = bool(node_data[7])
+            new_node.stop = bool(node_data[8])
+            new_node.turn = node_data[9]
+            new_node.lb = node_data[11]
+            new_node.wait_time = node_data[12]
+            self.nodes.append(new_node)
+            new_node.show()
+
+        for action_data in action_data:
+            new_action_point = action_point.ActionPoint(
+                action_data[0], action_data[1], action_data[2], self.central_widget
+            )
+            new_action_point.spin_intake = action_data[3]
+            new_action_point.clamp_goal = action_data[4]
+            new_action_point.doink = action_data[5]
+            new_action_point.stop = action_data[6]
+            new_action_point.lb = action_data[7]
+            new_action_point.wait_time = action_data[8]
+
+            self.central_widget.action_points.append(new_action_point)
+            new_action_point.show()
 
         self.central_widget.update_path()
 
@@ -384,9 +429,23 @@ class AutonomousPlannerGUIManager(QMainWindow):
             ]
             for cur_node in nodes
         ]
+        action_data = [
+            [
+                cur_action.get_abs_x(),
+                cur_action.get_abs_y(),
+                cur_action.t,
+                int(cur_action.spin_intake),
+                int(cur_action.clamp_goal),
+                int(cur_action.doink),
+                int(cur_action.stop),
+                cur_action.lb,
+                cur_action.wait_time,
+            ]
+            for cur_action in self.central_widget.action_points
+        ]
         if as_list:
-            return nodes_data
-        nodes_string = json.dumps(nodes_data, separators=(",", ":"))
+            return [nodes_data, action_data]
+        nodes_string = json.dumps([nodes_data, action_data], separators=(",", ":"))
         return nodes_string
 
     def auto_save(self):

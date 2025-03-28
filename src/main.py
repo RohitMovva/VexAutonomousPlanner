@@ -17,7 +17,7 @@ sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8")
 
 if __name__ == "__main__":
     # Configure the global logger
-    setup_global_logger(level=logging.DEBUG, mode=LogMode.FILE_ONLY)
+    setup_global_logger(level=logging.INFO, mode=LogMode.FILE_ONLY)
 
     logger = logging.getLogger(__name__)
     logger.info("Application started")
