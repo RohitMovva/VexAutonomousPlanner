@@ -452,7 +452,7 @@ class QuinticHermiteSplineManager:
             total_length=current_dist,
         )
 
-    def precompute_path_properties(self, samples_per_node: int = 2500) -> None:
+    def precompute_path_properties(self, samples_per_node: int = 1000) -> None:
         """
         Precompute curvature and heading at regular intervals for faster lookup.
         Optimized version with vectorization and reduced redundant calculations.
@@ -520,30 +520,33 @@ class QuinticHermiteSplineManager:
     def _interpolate_property(self, t: float, property_name: str) -> float:
         """
         Get a property value at parameter t using linear interpolation of precomputed values.
+        
+        Args:
+            t: Parameter value to interpolate at
+            property_name: Name of the property to interpolate ('curvatures' or 'headings')
+            
+        Returns:
+            float: Interpolated property value
         """
-        parameters = self._precomputed_properties["parameters"]
-        values = self._precomputed_properties[property_name]
-
+        # Cache property values to avoid repeated dictionary access
+        params = self._precomputed_properties["parameters"]
+        vals = self._precomputed_properties[property_name]
+        
         # Find surrounding indices
-        idx = np.searchsorted(parameters, t)
+        idx = np.searchsorted(params, t)
         if idx == 0:
-            return values[0]
-        if idx >= len(parameters):
-            return values[-1]
+            return vals[0]
+        if idx >= len(params):
+            return vals[-1]
 
         # Linear interpolation
-        t0 = parameters[idx - 1]
-        t1 = parameters[idx]
+        t0, t1 = params[idx - 1], params[idx]
+        v0, v1 = vals[idx - 1], vals[idx]
 
-        # If we're in between two spline segments, return the value of the next segment
-        if t0 % 1 != t1 % 1:  # Holy guacamole this worked first try (I lied)
-            if t % 1 > 0.5:
-                return values[idx - 1]
-            else:
-                return values[idx]
-        v0 = values[idx - 1]
-        v1 = values[idx]
-
+        # Handle spline segment transitions
+        if t0 % 1 != t1 % 1:
+            return vals[idx - 1] if t % 1 > 0.5 else vals[idx]
+            
         return v0 + (v1 - v0) * (t - t0) / (t1 - t0)
 
     def rebuild_tables(self):

@@ -547,8 +547,12 @@ class PathWidget(QGraphicsView):
 
     def load_nodes(self, node_str: str) -> None:
         data = json.loads(node_str)
-        nodes_data = data[0]
-        action_data = data[1]
+        if (len(data) == 2):
+            nodes_data = data[0]
+            action_data = data[1]
+        else:
+            nodes_data = data
+            action_data = []
         self.clear_nodes()
         for node_data in nodes_data:
             if len(node_data) > 4:

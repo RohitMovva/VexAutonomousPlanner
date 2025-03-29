@@ -179,9 +179,8 @@ def forward_backward_pass(
             if max_accel_wheel < 0:
                 max_accel_wheel = 0
 
-            max_accel = min(max_accel_ang, max_accel_kin, max_accel_wheel)
+            max_accel = min(max_accel_ang, max_accel_kin, max_accel_wheel, constraints.max_acc)
 
-        # if (max_linear_vel > )
         next_vel = min(
             max_linear_vel, math.sqrt(current_vel**2 + 2 * max_accel * delta_dist)
         )
@@ -235,7 +234,7 @@ def forward_backward_pass(
             max_accel_wheel = constraints.max_accels_at_turn(accel_ang)
             if max_accel_wheel < 0:
                 max_accel_wheel = 0
-            max_decel = min(max_decel_ang, max_decel_kin, max_accel_wheel)
+            max_decel = min(max_decel_ang, max_decel_kin, max_accel_wheel, constraints.max_dec)
 
         # Calculate maximum achievable velocity considering deceleration
         prev_vel = math.sqrt(current_vel**2 + 2 * max_decel * delta_dist)
@@ -287,6 +286,44 @@ def motion_profile_angle(
 
     return headings, angular_velocities
 
+def lerp(x, x_array, y_array, cache=None):
+    """
+    Fast linear interpolation when x_array is sorted.
+    Optionally uses a cache to avoid binary search when x is close to previous lookup.
+    """
+    # Use cached index as starting point if available
+    if cache is not None and 'last_idx' in cache:
+        idx = cache['last_idx']
+        # Check if we're still in the right segment
+        if idx < len(x_array) - 1 and x_array[idx] <= x < x_array[idx + 1]:
+            # We're in the same segment, use it
+            pass
+        elif idx > 0 and x_array[idx - 1] <= x < x_array[idx]:
+            # We're in the previous segment
+            idx -= 1
+        else:
+            # Find the right segment with binary search
+            idx = np.searchsorted(x_array, x, side='right') - 1
+    else:
+        # Find the right segment with binary search
+        idx = np.searchsorted(x_array, x, side='right') - 1
+    
+    # Boundary checks
+    if idx < 0:
+        return y_array[0]
+    if idx >= len(x_array) - 1:
+        return y_array[-1]
+    
+    # Linear interpolation
+    x0, x1 = x_array[idx], x_array[idx + 1]
+    y0, y1 = y_array[idx], y_array[idx + 1]
+    
+    # Store index for next lookup
+    if cache is not None:
+        cache['last_idx'] = idx
+    
+    # Linear interpolation formula
+    return y0 + (x - x0) * (y1 - y0) / (x1 - x0)
 
 def generate_motion_profile(
     spline_manager, constraints: Constraints, dt: float = 0.01, dd: float = 0.005
@@ -378,116 +415,131 @@ def generate_motion_profile(
 
         current_time += steps * dt
 
+    other_lists_start_time = time.time()
     prev_t = 0
     action_idx = 0
-    while current_pos < (total_length):
+    node_idx = 0
+    is_reversed = False
+
+    # Pre-calculate velocity interpolation points for better performance
+    velocity_points = [(i * dd, vel) for i, vel in enumerate(velocities)]
+    velocity_xs, velocity_ys = zip(*velocity_points)
+
+    def handle_turn(angle, start_heading, current_time, dt):
+        ins_headings, ins_ang_vels = motion_profile_angle(angle, constraints, dt)
+        
+        # Normalize headings to [-π, π]
+        for i in range(len(ins_headings)):
+            while ins_headings[i] + start_heading > math.pi:
+                ins_headings[i] -= 2 * math.pi
+            while ins_headings[i] + start_heading < -math.pi:
+                ins_headings[i] += 2 * math.pi
+
+        # Create arrays for turn segment
+        turn_len = len(ins_headings)
+        positions.extend(positions[-1] for _ in ins_headings)
+        linear_vels.extend(0 for _ in ins_headings)
+        accelerations.extend(0 for _ in ins_headings)
+        headings.extend(start_heading + ins_headings[i] for i in range(turn_len))
+        angular_vels.extend(ins_ang_vels)
+        coords.extend(coords[-1] for _ in ins_headings)
+        times.extend(current_time + i * dt for i in range(turn_len))
+        
+        return current_time + turn_len * dt
+
+    def handle_wait(wait_time, current_time, dt):
+        steps = int(wait_time / dt)
+        positions.extend(0 for _ in range(steps))
+        linear_vels.extend(0 for _ in range(steps))
+        accelerations.extend(0 for _ in range(steps))
+        headings.extend(headings[-1] for _ in range(steps))
+        angular_vels.extend(0 for _ in range(steps))
+        coords.extend(coords[-1] for _ in range(steps))
+        times.extend(current_time + i * dt for i in range(steps))
+        return current_time + steps * dt
+    
+    end_param = spline_manager.distance_to_time(total_length)
+
+    section_1_total_time = 0
+    section_2_total_time = 0
+    section_3_total_time = 0
+    section_4_total_time = 0
+    section_5_total_time = 0
+
+    while current_pos < total_length:
+        section_1_time_start = time.time()
         t = spline_manager.distance_to_time(current_pos)
-        if t % 1 < prev_t % 1 and t < spline_manager.distance_to_time(total_length):
+        section_1_time_end = time.time()
+        section_1_total_time += section_1_time_end - section_1_time_start
+        
+        section_2_time_start = time.time()
+        # Handle node transitions
+        if t % 1 < prev_t % 1 and t < end_param:
             nodes_map.append(len(times))
             node_idx += 1
-
-            if spline_manager.nodes[node_idx].turn != 0:
-                angle = np.radians(spline_manager.nodes[node_idx].turn)
-                ins_headings, ins_ang_vels = motion_profile_angle(
-                    angle, constraints, dt
+            current_node = spline_manager.nodes[node_idx]
+            
+            # Handle turn if present
+            if current_node.turn != 0:
+                current_time = handle_turn(
+                    np.radians(current_node.turn),
+                    headings[-1],
+                    current_time,
+                    dt
                 )
-
-                start_heading = headings[-1]
-                for i in range(len(ins_headings)):
-                    while ins_headings[i] + start_heading > math.pi:
-                        ins_headings[i] -= 2 * math.pi
-                    while ins_headings[i] + start_heading < -math.pi:
-                        ins_headings[i] += 2 * math.pi
-
-                positions.extend(positions[-1] for _ in ins_headings)
-                linear_vels.extend(0 for _ in ins_headings)
-                accelerations.extend(0 for _ in ins_headings)
-                headings.extend(
-                    start_heading + ins_headings[i] for i in range(len(ins_headings))
-                )
-                angular_vels.extend(ins_ang_vels)
-                coords.extend(coords[-1] for _ in ins_headings)
-                times.extend(current_time + i * dt for i in range(len(ins_headings)))
-
-                current_time += len(ins_headings) * dt
-
-            if spline_manager.nodes[node_idx].is_reverse_node:
+            
+            # Update reverse state
+            if current_node.is_reverse_node:
                 is_reversed = not is_reversed
+            
+            # Handle wait time if present
+            if current_node.wait_time > 0:
+                current_time = handle_wait(current_node.wait_time, current_time, dt)
 
-            if spline_manager.nodes[node_idx].wait_time > 0:
-                steps = int(spline_manager.nodes[node_idx].wait_time / dt)
-                positions.extend(0 for _ in range(steps))
-                linear_vels.extend(0 for _ in range(steps))
-                accelerations.extend(0 for _ in range(steps))
-                headings.extend(headings[-1] for _ in range(steps))
-                angular_vels.extend(0 for _ in range(steps))
-                coords.extend(coords[-1] for _ in range(steps))
-                times.extend(current_time + i * dt for i in range(steps))
-
-                current_time += steps * dt
-
+        # Handle action points
         if action_idx < len(spline_manager.action_points):
-            if (
-                spline_manager.action_points[action_idx].t > prev_t
-                and spline_manager.action_points[action_idx].t < t
-            ):
+            action_point = spline_manager.action_points[action_idx]
+            if prev_t < action_point.t < t:
                 actions_map.append(len(times))
-
-                if spline_manager.action_points[action_idx].wait_time > 0:
-                    steps = int(spline_manager.action_points[action_idx].wait_time / dt)
-                    positions.extend(0 for _ in range(steps))
-                    linear_vels.extend(0 for _ in range(steps))
-                    accelerations.extend(0 for _ in range(steps))
-                    headings.extend(headings[-1] for _ in range(steps))
-                    angular_vels.extend(0 for _ in range(steps))
-                    coords.extend(coords[-1] for _ in range(steps))
-                    times.extend(current_time + i * dt for i in range(steps))
-
-                    current_time += steps * dt
-
+                if action_point.wait_time > 0:
+                    current_time = handle_wait(action_point.wait_time, current_time, dt)
                 action_idx += 1
 
         prev_t = t
+        section_2_time_end = time.time()
+        section_2_total_time += section_2_time_end - section_2_time_start
+        
+        section_3_time_start = time.time()
+        # Get current state
         curvature = spline_manager.get_curvature(t)
-        logger.debug(f"{curvature}")
         heading = spline_manager.get_heading(t) - (math.pi if is_reversed else 0)
-        while heading > math.pi:
-            heading -= 2 * math.pi
-        while heading < -math.pi:
-            heading += 2 * math.pi
-
+        heading = ((heading + math.pi) % (2 * math.pi)) - math.pi  # Normalize to [-π, π]
         heading *= -1
+        
         coord = spline_manager.get_point_at_parameter(t)
+        section_3_time_end = time.time()
+        section_3_total_time += section_3_time_end - section_3_time_start
 
-        # Get interpolated target velocity
-        target_vel = np.interp(
-            current_pos, [i * dd for i in range(len(velocities))], velocities
-        )
+        section_4_time_start = time.time()
 
-        next_target_vel = np.interp(
-            current_pos + dd, [i * dd for i in range(len(velocities))], velocities
-        )
+        # Optimized velocity interpolation
+        target_vel = lerp(current_pos, velocity_xs, velocity_ys)
+        next_target_vel = lerp(current_pos + dd, velocity_xs, velocity_ys)
+        target_vel = max((target_vel + next_target_vel) / 2, 0.001)  # minimum velocity
 
-        target_vel = (target_vel + next_target_vel) / 2
-
-        target_vel = max(target_vel, 0.001)  # minimum velocity
-
-        target_vel = max(target_vel, 0.001)  # minimum velocity
-
-        # Calculate acceleration
-        accel = (target_vel - current_vel) / dt
+        # Calculate acceleration and angular velocity
+        accel = np.clip((target_vel - current_vel) / dt, -constraints.max_dec, constraints.max_acc)
         angular_vel = target_vel * curvature * -1
-        # Apply acceleration limits
-        accel = np.clip(accel, -constraints.max_dec, constraints.max_acc)
 
-        # Update velocity and position
-        current_vel = current_vel + accel * dt
-        current_vel = np.clip(current_vel, 0, target_vel)
-
-        # Update position
+        # Update state
+        current_vel = np.clip(current_vel + accel * dt, 0, target_vel)
         delta_pos = current_vel * dt + 0.5 * accel * dt * dt
         current_pos += delta_pos
 
+        section_4_time_end = time.time()
+        section_4_total_time += section_4_time_end - section_4_time_start
+
+        section_5_time_start = time.time()
         # Store results
         times.append(current_time)
         positions.append(current_pos)
@@ -496,8 +548,17 @@ def generate_motion_profile(
         accelerations.append(accel * (1 if not is_reversed else -1))
         headings.append(heading)
         coords.append(coord)
-
+        section_5_time_end = time.time()
+        section_5_total_time += section_5_time_end - section_5_time_start
         current_time += dt
+
+    other_lists_end_time = time.time()
+    logger.info(f"Other lists generation took {other_lists_end_time - other_lists_start_time} seconds")
+    logger.info(f"Section 1 time: {section_1_total_time} seconds")
+    logger.info(f"Section 2 time: {section_2_total_time} seconds")
+    logger.info(f"Section 3 time: {section_3_total_time} seconds")
+    logger.info(f"Section 4 time: {section_4_total_time} seconds")
+    logger.info(f"Section 5 time: {section_5_total_time} seconds")
 
     end_time = time.time()
     logger.info(f"Motion profile generation took {end_time - start_time} seconds")
