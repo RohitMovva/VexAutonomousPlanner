@@ -155,7 +155,6 @@ def forward_backward_pass(
             max_linear_vel = constraints.max_vel
             max_accel = constraints.max_acc
         else:
-            # Using the provided formulas
             delta_theta = headings[i + 1] - headings[i]
             accel_ang = (ang_vel**2 - prev_ang_vel**2) / (2 * abs(delta_theta))
             max_vel_ang = max_angular_vel / abs(curvature)
@@ -424,7 +423,8 @@ def generate_motion_profile(
     # Pre-calculate velocity interpolation points for better performance
     velocity_points = [(i * dd, vel) for i, vel in enumerate(velocities)]
     velocity_xs, velocity_ys = zip(*velocity_points)
-
+    print(velocity_xs)
+    print(velocity_ys)
     def handle_turn(angle, start_heading, current_time, dt):
         ins_headings, ins_ang_vels = motion_profile_angle(angle, constraints, dt)
         
@@ -460,19 +460,9 @@ def generate_motion_profile(
     
     end_param = spline_manager.distance_to_time(total_length)
 
-    section_1_total_time = 0
-    section_2_total_time = 0
-    section_3_total_time = 0
-    section_4_total_time = 0
-    section_5_total_time = 0
-
     while current_pos < total_length:
-        section_1_time_start = time.time()
         t = spline_manager.distance_to_time(current_pos)
-        section_1_time_end = time.time()
-        section_1_total_time += section_1_time_end - section_1_time_start
         
-        section_2_time_start = time.time()
         # Handle node transitions
         if t % 1 < prev_t % 1 and t < end_param:
             nodes_map.append(len(times))
@@ -506,10 +496,7 @@ def generate_motion_profile(
                 action_idx += 1
 
         prev_t = t
-        section_2_time_end = time.time()
-        section_2_total_time += section_2_time_end - section_2_time_start
         
-        section_3_time_start = time.time()
         # Get current state
         curvature = spline_manager.get_curvature(t)
         heading = spline_manager.get_heading(t) - (math.pi if is_reversed else 0)
@@ -517,10 +504,6 @@ def generate_motion_profile(
         heading *= -1
         
         coord = spline_manager.get_point_at_parameter(t)
-        section_3_time_end = time.time()
-        section_3_total_time += section_3_time_end - section_3_time_start
-
-        section_4_time_start = time.time()
 
         # Optimized velocity interpolation
         target_vel = lerp(current_pos, velocity_xs, velocity_ys)
@@ -534,12 +517,10 @@ def generate_motion_profile(
         # Update state
         current_vel = np.clip(current_vel + accel * dt, 0, target_vel)
         delta_pos = current_vel * dt + 0.5 * accel * dt * dt
+        if (current_vel <= 0.1):
+            delta_pos = 0.1 * dt + 0.5 * accel * dt * dt
         current_pos += delta_pos
 
-        section_4_time_end = time.time()
-        section_4_total_time += section_4_time_end - section_4_time_start
-
-        section_5_time_start = time.time()
         # Store results
         times.append(current_time)
         positions.append(current_pos)
@@ -548,17 +529,10 @@ def generate_motion_profile(
         accelerations.append(accel * (1 if not is_reversed else -1))
         headings.append(heading)
         coords.append(coord)
-        section_5_time_end = time.time()
-        section_5_total_time += section_5_time_end - section_5_time_start
         current_time += dt
 
     other_lists_end_time = time.time()
     logger.info(f"Other lists generation took {other_lists_end_time - other_lists_start_time} seconds")
-    logger.info(f"Section 1 time: {section_1_total_time} seconds")
-    logger.info(f"Section 2 time: {section_2_total_time} seconds")
-    logger.info(f"Section 3 time: {section_3_total_time} seconds")
-    logger.info(f"Section 4 time: {section_4_total_time} seconds")
-    logger.info(f"Section 5 time: {section_5_total_time} seconds")
 
     end_time = time.time()
     logger.info(f"Motion profile generation took {end_time - start_time} seconds")

@@ -614,15 +614,15 @@ class PathWidget(QGraphicsView):
             QPointF: The closest point on the path
         """
         logger.info(f"Finding closest point on path to ({point.x()}, {point.y()})")
-        if path is None:
+        if path.isEmpty():
             logger.info("Path is None")
-            return QPointF()
+            return QPointF(), None
 
         # Get the length of the path
         path_length = path.length()
         if path_length == 0:
             logger.info("Path length is 0")
-            return QPointF()
+            return QPointF(), None
 
         # Binary search parameters
         min_dist = float("inf")
@@ -635,7 +635,7 @@ class PathWidget(QGraphicsView):
         point = (point / (2000) - 0.5) * 12.3266567842
 
         # First pass: coarse search with larger steps
-        num_steps = 100
+        num_steps = 25 * len(self.nodes)
         for i in range(num_steps + 1):
             percent = i / num_steps
             path_param = self.spline_manager.percent_to_parameter(percent)
@@ -654,7 +654,7 @@ class PathWidget(QGraphicsView):
         start_percent = max(0.0, closest_percent - search_range)
         end_percent = min(1.0, closest_percent + search_range)
 
-        fine_steps = 20
+        fine_steps = 50
         percent_step = (end_percent - start_percent) / fine_steps
 
         for i in range(fine_steps + 1):
@@ -716,6 +716,9 @@ class PathWidget(QGraphicsView):
 
         path_point, _ = self.find_closest_point_on_path(self.path, pt)
         if path_point is None:
+            self.rect_item.hide()
+            return
+        if (path_point == QPointF(0, 0)):
             self.rect_item.hide()
             return
 
