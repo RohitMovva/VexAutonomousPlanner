@@ -405,6 +405,15 @@ class PathWidget(QGraphicsView):
         else:
             self.path = QPainterPath()
 
+        for action_node in self.action_points:
+            t = action_node.t
+            point = self.spline_manager.get_point_at_parameter(t)
+            point = (point / (12.3266567842) + 0.5) * 2000
+            # point[1] = (point[1] / (12.3266567842) + 0.5) * 2000
+
+            action_node.setPos(QPointF(point[0], point[1]))
+            
+
         pen = QPen(QColor("#0a0612"), 4)  # dark purple (looks cool)
         self.path_item.setPen(pen)
         self.path_item.setPath(self.path)

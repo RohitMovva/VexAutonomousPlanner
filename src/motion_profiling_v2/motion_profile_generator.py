@@ -537,8 +537,8 @@ def generate_motion_profile(
     end_time = time.time()
     logger.info(f"Motion profile generation took {end_time - start_time} seconds")
     logger.info(f"Generated {len(times)} points")
-    logger.info(f"headings: {headings}")
-    logger.info(f"angular_vels: {angular_vels}")
+    logger.debug(f"headings: {headings}")
+    logger.debug(f"angular_vels: {angular_vels}")
 
     return (
         times,

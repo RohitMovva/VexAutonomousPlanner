@@ -11,7 +11,6 @@ from splines.quintic_hermite_spline import QuinticHermiteSpline
 
 logger = logging.getLogger(__name__)
 
-
 @dataclass
 class PathLookupTable:
     """Cache for quick parameter lookups based on distance"""
@@ -453,6 +452,7 @@ class QuinticHermiteSplineManager:
         )
 
     def precompute_path_properties(self, samples_per_node: int = 1000) -> None:
+
         """
         Precompute curvature and heading at regular intervals for faster lookup.
         Optimized version with vectorization and reduced redundant calculations.
@@ -461,10 +461,12 @@ class QuinticHermiteSplineManager:
             raise ValueError("No splines initialized")
 
         num_samples = len(self.nodes) * samples_per_node
+        
         parameters = np.linspace(0, len(self.nodes) - 1, num_samples)
         
         # Precompute properties
         curvatures = np.zeros(num_samples)
+
         headings = np.zeros(num_samples)
         
         # Time measurement variables
@@ -514,6 +516,7 @@ class QuinticHermiteSplineManager:
         self._precomputed_properties = {
             "parameters": parameters,
             "curvatures": curvatures,
+
             "headings": headings,
         }
 
@@ -553,6 +556,7 @@ class QuinticHermiteSplineManager:
         """
         Rebuild the spline tables after modifying control points or constraints.
         """
+
         start_time = time.time()
         self.build_lookup_table()
         build_time = time.time() - start_time
@@ -561,3 +565,4 @@ class QuinticHermiteSplineManager:
         self.precompute_path_properties()
         precompute_time = time.time() - start_time
         logger.info(f"Precompute time: {precompute_time} seconds")
+
