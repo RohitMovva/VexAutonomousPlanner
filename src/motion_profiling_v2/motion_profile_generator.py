@@ -27,14 +27,15 @@ class Constraints:
     track_width: float
 
     def max_speed_at_curvature(self, curvature: float) -> float:
-        """Calculate maximum safe speed based on curvature considering both turning and friction limits"""
+        """Calculate maximum safe speed based on curvature"""
         if abs(curvature) < 1e-6:
             return self.max_vel
 
-        # Calculate maximum speed based on track width (to prevent tipping)
+        # Calculate maximum speed based on track width
         max_turn_speed = ((2 * self.max_vel / self.track_width) * self.max_vel) / (
             abs(curvature) * self.max_vel + (2 * self.max_vel / self.track_width)
         )
+        # ((2 * v_max / track_width) * v_max) / (|curvature| * v_max + (2 * v_max / track_width))
 
         return min(max_turn_speed, self.max_vel)
 
@@ -423,8 +424,6 @@ def generate_motion_profile(
     # Pre-calculate velocity interpolation points for better performance
     velocity_points = [(i * dd, vel) for i, vel in enumerate(velocities)]
     velocity_xs, velocity_ys = zip(*velocity_points)
-    print(velocity_xs)
-    print(velocity_ys)
     def handle_turn(angle, start_heading, current_time, dt):
         ins_headings, ins_ang_vels = motion_profile_angle(angle, constraints, dt)
         
@@ -459,7 +458,8 @@ def generate_motion_profile(
         return current_time + steps * dt
     
     end_param = spline_manager.distance_to_time(total_length)
-
+    left_wheel_vels = []
+    right_wheel_vels = []
     while current_pos < total_length:
         t = spline_manager.distance_to_time(current_pos)
         
@@ -529,6 +529,9 @@ def generate_motion_profile(
         accelerations.append(accel * (1 if not is_reversed else -1))
         headings.append(heading)
         coords.append(coord)
+
+        left_wheel_vels.append(current_vel - (angular_vel * constraints.track_width / 2))
+        right_wheel_vels.append(current_vel + (angular_vel * constraints.track_width / 2))
         current_time += dt
 
     other_lists_end_time = time.time()
@@ -539,6 +542,17 @@ def generate_motion_profile(
     logger.info(f"Generated {len(times)} points")
     logger.debug(f"headings: {headings}")
     logger.debug(f"angular_vels: {angular_vels}")
+    left_wheel_accs = []
+    right_wheel_accs = []
+    for i in range(len(left_wheel_vels)):
+        left_wheel_accs.append((left_wheel_vels[i] - left_wheel_vels[i - 1]) / dt)
+        right_wheel_accs.append((right_wheel_vels[i] - right_wheel_vels[i - 1]) / dt)
+    # for acc in right_wheel_accs:
+        # print(acc)
+    # print(right_wheel_accs)
+    # for vel in left_wheel_vels:
+    #     print(vel)
+    # print(right_wheel_vels)
 
     return (
         times,

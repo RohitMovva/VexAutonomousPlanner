@@ -453,8 +453,20 @@ class PathWidget(QGraphicsView):
 
     def add_action_point(self, point: QPointF, t: float, pos=-1):
         new_action_point = action_point.ActionPoint(point.x(), point.y(), t, self)
+        if len(self.action_points) == 0:
+            self.action_points.append(new_action_point)
+        else:
+            for i in range(len(self.action_points)):
+                if self.action_points[i].t > t:
+                    self.action_points.insert(i, new_action_point)
+                break
+            if i == len(self.action_points)-1:
+                self.action_points.append(new_action_point)
 
-        self.action_points.append(new_action_point)
+        # print("Action points:")
+        # for p in self.action_points:
+        #     print(p.t)
+        # print()
 
         self.scene.addItem(new_action_point)
         new_action_point.show()
@@ -663,7 +675,7 @@ class PathWidget(QGraphicsView):
         start_percent = max(0.0, closest_percent - search_range)
         end_percent = min(1.0, closest_percent + search_range)
 
-        fine_steps = 50
+        fine_steps = 500
         percent_step = (end_percent - start_percent) / fine_steps
 
         for i in range(fine_steps + 1):

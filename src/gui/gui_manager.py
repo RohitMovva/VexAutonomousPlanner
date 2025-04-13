@@ -205,6 +205,16 @@ class AutonomousPlannerGUIManager(QMainWindow):
     def mirror_nodes(self):
         self.central_widget.mirror_nodes()
 
+    def fill_txt_file(self, nodes_data):
+        res = ""
+        for data in nodes_data:
+            for v in data:
+                res += f"{v} "
+            res += "\n"
+        
+        with open(self.routes_header_path + "/" + self.current_working_file + ".txt", "w") as file:
+            file.write(res)
+
     def save_nodes_to_file(self):
         nodes_string = ""
         nodes = self.central_widget.get_nodes()

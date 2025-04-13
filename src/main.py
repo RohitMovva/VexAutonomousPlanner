@@ -27,8 +27,8 @@ if __name__ == "__main__":
         ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
     app = QApplication(sys.argv)
 
-    # qdarktheme.setup_theme()
-    plt.style.use("dark_background")
+    qdarktheme.setup_theme()
+    # plt.style.use("dark_background")
 
     if getattr(sys, "frozen", False):
         utilities.file_management.create_files()
