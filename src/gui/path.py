@@ -287,14 +287,6 @@ class PathWidget(QGraphicsView):
             QApplication.setOverrideCursor(Qt.CursorShape.OpenHandCursor)
         super().keyReleaseEvent(event)
 
-    def handle_coords(self, point: QPointF):
-        x = round(((point.x() / (2000)) - 0.5) * 12**2, 2)
-        y = round(((point.y() / (2000)) - 0.5) * 12**2, 2)
-        if not point.isNull():
-            self.labelCoords.setText(f"{x}, {y}")
-        else:
-            self.labelCoords.clear()
-
     def update_image_path(self, new_path: str):
         self.image = QPixmap(new_path)
         self.image_item.setPixmap(self.image)
@@ -365,8 +357,8 @@ class PathWidget(QGraphicsView):
         points = np.array([[point.x(), point.y()] for point in points])
 
         for i in range(len(points)):
-            points[i][0] = (points[i][0] / (2000) - 0.5) * 12.3266567842
-            points[i][1] = (points[i][1] / (2000) - 0.5) * 12.3266567842
+            points[i][0] = (points[i][0] / (2000) - 0.5) * 12.3266567841
+            points[i][1] = (points[i][1] / (2000) - 0.5) * 12.3266567841
 
         self.spline_manager.build_path(points, nodes, action_points)
         t_values = np.linspace(0, len(points) - 1, 25 * len(self.nodes))
@@ -378,10 +370,10 @@ class PathWidget(QGraphicsView):
             self.path = QPainterPath()
             for i in range(len(spline_points)):
                 spline_points[i][0] = (
-                    spline_points[i][0] / (12.3266567842) + 0.5
+                    spline_points[i][0] / (12.3266567841) + 0.5
                 ) * 2000
                 spline_points[i][1] = (
-                    spline_points[i][1] / (12.3266567842) + 0.5
+                    spline_points[i][1] / (12.3266567841) + 0.5
                 ) * 2000
             self.path.moveTo(spline_points[0][0], spline_points[0][1])
             for p in spline_points[1:]:
@@ -408,8 +400,7 @@ class PathWidget(QGraphicsView):
         for action_node in self.action_points:
             t = action_node.t
             point = self.spline_manager.get_point_at_parameter(t)
-            point = (point / (12.3266567842) + 0.5) * 2000
-            # point[1] = (point[1] / (12.3266567842) + 0.5) * 2000
+            point = (point / (12.3266567841) + 0.5) * 2000
 
             action_node.setPos(QPointF(point[0], point[1]))
             
@@ -555,8 +546,8 @@ class PathWidget(QGraphicsView):
         # self.auto_save()
 
     def convert_point(self, point: QPointF):
-        point.setX((point.x() / (12.3266567842 * 12) + 0.5) * 2000)
-        point.setY((point.y() / (12.3266567842 * 12) + 0.5) * 2000)
+        point.setX((point.x() / (145.308474301) + 0.5) * 2000)
+        point.setY((point.y() / (145.308474301) + 0.5) * 2000)
 
         return point
 
@@ -653,7 +644,7 @@ class PathWidget(QGraphicsView):
 
         # Convert point to numpy array w/ inches
         point = np.array([point.x(), point.y()])
-        point = (point / (2000) - 0.5) * 12.3266567842
+        point = (point / (2000) - 0.5) * 12.3266567841
 
         # First pass: coarse search with larger steps
         num_steps = 25 * len(self.nodes)
@@ -690,7 +681,7 @@ class PathWidget(QGraphicsView):
                 closest_parameter = path_param
 
         # Convert closest point to QPointF with pixels
-        closest_point = (closest_point / (12.3266567842) + 0.5) * 2000
+        closest_point = (closest_point / (12.3266567841) + 0.5) * 2000
 
         return QPointF(closest_point[0], closest_point[1]), closest_parameter
 
@@ -753,8 +744,8 @@ class PathWidget(QGraphicsView):
 
         # Create rectangle centered at path point
         rect_size = QSizeF(
-            self.robot_width * (2000 / 12.3266567842 / 12),
-            self.robot_length * (2000 / 12.3266567842 / 12),
+            self.robot_width * (2000 / (145.308474301)),
+            self.robot_length * (2000 / (145.308474301)),
         )
         center_rect = QRectF(
             path_point.x() - rect_size.width() / 2,

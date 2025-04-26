@@ -33,19 +33,19 @@ class Node(QGraphicsItem):
 
         # Scale pixel value down to account for the extra padding that isn't part of the field on either side, scale to between 0-1, subtract 0.5 to center and turn into inches
         self.image_size = 2000
-        self.abs_x = ((self.x() / (self.image_size)) - 0.5) * 12.3266567842 * 12
-        self.abs_y = ((self.y() / (self.image_size)) - 0.5) * 12.3266567842 * 12
+        self.abs_x = ((self.x() / (self.image_size)) - 0.5) * 145.308474301
+        self.abs_y = ((self.y() / (self.image_size)) - 0.5) * 145.308474301
 
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsMovable)
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemSendsGeometryChanges)
         self.drag_start_position = None
 
     def get_abs_x(self):
-        self.abs_x = ((self.x() / (self.image_size)) - 0.5) * 12.3266567842 * 12
+        self.abs_x = ((self.x() / (self.image_size)) - 0.5) * 145.308474301
         return self.abs_x
 
     def get_abs_y(self):
-        self.abs_y = ((self.y() / (self.image_size)) - 0.5) * 12.3266567842 * 12
+        self.abs_y = ((self.y() / (self.image_size)) - 0.5) * 145.308474301
         return self.abs_y
 
     def boundingRect(self):
@@ -85,8 +85,8 @@ class Node(QGraphicsItem):
     def mouseReleaseEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
             self.drag_start_position = None
-            self.abs_x = ((self.x() / (self.image_size)) - 0.5) * 12.3266567842 * 12
-            self.abs_y = ((self.y() / (self.image_size)) - 0.5) * 12.3266567842 * 12
+            self.abs_x = ((self.x() / (self.image_size)) - 0.5) * 145.308474301
+            self.abs_y = ((self.y() / (self.image_size)) - 0.5) * 145.308474301
             self.parent.update_path()
             # self.parent.save()
         super().mouseReleaseEvent(event)

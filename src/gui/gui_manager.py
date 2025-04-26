@@ -108,8 +108,6 @@ class AutonomousPlannerGUIManager(QMainWindow):
             Qt.DockWidgetArea.RightDockWidgetArea, self.settings_dock_widget
         )
 
-        # Optional: you can also set it to a specific height on the screen
-        # This will position the dock at its preferred size
         self.resizeDocks([self.settings_dock_widget], [300], Qt.Orientation.Horizontal)
         self.resizeDocks([self.settings_dock_widget], [400], Qt.Orientation.Vertical)
 
@@ -118,8 +116,8 @@ class AutonomousPlannerGUIManager(QMainWindow):
 
     def update_coords(self, p):
         # p = self.mapToScene(event.position().toPoint())
-        x = round(((p.x() / (2000)) - 0.5) * 12.3266567842 * 12, 3)
-        y = round(((p.y() / (2000)) - 0.5) * 12.3266567842 * 12, 3)
+        x = round(((p.x() / (2000)) - 0.5) * 145.308474301, 3)
+        y = round(((p.y() / (2000)) - 0.5) * 145.308474301, 3)
 
         self.settings_dock_widget.set_current_coordinates(x, y)
 
