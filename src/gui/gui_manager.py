@@ -74,7 +74,7 @@ class AutonomousPlannerGUIManager(QMainWindow):
         self.config_manager = config_manager.ConfigManager(config_file_path)
 
         autonomous_path = (
-            self.config_manager.get_value("files", "header_folder") + "/routes.h"
+            self.config_manager.get_value("files", "header_folder")# + "/routes.h"
         )
         routes_path = self.config_manager.get_value("files", "routes_folder")
 
@@ -310,7 +310,8 @@ class AutonomousPlannerGUIManager(QMainWindow):
         for i in range(0, len(actions_map)):
             nodes_data.insert(int(actions_map[i] / 1) + i, actions_data[i])
 
-        self.fill_template(nodes_data)
+        # self.fill_template(nodes_data)
+        self.fill_txt_file(nodes_data)
         with open(full_path, "w") as file:
             file.write(nodes_string)
         logger.info(f"Route saved to {full_path}")

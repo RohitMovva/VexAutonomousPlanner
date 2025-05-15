@@ -14,3 +14,7 @@ log*[0-9]*.txt
 log.txt
 
 routes/
+
+config.yaml
+
+settings.json

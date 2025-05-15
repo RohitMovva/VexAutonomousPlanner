@@ -86,18 +86,18 @@ class QuinticHermiteSpline(Spline):
 
                 if segment_length > 0:
                     # Scale derivatives by segment length
-                    d0_scaled = d0 * segment_length
-                    d1_scaled = d1 * segment_length
-                    dd0_scaled = dd0 * (segment_length**2)
-                    dd1_scaled = dd1 * (segment_length**2)
+                    # d0_scaled = d0 * segment_length
+                    # d1_scaled = d1 * segment_length
+                    # dd0_scaled = dd0 * (segment_length**2)
+                    # dd1_scaled = dd1 * (segment_length**2)
 
-                    logger.debug(f"  Scaled derivatives: d0={d0_scaled}, d1={d1_scaled}")
+                    logger.debug(f"  Scaled derivatives: d0={d0}, d1={d1}")
                     logger.debug(
-                        f"  Scaled second derivatives: dd0={dd0_scaled}, dd1={dd1_scaled}"
+                        f"  Scaled second derivatives: dd0={dd0}, dd1={dd1}"
                     )
 
                     segment = np.vstack(
-                        [p0, p1, d0_scaled, d1_scaled, dd0_scaled, dd1_scaled]
+                        [p0, p1, d0, d1, dd0, dd1]
                     )
                 else:
                     logger.debug("  Warning: Zero segment length detected")
@@ -129,50 +129,41 @@ class QuinticHermiteSpline(Spline):
         diffs = np.diff(self.control_points, axis=0)
         distances = np.linalg.norm(diffs, axis=1)
         logger.debug(f"Segment distances: {distances}")
+        print(f"Distances: {distances}")
 
         # First derivative calculation
         chords = diffs.copy()
-        scale_factor = 1.0
+        scale_factor = 1
 
         logger.debug("\nComputing first derivatives:")
         for i in range(num_points):
             if i == 0:
-                self.first_derivatives[i] = chords[0] * scale_factor / distances[0]
+                self.first_derivatives[i] = chords[0] * scale_factor# / distances[0]
                 logger.debug(
                     f"First point: {self.first_derivatives[i]} (using distance {distances[0]})"
                 )
             elif i == num_points - 1:
-                self.first_derivatives[i] = chords[-1] * scale_factor / distances[-1]
+                self.first_derivatives[i] = chords[-1] * scale_factor# / distances[-1]
                 logger.debug(
                     f"Last point: {self.first_derivatives[i]} (using distance {distances[-1]})"
                 )
             else:
-                prev_chord = chords[i - 1] / distances[i - 1]
-                next_chord = chords[i] / distances[i]
+                prev_chord = chords[i - 1]# / distances[i - 1]
+                next_chord = chords[i]# / distances[i]
                 self.first_derivatives[i] = (prev_chord + next_chord) * scale_factor / 2
                 logger.debug(f"Interior point {i}: {self.first_derivatives[i]}")
+
+            print(self.first_derivatives[i])
 
         # Second derivative calculation
         logger.debug("\nComputing second derivatives:")
         for i in range(num_points):
             if i == 0:
-                # For the first point, use forward difference
-                forward_tangent = self.first_derivatives[1]
-                current_tangent = self.first_derivatives[0]
-                self.second_derivatives[i] = (
-                    forward_tangent - current_tangent
-                ) / distances[0]
-                self.second_derivatives[i] = 0.0  # Corrected scaling
+                self.second_derivatives[i] = 0.0  # Natural boundary condition
                 logger.debug(f"First point: {self.second_derivatives[i]}")
 
             elif i == num_points - 1:
-                # For the last point, use backward difference
-                backward_tangent = self.first_derivatives[-2]
-                current_tangent = self.first_derivatives[-1]
-                self.second_derivatives[i] = (
-                    current_tangent - backward_tangent
-                ) / distances[-1]
-                self.second_derivatives[i] = 0.0  # Corrected scaling
+                self.second_derivatives[i] = 0.0  # Natural boundary condition
                 logger.debug(f"Last point: {self.second_derivatives[i]}")
 
             else:
@@ -183,7 +174,7 @@ class QuinticHermiteSpline(Spline):
                 avg_dist = (prev_dist + next_dist) / 2
                 self.second_derivatives[i] = (
                     self.first_derivatives[i + 1] - self.first_derivatives[i - 1]
-                ) / (0.5 * avg_dist)
+                ) / (0.5)
 
                 logger.debug(f"Interior point {i}: {self.second_derivatives[i]}")
 
