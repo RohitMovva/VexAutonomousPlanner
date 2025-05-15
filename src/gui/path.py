@@ -406,13 +406,14 @@ class PathWidget(QGraphicsView):
             self.path = QPainterPath()
 
         for action_node in self.action_points:
+            # print("an")
             t = action_node.t
             point = self.spline_manager.get_point_at_parameter(t)
             point = (point / (12.3266567842) + 0.5) * 2000
             # point[1] = (point[1] / (12.3266567842) + 0.5) * 2000
 
             action_node.setPos(QPointF(point[0], point[1]))
-            
+        # print()
 
         pen = QPen(QColor("#0a0612"), 4)  # dark purple (looks cool)
         self.path_item.setPen(pen)
@@ -453,16 +454,21 @@ class PathWidget(QGraphicsView):
 
     def add_action_point(self, point: QPointF, t: float, pos=-1):
         new_action_point = action_point.ActionPoint(point.x(), point.y(), t, self)
+        # print("adding action point")
+        # print(self.action_points)
         if len(self.action_points) == 0:
             self.action_points.append(new_action_point)
+
         else:
+
             for i in range(len(self.action_points)):
                 if self.action_points[i].t > t:
                     self.action_points.insert(i, new_action_point)
-                break
+                    break
             if i == len(self.action_points)-1:
                 self.action_points.append(new_action_point)
-
+        # print("action points after adding")
+        # print(self.action_points)
         # print("Action points:")
         # for p in self.action_points:
         #     print(p.t)

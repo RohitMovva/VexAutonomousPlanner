@@ -123,6 +123,8 @@ class QuinticHermiteSplineManager:
                         min_length = min(prev_length, next_length)
                         dif_vector = dif_vector * min_length
 
+
+                        print(f"dif_vector: {dif_vector}")
                         # Set end tangent for current spline
                         spline.set_ending_tangent(dif_vector)
                         start_tangent = -1 * dif_vector

@@ -35,7 +35,6 @@ class Constraints:
         max_turn_speed = ((2 * self.max_vel / self.track_width) * self.max_vel) / (
             abs(curvature) * self.max_vel + (2 * self.max_vel / self.track_width)
         )
-        # ((2 * v_max / track_width) * v_max) / (|curvature| * v_max + (2 * v_max / track_width))
 
         return min(max_turn_speed, self.max_vel)
 
@@ -43,7 +42,7 @@ class Constraints:
         self, dkappads: float, max_angular_accel: float
     ) -> float:
         """Calculate maximum velocity based on angular acceleration and rate of change of curvature."""
-        if abs(dkappads) < 1e-9:  # Avoid division by zero if dkappads is very small
+        if abs(dkappads) < 1e-9:
             return self.max_vel
         max_v_sq = max_angular_accel / abs(dkappads)
         if max_v_sq < 0:
@@ -367,7 +366,7 @@ def generate_motion_profile(
     total_length = spline_manager.get_total_arc_length()
     is_reversed = False
     # if spline_manager.nodes[0].is_reverse_node:
-    # is_reversed = True
+        # is_reversed = True
     node_idx = 0
     if spline_manager.nodes[node_idx].is_reverse_node:
         is_reversed = not is_reversed
@@ -419,7 +418,7 @@ def generate_motion_profile(
     prev_t = 0
     action_idx = 0
     node_idx = 0
-    is_reversed = False
+    # is_reversed = False
 
     # Pre-calculate velocity interpolation points for better performance
     velocity_points = [(i * dd, vel) for i, vel in enumerate(velocities)]
