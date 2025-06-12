@@ -60,7 +60,7 @@ class PathWidget(QGraphicsView):
         config_manager: config_manager.ConfigManager,
         parent=None,
         image_path=utilities.file_management.resource_path(
-            "../assets/V5RC-HighStakes-Match-2000x2000.png"
+            "../assets/V5RC-PushBack-Match-2000x2000.png"
         ),
         size=QSize(250, 250),
     ):

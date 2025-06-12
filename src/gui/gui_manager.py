@@ -71,7 +71,7 @@ class AutonomousPlannerGUIManager(QMainWindow):
 
         # Get parent of current working directory
         config_file_path = os.path.join(os.getcwd(), "..", "config.yaml")
-        self.config_manager = config_manager.ConfigManager(config_file_path)
+        self.config_manager: config_manager.ConfigManager = config_manager.ConfigManager(config_file_path)
 
         autonomous_path = (
             self.config_manager.get_value("files", "header_folder") + "/routes.h"
@@ -532,13 +532,13 @@ class AutonomousPlannerGUIManager(QMainWindow):
         if fieldType == "High Stakes Match":
             self.central_widget.update_image_path(
                 utilities.file_management.resource_path(
-                    "../assets/V5RC-HighStakes-Match-2000x2000.png"
+                    "../assets/V5RC-PushBack-Match-2000x2000.png"
                 )
             )
         else:
             self.central_widget.update_image_path(
                 utilities.file_management.resource_path(
-                    "../assets/V5RC-HighStakes-Skills-2000x2000.png"
+                    "../assets/V5RC-PushBack-Skills-2000x2000.png"
                 )
             )
 

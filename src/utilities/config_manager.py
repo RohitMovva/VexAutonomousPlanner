@@ -131,3 +131,18 @@ class ConfigManager:
             dict: The complete configuration
         """
         return self.config
+    
+    def get_section(self, section, default=None):
+        """Get a configuration section.
+
+        Args:
+            section: Configuration section (e.g., 'robot', 'motion')
+            default: Default value if the section doesn't exist
+
+        Returns:
+            The configuration value or default if not found
+        """
+        try:
+            return self.config[section]
+        except KeyError:
+            return default

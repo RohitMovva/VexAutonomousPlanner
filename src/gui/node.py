@@ -4,6 +4,8 @@ from PyQt6.QtCore import QPoint, QPointF, QRectF, Qt
 from PyQt6.QtGui import QAction, QActionGroup, QColor, QPainter
 from PyQt6.QtWidgets import QGraphicsItem, QInputDialog, QMenu, QWidget
 
+from utilities import config_manager
+
 logger = logging.getLogger(__name__)
 
 
@@ -24,6 +26,9 @@ class Node(QGraphicsItem):
         self.lb = 0
         self.wait_time = 0
         self.dragging = False
+
+        self.actions = self.parent.config_manager.get_section("actions")
+
         self.offset = QPoint(0, 0)
         self.radius = radius
         self.stop = False
@@ -197,6 +202,12 @@ class Node(QGraphicsItem):
         insert_node_after_action.triggered.connect(self.insert_node_after)
         node_menu.addAction(insert_node_after_action)
 
+        for action in self.actions:
+            new_action = QAction(action)
+            new_action.triggered.connect(self.action_handler)
+            attributes_menu.addAction(new_action)
+                
+
         context_menu.addMenu(attributes_menu)
         context_menu.addMenu(node_menu)
 
@@ -349,6 +360,31 @@ class Node(QGraphicsItem):
         logger.info(f"Inserting node after at {self.pos()}")
         new_point = QPointF(self.pos().x() + 5, self.pos().y() + 5)
         self.parent.add_node(new_point, self.parent.index_of(self) + 1)
+
+    def action_handler(self):
+        # Get the position of the node in screen coordinates
+        scene_pos = self.scenePos()
+        view_pos = self.scene().views()[0].mapFromScene(scene_pos)
+        screen_pos = self.scene().views()[0].viewport().mapToGlobal(view_pos)
+
+        # Create the dialog
+        dialog = QInputDialog(self.scene().views()[0])
+        dialog.setWindowTitle("Set Action")
+        dialog.setLabelText("Enter Action Value:")
+        dialog.setDoubleRange(-1000, 1000)
+        dialog.setDoubleValue(self.turn)
+
+        # Set the position of the dialog
+        dialog.move(
+            int(screen_pos.x() + self.radius), int(screen_pos.y() + self.radius)
+        )
+
+        # Show the dialog and get the result
+        if dialog.exec() == QInputDialog.DialogCode.Accepted:
+            self.turn = dialog.doubleValue()
+            self.parent.update_path()
+            logger.info(f"Turn set to: {self.turn}")
+
 
     def __str__(self):
         return (
