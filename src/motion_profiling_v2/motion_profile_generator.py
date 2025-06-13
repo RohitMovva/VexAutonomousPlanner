@@ -423,8 +423,7 @@ def generate_motion_profile(
     # Pre-calculate velocity interpolation points for better performance
     velocity_points = [(i * dd, vel) for i, vel in enumerate(velocities)]
     velocity_xs, velocity_ys = zip(*velocity_points)
-    print(velocity_xs)
-    print(velocity_ys)
+
     def handle_turn(angle, start_heading, current_time, dt):
         ins_headings, ins_ang_vels = motion_profile_angle(angle, constraints, dt)
         

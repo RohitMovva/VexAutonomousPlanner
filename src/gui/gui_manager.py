@@ -271,24 +271,12 @@ class AutonomousPlannerGUIManager(QMainWindow):
                 )
         logger.info(f"nodes map: {nodes_map} traj length {len(nodes_data)}")
         nodes_actions = [
-            [
-                1,
-                int(cur_node.spin_intake),
-                int(cur_node.clamp_goal),
-                int(cur_node.doink),
-                cur_node.lb,
-            ]
+            [1] + cur_node.get_action_values()
             for cur_node in nodes
         ]
 
         actions_data = [
-            [
-                1,
-                int(cur_action.spin_intake),
-                int(cur_action.clamp_goal),
-                int(cur_action.doink),
-                cur_action.lb,
-            ]
+            [1] + cur_action.get_action_values()
             for cur_action in self.central_widget.action_points
         ]
 
@@ -323,6 +311,11 @@ class AutonomousPlannerGUIManager(QMainWindow):
 
     def load_route_file(self, file_path):
         """Load a route file"""
+        
+        if (not file_path.endswith(".txt")
+                or not os.path.exists(os.path.join(self.routes_folder_path, file_path))):
+            logger.error(f"Invalid file path: {file_path}")
+            return
         self.current_working_file = file_path[:-4]  # cut off the .txt
         file_path = os.path.join(self.routes_folder_path, file_path)
         with open(file_path, "r") as file:
@@ -366,48 +359,6 @@ class AutonomousPlannerGUIManager(QMainWindow):
         logger.info("Clearing all nodes...")
         self.central_widget.clear_nodes()
 
-    def load_nodes(self, str):
-        data = json.loads(str)
-        nodes_data = data[0]
-        action_data = data[1]
-        self.clear_nodes()
-        logger.info("Loading nodes...")
-        for node_data in nodes_data:
-            logger.debug(f"Nodes data: {node_data}")
-            new_node = node.Node(
-                node_data[0], node_data[1], self.central_widget, gui_instance=self
-            )
-            self.start_node = new_node if bool(node_data[2]) else self.start_node
-            new_node.is_start_node = bool(node_data[2])
-            self.end_node = new_node if bool(node_data[3]) else self.end_node
-            new_node.is_end_node = bool(node_data[3])
-            new_node.spin_intake = bool(node_data[4])
-            new_node.clamp_goal = bool(node_data[5])
-            new_node.doink = bool(node_data[6])
-            new_node.is_reverse_node = bool(node_data[7])
-            new_node.stop = bool(node_data[8])
-            new_node.turn = node_data[9]
-            new_node.lb = node_data[11]
-            new_node.wait_time = node_data[12]
-            self.nodes.append(new_node)
-            new_node.show()
-
-        for action_data in action_data:
-            new_action_point = action_point.ActionPoint(
-                action_data[0], action_data[1], action_data[2], self.central_widget
-            )
-            new_action_point.spin_intake = action_data[3]
-            new_action_point.clamp_goal = action_data[4]
-            new_action_point.doink = action_data[5]
-            new_action_point.stop = action_data[6]
-            new_action_point.lb = action_data[7]
-            new_action_point.wait_time = action_data[8]
-
-            self.central_widget.action_points.append(new_action_point)
-            new_action_point.show()
-
-        self.central_widget.update_path()
-
     def convert_nodes(self, as_list=False):
         nodes: list[node.Node] = self.central_widget.get_nodes()
         logger.info("Converting nodes...")
@@ -418,15 +369,11 @@ class AutonomousPlannerGUIManager(QMainWindow):
                 cur_node.get_abs_y(),
                 int(cur_node.is_start_node),
                 int(cur_node.is_end_node),
-                int(cur_node.spin_intake),
-                int(cur_node.clamp_goal),
-                int(cur_node.doink),
                 int(cur_node.is_reverse_node),
                 int(cur_node.stop),
                 cur_node.turn,
-                cur_node.lb,
                 cur_node.wait_time,
-            ]
+            ] + cur_node.get_action_values()
             for cur_node in nodes
         ]
         action_data = [
@@ -434,13 +381,9 @@ class AutonomousPlannerGUIManager(QMainWindow):
                 cur_action.get_abs_x(),
                 cur_action.get_abs_y(),
                 cur_action.t,
-                int(cur_action.spin_intake),
-                int(cur_action.clamp_goal),
-                int(cur_action.doink),
                 int(cur_action.stop),
-                cur_action.lb,
                 cur_action.wait_time,
-            ]
+            ] + cur_action.get_action_values()
             for cur_action in self.central_widget.action_points
         ]
         if as_list:

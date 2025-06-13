@@ -1,6 +1,6 @@
 import logging
 
-from PyQt6.QtCore import QPoint, QPointF, QRectF, Qt
+from PyQt6.QtCore import QPoint, QPointF, QRectF, Qt, QObject
 from PyQt6.QtGui import QAction, QActionGroup, QColor, QPainter
 from PyQt6.QtWidgets import QGraphicsItem, QInputDialog, QMenu, QWidget
 
@@ -18,16 +18,13 @@ class Node(QGraphicsItem):
         self.parent = parent
         self.is_start_node = False
         self.is_end_node = False
-        self.spin_intake = False
-        self.clamp_goal = False
-        self.doink = False
         self.is_reverse_node = False
         self.turn = 0
-        self.lb = 0
         self.wait_time = 0
         self.dragging = False
 
-        self.actions = self.parent.config_manager.get_section("actions")
+        self.actions = list(self.parent.config_manager.get_section("actions"))
+        self.action_values = [0 for _ in self.actions]
 
         self.offset = QPoint(0, 0)
         self.radius = radius
@@ -137,37 +134,6 @@ class Node(QGraphicsItem):
         end_action.triggered.connect(self.toggle_end_node)
         attributes_menu.addAction(end_action)
 
-        spin_menu = QMenu("Spin Intake")
-        attributes_menu.addMenu(spin_menu)
-
-        spin_options = {
-            "Don't spin intake": 0,
-            "Spin intake": 1,
-            "Spin intake in reverse": -1,
-        }
-
-        spin_action_group = QActionGroup(spin_menu)
-        spin_action_group.setExclusive(True)
-
-        for option, value in spin_options.items():
-            action = QAction(option, spin_menu, checkable=True)
-            action.setChecked(self.spin_intake == value)
-            action.setData(value)
-            spin_action_group.addAction(action)
-            spin_menu.addAction(action)
-
-        spin_action_group.triggered.connect(self.set_spin_intake)
-
-        clamp_action = QAction("Clamp Goal", checkable=True)
-        clamp_action.setChecked(self.clamp_goal)
-        clamp_action.triggered.connect(self.toggle_clamp_goal)
-        attributes_menu.addAction(clamp_action)
-
-        doink_action = QAction("Toggle Doinker", checkable=True)
-        doink_action.setChecked(self.doink)
-        doink_action.triggered.connect(self.toggle_doinker)
-        attributes_menu.addAction(doink_action)
-
         stop_action = QAction("Stop at Node", checkable=True)
         stop_action.setChecked(self.stop)
         stop_action.triggered.connect(self.toggle_stop)
@@ -181,10 +147,6 @@ class Node(QGraphicsItem):
         turn_action = QAction("Turn Value: " + str(self.turn))
         turn_action.triggered.connect(self.set_turn)
         attributes_menu.addAction(turn_action)
-
-        lb_action = QAction("LB Value: " + str(self.lb))
-        lb_action.triggered.connect(self.set_lb)
-        attributes_menu.addAction(lb_action)
 
         wait_action = QAction("Wait time: " + str(self.wait_time))
         wait_action.triggered.connect(self.set_wait)
@@ -202,12 +164,11 @@ class Node(QGraphicsItem):
         insert_node_after_action.triggered.connect(self.insert_node_after)
         node_menu.addAction(insert_node_after_action)
 
-        for action in self.actions:
-            new_action = QAction(action)
-            new_action.triggered.connect(self.action_handler)
+        for i, action in enumerate(self.actions):
+            new_action = QAction(f"{action}: {self.action_values[i]}")
+            new_action.triggered.connect(lambda checked, p=i: self.action_handler(p))
             attributes_menu.addAction(new_action)
                 
-
         context_menu.addMenu(attributes_menu)
         context_menu.addMenu(node_menu)
 
@@ -240,30 +201,30 @@ class Node(QGraphicsItem):
         logger.info(f"End Node: {self.is_end_node}")
 
     def has_action(self):
+        for action_value in self.action_values:
+            if action_value != 0:
+                return True
+            
         return (
-            self.spin_intake
-            or self.clamp_goal
-            or self.is_reverse_node
+            self.is_reverse_node
             or self.stop
             or self.turn != 0
-            or self.lb != 0
             or self.wait_time != 0
         )
+    
+    def get_action_values(self):
+        return self.action_values
+    
+    def set_action_values(self, values):
+        if len(values) == len(self.action_values):
+            self.action_values = values
+            self.parent.update_path()
+            logger.info(f"Action values set to: {self.action_values}")
+        else:
+            logger.error("Invalid action values length")
 
     def is_stop_node(self):
         return self.stop
-
-    def set_spin_intake(self, action):
-        self.spin_intake = action.data()
-        logger.info(f"Spin Intake: {self.spin_intake}")
-
-    def toggle_clamp_goal(self):
-        self.clamp_goal = not self.clamp_goal
-        logger.info(f"Clamp Goal: {self.clamp_goal}")
-
-    def toggle_doinker(self):
-        self.doink = not self.doink
-        logger.info(f"Doinker: {self.doink}")
 
     def toggle_reverse(self):
         self.is_reverse_node = not self.is_reverse_node
@@ -293,30 +254,6 @@ class Node(QGraphicsItem):
             self.turn = dialog.intValue()
             self.parent.update_path()
             logger.info(f"Turn set to: {self.turn}")
-
-    def set_lb(self):
-        # Get the position of the node in screen coordinates
-        scene_pos = self.scenePos()
-        view_pos = self.scene().views()[0].mapFromScene(scene_pos)
-        screen_pos = self.scene().views()[0].viewport().mapToGlobal(view_pos)
-
-        # Create the dialog
-        dialog = QInputDialog(self.scene().views()[0])
-        dialog.setWindowTitle("Set LB")
-        dialog.setLabelText("Enter value (0-4):")
-        dialog.setIntRange(0, 4)
-        dialog.setIntValue(self.lb)
-
-        # Set the position of the dialog
-        dialog.move(
-            int(screen_pos.x() + self.radius), int(screen_pos.y() + self.radius)
-        )
-
-        # Show the dialog and get the result
-        if dialog.exec() == QInputDialog.DialogCode.Accepted:
-            self.lb = dialog.intValue()
-            self.parent.update_path()
-            logger.info(f"LB value set to: {self.lb}")
 
     def set_wait(self):
         # Get the position of the node in screen coordinates
@@ -361,7 +298,9 @@ class Node(QGraphicsItem):
         new_point = QPointF(self.pos().x() + 5, self.pos().y() + 5)
         self.parent.add_node(new_point, self.parent.index_of(self) + 1)
 
-    def action_handler(self):
+    def action_handler(self, action_index):
+        action_name = self.actions[action_index]
+
         # Get the position of the node in screen coordinates
         scene_pos = self.scenePos()
         view_pos = self.scene().views()[0].mapFromScene(scene_pos)
@@ -369,10 +308,10 @@ class Node(QGraphicsItem):
 
         # Create the dialog
         dialog = QInputDialog(self.scene().views()[0])
-        dialog.setWindowTitle("Set Action")
-        dialog.setLabelText("Enter Action Value:")
+        dialog.setWindowTitle(f"Set {action_name}")
+        dialog.setLabelText(f"Enter {action_name} value:")
         dialog.setDoubleRange(-1000, 1000)
-        dialog.setDoubleValue(self.turn)
+        dialog.setDoubleValue(self.action_values[action_index])
 
         # Set the position of the dialog
         dialog.move(
@@ -381,9 +320,9 @@ class Node(QGraphicsItem):
 
         # Show the dialog and get the result
         if dialog.exec() == QInputDialog.DialogCode.Accepted:
-            self.turn = dialog.doubleValue()
+            self.action_values[action_index] = dialog.doubleValue()
             self.parent.update_path()
-            logger.info(f"Turn set to: {self.turn}")
+            logger.info(f"{action_name} value set to: {self.action_values[action_index]}")
 
 
     def __str__(self):

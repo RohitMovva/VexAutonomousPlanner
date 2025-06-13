@@ -572,14 +572,11 @@ class PathWidget(QGraphicsView):
                 node.is_start_node = bool(node_data[2])
                 self.end_node = node if bool(node_data[3]) else self.end_node
                 node.is_end_node = bool(node_data[3])
-                node.spin_intake = node_data[4]
-                node.clamp_goal = bool(node_data[5])
-                node.doink = bool(node_data[6])
-                node.is_reverse_node = bool(node_data[7])
-                node.stop = bool(node_data[8])
-                node.turn = node_data[9]
-                node.lb = node_data[10]
-                node.wait_time = node_data[11]
+                node.is_reverse_node = bool(node_data[4])
+                node.stop = bool(node_data[5])
+                node.turn = node_data[6]
+                node.wait_time = node_data[7]
+                node.set_action_values(node_data[8:])
 
                 node.show()
 
@@ -588,12 +585,9 @@ class PathWidget(QGraphicsView):
                 self.convert_point(QPointF(action_data[0], action_data[1])),
                 action_data[2],
             )
-            action_point.spin_intake = action_data[3]
-            action_point.clamp_goal = action_data[4]
-            action_point.doink = action_data[5]
-            action_point.stop = action_data[6]
-            action_point.lb = action_data[7]
-            action_point.wait_time = action_data[8]
+            action_point.stop = action_data[3]
+            action_point.wait_time = action_data[4]
+            action_point.set_action_values(action_data[5:])
 
             action_point.show()
 
