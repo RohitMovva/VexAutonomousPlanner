@@ -123,6 +123,14 @@ class AutonomousPlannerGUIManager(QMainWindow):
 
         self.settings_dock_widget.set_current_coordinates(x, y)
 
+    def get_tangent_at_node(self, node):
+        """Get the tangent at the selected node"""
+        return self.central_widget.get_tangent_at_node(node)
+    
+    def set_tangent_at_node(self, node, tangent):
+        """Set the tangent at the selected node"""
+        self.central_widget.set_tangent_at_node(node, tangent)
+
     def create_menu_bar(self):
         menu_bar = self.menuBar()
 
@@ -355,6 +363,9 @@ class AutonomousPlannerGUIManager(QMainWindow):
                 else:
                     self.load_nodes_from_file(False)
 
+    def get_nodes(self):
+        return self.central_widget.get_nodes()
+
     def clear_nodes(self):
         logger.info("Clearing all nodes...")
         self.central_widget.clear_nodes()
@@ -471,8 +482,12 @@ class AutonomousPlannerGUIManager(QMainWindow):
         with open(self.routes_header_path, "w") as routes_file:
             routes_file.writelines(content)
 
+    def set_selected_node(self, node: node.Node):
+        """Set the currently selected node in the central widget"""
+        self.settings_dock_widget.set_selected_node(node)
+
     def switch_field(self, fieldType: str):
-        if fieldType == "High Stakes Match":
+        if fieldType == "Push Back Match":
             self.central_widget.update_image_path(
                 utilities.file_management.resource_path(
                     "../assets/V5RC-PushBack-Match-2000x2000.png"
@@ -488,6 +503,11 @@ class AutonomousPlannerGUIManager(QMainWindow):
     def set_velocity(self, new_velocity):
         self.max_velocity = new_velocity
         utilities.file_management.set_config_value("max_velocity", self.max_velocity)
+
+    def update_path_page(self):
+        """Update the current page view in the dock widget"""
+        self.settings_dock_widget.update_path_page()
+        logger.info("Path page updated")
 
     def set_acceleration(self, new_acceleration):
         self.max_acceleration = new_acceleration

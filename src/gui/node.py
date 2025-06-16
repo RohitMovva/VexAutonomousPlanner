@@ -23,6 +23,9 @@ class Node(QGraphicsItem):
         self.wait_time = 0
         self.dragging = False
 
+        self.locked = False
+        self.visible = True
+
         self.actions = list(self.parent.config_manager.get_section("actions"))
         self.action_values = [0 for _ in self.actions]
 
@@ -72,20 +75,39 @@ class Node(QGraphicsItem):
         painter.drawEllipse(self.boundingRect())
 
     def mousePressEvent(self, event):
-        if event.button() == Qt.MouseButton.LeftButton:
+        if event.button() == Qt.MouseButton.LeftButton and not self.locked:
             self.drag_start_position = event.pos()
+        self.parent.set_selected_node(self)
         super().mousePressEvent(event)
 
     def mouseMoveEvent(self, event):
-        if event.buttons() & Qt.MouseButton.LeftButton and self.drag_start_position:
+        if event.buttons() & Qt.MouseButton.LeftButton and self.drag_start_position and not self.locked:
             drag_distance = event.pos() - self.drag_start_position
             self.setPos(self.pos() + drag_distance)
             self.drag_start_position = event.pos()
             self.parent.update_path()
         super().mouseMoveEvent(event)
 
+    def set_visible(self, visible: bool):
+        self.visible = visible
+        if visible:
+            self.show()
+        else:
+            self.hide()
+        logger.info(f"Node visibility set to: {self.visible}")
+
+    def is_visible(self):
+        return self.visible
+    
+    def set_locked(self, locked: bool):
+        self.locked = locked
+        logger.info(f"Node locked set to: {self.locked}")
+    
+    def is_locked(self):
+        return self.locked
+
     def mouseReleaseEvent(self, event):
-        if event.button() == Qt.MouseButton.LeftButton:
+        if event.button() == Qt.MouseButton.LeftButton and not self.locked:
             self.drag_start_position = None
             self.abs_x = ((self.x() / (self.image_size)) - 0.5) * 12.3266567842 * 12
             self.abs_y = ((self.y() / (self.image_size)) - 0.5) * 12.3266567842 * 12
@@ -98,6 +120,8 @@ class Node(QGraphicsItem):
             change == QGraphicsItem.GraphicsItemChange.ItemPositionChange
             and self.scene()
         ):
+            if (self.locked):
+                return self.pos()
             new_pos = value
             if self.image_rect:
                 # Restrict the movement within the image boundaries
@@ -199,6 +223,14 @@ class Node(QGraphicsItem):
         self.update()
         self.parent.update_path()
         logger.info(f"End Node: {self.is_end_node}")
+
+    def get_name(self):
+        if (self.is_start_node):
+            return "Start Node"
+        elif (self.is_end_node):
+            return "End Node"
+        else:
+            return "Node"
 
     def has_action(self):
         for action_value in self.action_values:
