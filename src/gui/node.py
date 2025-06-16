@@ -88,6 +88,15 @@ class Node(QGraphicsItem):
             self.parent.update_path()
         super().mouseMoveEvent(event)
 
+    def set_position(self, x, y):
+        self.abs_x = x
+        self.abs_y = y
+        
+        new_pos = QPointF(((x / (12.3266567842 * 12)) + 0.5) * self.image_size, ((y / (12.3266567842 * 12)) + 0.5) * self.image_size)
+        self.setPos(new_pos)
+        self.parent.update_path()
+        # self.update()
+
     def set_visible(self, visible: bool):
         self.visible = visible
         if visible:

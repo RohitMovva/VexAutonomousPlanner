@@ -426,7 +426,6 @@ class PathWidget(QGraphicsView):
         self.viewport().update()  # Request a repaint of the viewport
 
     def save(self):
-        # pass
         self.parent.auto_save()
 
     def update_lines(self):

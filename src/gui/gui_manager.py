@@ -14,6 +14,7 @@ from PyQt6.QtWidgets import (
     QPushButton,
     QTextEdit,
     QVBoxLayout,
+    QWidget
 )
 
 import utilities.file_management

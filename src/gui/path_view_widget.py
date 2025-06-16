@@ -1,35 +1,71 @@
 from PyQt6.QtWidgets import (
-    QWidget, QVBoxLayout, QLabel, QHBoxLayout, QPushButton, QScrollArea, QSizePolicy, QGroupBox, QFormLayout, QDoubleSpinBox
+    QWidget, QVBoxLayout, QLabel, QHBoxLayout, QPushButton, QScrollArea, QSizePolicy, QGroupBox, QFormLayout, QDoubleSpinBox, QSpacerItem
 )
 from PyQt6.QtGui import QIcon
 from PyQt6.QtCore import QSize, Qt
 import numpy as np
 
+from gui import node
+
 import utilities
+import logging
+
+logger = logging.getLogger(__name__)
 
 class PathViewWidget(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.gui_manager = parent  # Assuming parent is the gui manager
 
-        self.layout = QVBoxLayout(self)
+        scroll_area = QScrollArea()
+        scroll_area.setWidgetResizable(True)
+        scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+
+        path_view_content = QWidget()
+        main_layout = QVBoxLayout(path_view_content)
+        main_layout.setSpacing(10)
 
         # Scroll area for node list
-        self.scroll_area = QScrollArea(self)
-        self.scroll_area.setWidgetResizable(True)
-        self.scroll_content = QWidget()
-        self.scroll_layout = QVBoxLayout(self.scroll_content)
+        self.node_area = QScrollArea(self)
+        self.node_area.setWidgetResizable(True)
+        self.node_content = QWidget()
+        self.node_layout = QVBoxLayout(self.node_content)
 
-        self.scroll_content.setLayout(self.scroll_layout)
-        self.scroll_area.setWidget(self.scroll_content)
-        self.layout.addWidget(self.scroll_area)
+        self.node_content.setLayout(self.node_layout)
+        self.node_area.setWidget(self.node_content)
+        main_layout.addWidget(self.node_area)
 
-        # --- Spline Options View ---
-        self.spline_options_widget = QWidget()
-        self.spline_options_layout = QVBoxLayout(self.spline_options_widget)
-        self.spline_options_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.addItem(
+            QSpacerItem(
+                20, 20, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Expanding
+            )
+        )
 
-        self.selected_node = None
+        self.selected_node: node.Node = None
+
+        # Position Section
+        self.position_group = QGroupBox("Position")
+        self.position_form = QFormLayout()
+
+        self.position_x = QDoubleSpinBox()
+        self.position_x.setRange(-10000.0, 10000.0)
+        self.position_x.setDecimals(3)
+
+        self.position_y = QDoubleSpinBox()
+        self.position_y.setRange(-10000.0, 10000.0)
+        self.position_y.setDecimals(3)
+
+        self.position_form.addRow("X:", self.position_x)
+        self.position_form.addRow("Y:", self.position_y)
+
+        self.position_group.setLayout(self.position_form)
+        main_layout.addWidget(self.position_group)
+
+        self.position_y.valueChanged.connect(self.on_position_changed)
+        self.position_x.valueChanged.connect(self.on_position_changed)
+        
+        # Connect position spinboxes to update handler
+
 
 
         # Ending Tangent Section
@@ -52,26 +88,31 @@ class PathViewWidget(QWidget):
         self.magnitude_outgoing.setRange(0.0, 10000.0)
         self.magnitude_outgoing.setDecimals(3)
 
-        self.tangent_form.addRow("dx:", self.tangent_dx)
-        self.tangent_form.addRow("dy:", self.tangent_dy)
+        self.tangent_form.addRow("dX:", self.tangent_dx)
+        self.tangent_form.addRow("dY:", self.tangent_dy)
         self.tangent_form.addRow("Incoming Magnitude:", self.magnitude_incoming)
         self.tangent_form.addRow("Outgoing Magnitude:", self.magnitude_outgoing)
         self.tangent_group.setLayout(self.tangent_form)
-        self.spline_options_layout.addWidget(self.tangent_group)
+        main_layout.addWidget(self.tangent_group)
 
         # Connect tangent spinboxes to update handler
         self.tangent_dx.valueChanged.connect(self.on_tangent_changed)
         self.tangent_dy.valueChanged.connect(self.on_tangent_changed)
 
-        # Pin spline options to bottom
-        self.layout.addWidget(self.spline_options_widget, alignment=Qt.AlignmentFlag.AlignBottom)
+        scroll_area.setWidget(path_view_content)
 
+        # Pin spline options to bottom
+        # self.layout.addWidget(self.spline_options_widget, alignment=Qt.AlignmentFlag.AlignBottom)
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.addWidget(scroll_area)
+        self.setLayout(layout)
         self.update_view()
 
     def update_view(self):
         # Clear existing widgets
-        while self.scroll_layout.count():
-            item = self.scroll_layout.takeAt(0)
+        while self.node_layout.count():
+            item = self.node_layout.takeAt(0)
             widget = item.widget()
             if widget is not None:
                 widget.deleteLater()
@@ -133,9 +174,9 @@ class PathViewWidget(QWidget):
             if node is self.selected_node:
                 # highlight the node
                 node_widget.setStyleSheet("background-color: #000000;")
-            self.scroll_layout.addWidget(node_widget)
+            self.node_layout.addWidget(node_widget)
 
-        self.scroll_layout.addStretch()
+        self.node_layout.addStretch()
 
     # Placeholder callback methods
     def on_lock_clicked(self, node, button):
@@ -149,9 +190,14 @@ class PathViewWidget(QWidget):
 
     def set_selected_node(self, node):
         self.selected_node = node
-        self.tangent_dx.setValue(self.gui_manager.get_tangent_at_node(node)[0])
-        self.tangent_dy.setValue(self.gui_manager.get_tangent_at_node(node)[1])
+        tangent = self.gui_manager.get_tangent_at_node(node)
+        self.tangent_dx.setValue(tangent[0])
+        self.tangent_dy.setValue(tangent[1])
 
+        pos = (self.selected_node.get_abs_x(), self.selected_node.get_abs_y())
+        self.position_x.setValue(pos[0])
+        self.position_y.setValue(pos[1])
+    
         self.update_view()
 
     def on_eye_clicked(self, node, button):
@@ -172,3 +218,9 @@ class PathViewWidget(QWidget):
             print(f"Tangent changed: {self.tangent_dx.value()}, {self.tangent_dy.value()}")
             tangent = np.array([self.tangent_dx.value(), self.tangent_dy.value()])
             self.gui_manager.set_tangent_at_node(self.selected_node, tangent)
+
+    def on_position_changed(self):
+        if (self.selected_node is not None):
+            position = (self.position_x.value(), self.position_y.value())
+            self.selected_node.set_position(position[0], position[1])
+            
