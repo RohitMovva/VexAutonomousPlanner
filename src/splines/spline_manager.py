@@ -128,10 +128,8 @@ class QuinticHermiteSplineManager:
                         spline.ending_tangent = dif_vector
                         start_tangent = -1 * dif_vector
 
-                # spline.set_tangent(self.set_tangents[i], i)
-
                 if not spline.fit(current_points[:, 0], current_points[:, 1]):
-                    print("Failed to fit spline")
+                    logger.error(f"Failed to fit spline for points {current_points}")
                     return False
                 self.splines.append(spline)
 
@@ -146,18 +144,17 @@ class QuinticHermiteSplineManager:
         self.lookup_table = None
         return True
 
-    def set_tangent_at_node(self, node: Node, tangent: np.ndarray):
+    def set_tangent_at_node(self, node: Node, incoming_tangent: np.ndarray, outgoing_tangent: np.ndarray):
         """
         Set the tangent at the given node.
         """
         if not self.splines:
             raise ValueError("No splines have been initialized")
         
-        print(f"Setting tangent at node {node} to {tangent}")
-        self.set_tangents[self.nodes.index(node)] = tangent
+        self.set_tangents[self.nodes.index(node)] = [incoming_tangent, outgoing_tangent]
         spline_idx, local_t = self._map_parameter_to_spline(self.nodes.index(node))
         
-        self.splines[spline_idx].set_tangent(tangent, round(local_t))
+        self.splines[spline_idx].set_tangent([incoming_tangent, outgoing_tangent], round(local_t))
 
     def get_magnitudes_at_parameter(self, idx):
         spline_idx, local_t = self._map_parameter_to_spline(idx)
@@ -165,7 +162,7 @@ class QuinticHermiteSplineManager:
         if (spline_idx == 0 and local_t == 0):
             return [0, self.splines[spline_idx].get_magnitude(0)]
         elif (spline_idx == len(self.splines)-1 and local_t == self.splines[spline_idx].percent_to_parameter(100)):
-            return [self.splines[spline_idx].get_magnitude[-1], 0]
+            return [self.splines[spline_idx].get_magnitude(-1), 0]
         
         return [self.splines[spline_idx].get_magnitude(round(local_t)-1), self.splines[spline_idx].get_magnitude(round(local_t))]
         

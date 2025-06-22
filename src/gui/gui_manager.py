@@ -304,7 +304,7 @@ class AutonomousPlannerGUIManager(QMainWindow):
         ]
 
         logger.info(
-            f"nodes map length {len(nodes_map)}, node actions length {len(nodes_actions)}"
+            f"Nodes map length {len(nodes_map)}, Node actions length {len(nodes_actions)}"
         )
         for i in range(0, len(nodes_map)):
             nodes_data.insert(int(nodes_map[i] / 1) + i, nodes_actions[i])

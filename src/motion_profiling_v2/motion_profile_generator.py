@@ -548,12 +548,6 @@ def generate_motion_profile(
     for i in range(len(left_wheel_vels)):
         left_wheel_accs.append((left_wheel_vels[i] - left_wheel_vels[i - 1]) / dt)
         right_wheel_accs.append((right_wheel_vels[i] - right_wheel_vels[i - 1]) / dt)
-    # for acc in right_wheel_accs:
-        # print(acc)
-    # print(right_wheel_accs)
-    # for vel in left_wheel_vels:
-    #     print(vel)
-    # print(right_wheel_vels)
 
     return (
         times,

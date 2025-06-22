@@ -92,7 +92,7 @@ class Node(QGraphicsItem):
         self.abs_x = x
         self.abs_y = y
         
-        new_pos = QPointF(((x / (12.3266567842 * 12)) + 0.5) * self.image_size, ((y / (12.3266567842 * 12)) + 0.5) * self.image_size)
+        new_pos = QPointF(((x / (12.1090395251 * 12)) + 0.5) * self.image_size, ((y / (12.1090395251 * 12)) + 0.5) * self.image_size)
         self.setPos(new_pos)
         self.parent.update_path()
         # self.update()

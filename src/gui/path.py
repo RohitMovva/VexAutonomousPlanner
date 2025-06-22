@@ -358,13 +358,10 @@ class PathWidget(QGraphicsView):
         points = np.array([[point.x(), point.y()] for point in points])
 
         for i in range(len(points)):
-            points[i][0] = (points[i][0] / (2000) - 0.5) * 12.3266567841
-            points[i][1] = (points[i][1] / (2000) - 0.5) * 12.3266567841
+            points[i][0] = (points[i][0] / (2000) - 0.5) * 12.1090395251
+            points[i][1] = (points[i][1] / (2000) - 0.5) * 12.1090395251
 
-        print(f"Tangent map: {self.tangent_map}")
         set_tangents = [[self.tangent_map[node][0], self.tangent_map[node][1]] for node in nodes]
-        # set_tangents = np.zeros((len(nodes), 2))
-        print(f"Set tangents: {set_tangents}")
 
         self.spline_manager.build_path(points, nodes, action_points, set_tangents)
         t_values = np.linspace(0, len(points) - 1, 25 * len(self.nodes))
@@ -376,10 +373,10 @@ class PathWidget(QGraphicsView):
             self.path = QPainterPath()
             for i in range(len(spline_points)):
                 spline_points[i][0] = (
-                    spline_points[i][0] / (12.3266567841) + 0.5
+                    spline_points[i][0] / (12.1090395251) + 0.5
                 ) * 2000
                 spline_points[i][1] = (
-                    spline_points[i][1] / (12.3266567841) + 0.5
+                    spline_points[i][1] / (12.1090395251) + 0.5
                 ) * 2000
             self.path.moveTo(spline_points[0][0], spline_points[0][1])
             for p in spline_points[1:]:
@@ -404,14 +401,12 @@ class PathWidget(QGraphicsView):
             self.path = QPainterPath()
 
         for action_node in self.action_points:
-            # print("an")
             t = action_node.t
             point = self.spline_manager.get_point_at_parameter(t)
 
-            point = (point / (12.3266567842) + 0.5) * 2000
+            point = (point / (12.1090395251) + 0.5) * 2000
 
             action_node.setPos(QPointF(point[0], point[1]))
-        # print()
 
         pen = QPen(QColor("#0a0612"), 4)  # dark purple (looks cool)
         self.path_item.setPen(pen)
@@ -455,8 +450,6 @@ class PathWidget(QGraphicsView):
 
     def add_action_point(self, point: QPointF, t: float, pos=-1):
         new_action_point = action_point.ActionPoint(point.x(), point.y(), t, self)
-        # print("adding action point")
-        # print(self.action_points)
         if len(self.action_points) == 0:
             self.action_points.append(new_action_point)
 
@@ -468,13 +461,7 @@ class PathWidget(QGraphicsView):
                     break
             if i == len(self.action_points)-1:
                 self.action_points.append(new_action_point)
-        # print("action points after adding")
-        # print(self.action_points)
-        # print("Action points:")
-        # for p in self.action_points:
-        #     print(p.t)
-        # print()
-
+                
         self.scene.addItem(new_action_point)
         new_action_point.show()
 
@@ -533,7 +520,7 @@ class PathWidget(QGraphicsView):
             return [0, 0]
     
     def set_tangent_at_node(self, node, tangent, incoming_magnitude, outgoing_magnitude):
-        self.spline_manager.set_tangent_at_node(node, tangent)
+        self.spline_manager.set_tangent_at_node(node, tangent*incoming_magnitude, tangent*outgoing_magnitude)
         self.tangent_map[node] = [tangent*incoming_magnitude, tangent*outgoing_magnitude]
         self.update_path()
 
@@ -687,7 +674,7 @@ class PathWidget(QGraphicsView):
 
         # Convert point to numpy array w/ inches
         point = np.array([point.x(), point.y()])
-        point = (point / (2000) - 0.5) * 12.3266567841
+        point = (point / (2000) - 0.5) * 12.1090395251
 
         # First pass: coarse search with larger steps
         num_steps = 25 * len(self.nodes)
@@ -724,7 +711,7 @@ class PathWidget(QGraphicsView):
                 closest_parameter = path_param
 
         # Convert closest point to QPointF with pixels
-        closest_point = (closest_point / (12.3266567841) + 0.5) * 2000
+        closest_point = (closest_point / (12.1090395251) + 0.5) * 2000
 
         return QPointF(closest_point[0], closest_point[1]), closest_parameter
 
