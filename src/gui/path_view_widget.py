@@ -98,6 +98,8 @@ class PathViewWidget(QWidget):
         self.magnitude_incoming.valueChanged.connect(self.on_tangent_changed)
         self.magnitude_outgoing.valueChanged.connect(self.on_tangent_changed)
 
+        self.changing_node = False
+
         scroll_area.setWidget(path_view_content)
 
         # Pin spline options to bottom
@@ -187,10 +189,12 @@ class PathViewWidget(QWidget):
         button.setIcon(QIcon(icon_path))
 
     def set_selected_node(self, node):
+        self.changing_node = True
         self.selected_node = node
 
         self.update_selected_node()
-    
+
+        self.changing_node = False
         self.update_view()
 
     def update_selected_node(self):
@@ -226,10 +230,13 @@ class PathViewWidget(QWidget):
 
     def on_tangent_changed(self):
         """Handle changes to the tangent form values"""
-        if self.selected_node is not None and self.magnitude_outgoing.value() > 0:
+        if not self.changing_node and self.magnitude_outgoing.value() > 0:
             tangent = np.array([self.tangent_dx.value(), self.tangent_dy.value()])
-            self.gui_manager.set_tangent_at_node(self.selected_node, tangent, self.magnitude_incoming.value(), self.magnitude_outgoing.value())
-
+            self.selected_node.set_tangent(tangent)
+            self.selected_node.set_incoming_magnitude(self.magnitude_incoming.value())
+            self.selected_node.set_outgoing_magnitude(self.magnitude_outgoing.value())
+            self.gui_manager.update_path()
+            
     def on_position_changed(self):
         if (self.selected_node is not None):
             position = (self.position_x.value(), self.position_y.value())

@@ -100,7 +100,6 @@ class PathWidget(QGraphicsView):
         self.headings = []
         self.nodes_map = []  # Represents index of node n in any of the above lists
         self.actions_map = []  # Represents index of action point n in any of the above lists
-        self.tangent_map = {} # Node: Tangent
 
         self.nodes: List[node.Node] = []
         self.action_points: List[action_point.ActionPoint] = []
@@ -361,9 +360,7 @@ class PathWidget(QGraphicsView):
             points[i][0] = (points[i][0] / (2000) - 0.5) * 12.1090395251
             points[i][1] = (points[i][1] / (2000) - 0.5) * 12.1090395251
 
-        set_tangents = [[self.tangent_map[node][0], self.tangent_map[node][1], self.tangent_map[node][2]] for node in nodes]
-
-        self.spline_manager.build_path(points, nodes, action_points, set_tangents)
+        self.spline_manager.build_path(points, nodes, action_points)
         t_values = np.linspace(0, len(points) - 1, 25 * len(self.nodes))
         spline_points = np.array(
             [self.spline_manager.get_point_at_parameter(t) for t in t_values]
@@ -438,8 +435,6 @@ class PathWidget(QGraphicsView):
         new_node.setPos(point)
         self.scene.addItem(new_node)
 
-        self.tangent_map[new_node] = [None, None, None]
-
         new_node.show()
         self.update_path()
 
@@ -476,8 +471,6 @@ class PathWidget(QGraphicsView):
                 self.start_node = None
             if remove_node == self.end_node:
                 self.end_node = None
-
-            self.tangent_map.pop(remove_node)
 
         self.parent.update_path_page()
         self.update_path()
@@ -517,11 +510,6 @@ class PathWidget(QGraphicsView):
             return self.spline_manager.get_derivative_at_parameter(self.nodes.index(node))
         else:
             return [0, 0]
-    
-    def set_tangent_at_node(self, node, tangent, incoming_magnitude, outgoing_magnitude):
-        self.spline_manager.set_tangent_at_node(node, tangent, incoming_magnitude, outgoing_magnitude)
-        self.tangent_map[node] = [tangent, incoming_magnitude, outgoing_magnitude]
-        self.update_path()
 
     def get_incoming_magnitude_at_node(self, node):
         if (self.spline_manager.splines):
@@ -614,9 +602,16 @@ class PathWidget(QGraphicsView):
                 node.stop = bool(node_data[5])
                 node.turn = node_data[6]
                 node.wait_time = node_data[7]
-                node.set_action_values(node_data[8:])
+                node.tangent = node_data[8]
+                node.incoming_magnitude = (node_data[9])
+                node.outgoing_magnitude = node_data[10]
+                node.set_action_values(node_data[11:])
 
+                if (node_data[8] is not None):
+                    node.set_tangent(np.array(node_data[8]))
                 node.show()
+
+                
 
         for action_data in action_data:
             action_point = self.add_action_point(

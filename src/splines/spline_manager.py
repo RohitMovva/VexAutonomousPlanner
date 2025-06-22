@@ -37,10 +37,9 @@ class QuinticHermiteSplineManager:
         self.arc_length: float = 0.0  # Store the total arc length of the path
         self.lookup_table: Optional[PathLookupTable] = None
         self._precomputed_properties: Optional[Dict] = None
-        self.set_tangents: Optional[np.ndarray] = None
 
     def build_path(
-        self, points: np.ndarray, nodes: List[Node], action_points: List[ActionPoint], set_tangents: Optional[np.ndarray] = None
+        self, points: np.ndarray, nodes: List[Node], action_points: List[ActionPoint]
     ) -> bool:
         """
         Build a complete path through the given points and nodes.
@@ -53,7 +52,6 @@ class QuinticHermiteSplineManager:
         self.splines = []
         self.nodes = nodes
         self.action_points = action_points
-        self.set_tangents = set_tangents
 
         current_start_idx = 0
         start_tangent = None
@@ -63,11 +61,10 @@ class QuinticHermiteSplineManager:
                 # Create spline segment
                 current_points = points[current_start_idx : i + 1]
                 spline = QuinticHermiteSpline()
-                logger.info(f"Setting tangents: {self.set_tangents}")
                 tangents = []
-                for i in range(len(self.set_tangents)):
-                    if self.set_tangents[i] is not None and self.set_tangents[i][0] is not None:
-                        tangents.append([self.set_tangents[i][0]*self.set_tangents[i][1], self.set_tangents[i][0]*self.set_tangents[i][2]])
+                for node in self.nodes[current_start_idx:i + 1]:
+                    if node.tangent is not None:
+                        tangents.append([node.tangent*node.incoming_magnitude, node.tangent*node.outgoing_magnitude])
                     else:
                         tangents.append([None, None])
 
@@ -151,22 +148,10 @@ class QuinticHermiteSplineManager:
         self.lookup_table = None
         return True
 
-    def set_tangent_at_node(self, node: Node, tangent: np.ndarray, incoming_magnitude: float, outgoing_magnitude: float) -> None:
-        """
-        Set the tangent at the given node.
-        """
-        if not self.splines:
-            raise ValueError("No splines have been initialized")
-        
-        self.set_tangents[self.nodes.index(node)] = [tangent, incoming_magnitude, outgoing_magnitude]
-        spline_idx, local_t = self._map_parameter_to_spline(self.nodes.index(node))
-        
-        self.splines[spline_idx].set_tangent([tangent*incoming_magnitude, tangent*outgoing_magnitude], round(local_t))
-
     def get_magnitudes_at_parameter(self, idx):
         spline_idx, local_t = self._map_parameter_to_spline(idx)
-        if (self.set_tangents[idx] is not None and self.set_tangents[idx][0] is not None):
-            return [self.set_tangents[idx][1], self.set_tangents[idx][2]]
+        if (self.nodes[idx].tangent is not None):
+            return [self.nodes[idx].incoming_magnitude, self.nodes[idx].outgoing_magnitude]
         
         if (spline_idx == 0 and local_t == 0):
             return [0, self.splines[spline_idx].get_magnitude(0)]

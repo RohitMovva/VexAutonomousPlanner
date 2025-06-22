@@ -45,6 +45,10 @@ class Node(QGraphicsItem):
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemSendsGeometryChanges)
         self.drag_start_position = None
 
+        self.tangent = None
+        self.incoming_magnitude = None
+        self.outgoing_magnitude = None
+
     def get_abs_x(self):
         self.abs_x = ((self.x() / (self.image_size)) - 0.5) * 145.308474301
         return self.abs_x
@@ -52,6 +56,26 @@ class Node(QGraphicsItem):
     def get_abs_y(self):
         self.abs_y = ((self.y() / (self.image_size)) - 0.5) * 145.308474301
         return self.abs_y
+    
+    def set_tangent(self, tangent):
+        self.tangent = tangent
+
+    def get_tangent(self, aslist=False):
+        if (aslist):
+            return self.tangent.tolist() if self.tangent is not None else None
+        return self.tangent
+
+    def set_incoming_magnitude(self, magnitude):
+        self.incoming_magnitude = magnitude
+
+    def get_incoming_magnitude(self):
+        return self.incoming_magnitude
+
+    def set_outgoing_magnitude(self, magnitude):
+        self.outgoing_magnitude = magnitude
+
+    def get_outgoing_magnitude(self):
+        return self.outgoing_magnitude
 
     def boundingRect(self):
         return QRectF(-self.radius, -self.radius, 2 * self.radius, 2 * self.radius)
