@@ -18,6 +18,7 @@ sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8")
 if __name__ == "__main__":
     setup_global_logger(level=logging.INFO, mode=LogMode.FILE_ONLY)
 
+
     logger = logging.getLogger(__name__)
     logger.info("Application started")
 
@@ -26,7 +27,10 @@ if __name__ == "__main__":
         ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
     app = QApplication(sys.argv)
 
-    app.setStyleSheet(qdarktheme.load_stylesheet())
+#     app.setStyleSheet(qdarktheme.load_stylesheet())
+
+    qdarktheme.setup_theme()
+
     plt.style.use("dark_background")
 
     if getattr(sys, "frozen", False):

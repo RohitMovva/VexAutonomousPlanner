@@ -37,9 +37,10 @@ class QuinticHermiteSplineManager:
         self.arc_length: float = 0.0  # Store the total arc length of the path
         self.lookup_table: Optional[PathLookupTable] = None
         self._precomputed_properties: Optional[Dict] = None
+        self.set_tangents: Optional[np.ndarray] = None
 
     def build_path(
-        self, points: np.ndarray, nodes: List[Node], action_points: List[ActionPoint]
+        self, points: np.ndarray, nodes: List[Node], action_points: List[ActionPoint], set_tangents: Optional[np.ndarray] = None
     ) -> bool:
         """
         Build a complete path through the given points and nodes.
@@ -52,6 +53,7 @@ class QuinticHermiteSplineManager:
         self.splines = []
         self.nodes = nodes
         self.action_points = action_points
+        self.set_tangents = set_tangents
 
         current_start_idx = 0
         start_tangent = None
@@ -61,12 +63,11 @@ class QuinticHermiteSplineManager:
                 # Create spline segment
                 current_points = points[current_start_idx : i + 1]
                 spline = QuinticHermiteSpline()
-
-                if not spline.fit(current_points[:, 0], current_points[:, 1]):
-                    return False
+                logger.info(f"Setting tangents: {self.set_tangents}")
+                spline.set_all_tangents(self.set_tangents)
 
                 if start_tangent is not None:
-                    spline.set_starting_tangent(start_tangent)
+                    spline.starting_tangent = start_tangent
                     start_tangent = None
 
                 # Handle tangent continuity at split points
@@ -105,10 +106,10 @@ class QuinticHermiteSplineManager:
 
                         # Apply rotation to the previous vector to get the next tangent
                         next_tangent = rotation_matrix @ prev_vector
-                        next_tangent = next_tangent * min_length
+                        next_tangent = next_tangent# * min_length
 
                         # Set end tangent for current spline and start tangent for next spline
-                        spline.set_ending_tangent(prev_vector * min_length)
+                        spline.set_ending_tangent(prev_vector)# * min_length)
                         start_tangent = next_tangent
 
                     else:  # Reverse node
@@ -123,12 +124,15 @@ class QuinticHermiteSplineManager:
                         min_length = min(prev_length, next_length)
                         dif_vector = dif_vector * min_length
 
-
-                        print(f"dif_vector: {dif_vector}")
                         # Set end tangent for current spline
-                        spline.set_ending_tangent(dif_vector)
+                        spline.ending_tangent = dif_vector
                         start_tangent = -1 * dif_vector
 
+                # spline.set_tangent(self.set_tangents[i], i)
+
+                if not spline.fit(current_points[:, 0], current_points[:, 1]):
+                    print("Failed to fit spline")
+                    return False
                 self.splines.append(spline)
 
                 if (nodes[i].is_reverse_node or nodes[i].turn != 0) and i < len(
@@ -136,9 +140,37 @@ class QuinticHermiteSplineManager:
                 ) - 1:
                     current_start_idx = i
 
+            
+
         self.arc_length = None
         self.lookup_table = None
         return True
+
+    def set_tangent_at_node(self, node: Node, tangent: np.ndarray):
+        """
+        Set the tangent at the given node.
+        """
+        if not self.splines:
+            raise ValueError("No splines have been initialized")
+        
+        print(f"Setting tangent at node {node} to {tangent}")
+        self.set_tangents[self.nodes.index(node)] = tangent
+        spline_idx, local_t = self._map_parameter_to_spline(self.nodes.index(node))
+        
+        self.splines[spline_idx].set_tangent(tangent, round(local_t))
+
+    def get_magnitudes_at_parameter(self, idx):
+        spline_idx, local_t = self._map_parameter_to_spline(idx)
+
+        if (spline_idx == 0 and local_t == 0):
+            return [0, self.splines[spline_idx].get_magnitude(0)]
+        elif (spline_idx == len(self.splines)-1 and local_t == self.splines[spline_idx].percent_to_parameter(100)):
+            return [self.splines[spline_idx].get_magnitude[-1], 0]
+        
+        return [self.splines[spline_idx].get_magnitude(round(local_t)-1), self.splines[spline_idx].get_magnitude(round(local_t))]
+        
+
+        
 
     def get_point_at_parameter(self, t: float) -> np.ndarray:
         """
@@ -179,24 +211,6 @@ class QuinticHermiteSplineManager:
 
         return second_derivative
 
-    def get_third_derivative_at_parameter(self, t: float) -> np.ndarray:
-        """
-        Get third derivative on the complete path at parameter t.
-        Handles direction changes at reverse nodes.
-        """
-        if not self.splines:
-            raise ValueError("No splines have been initialized")
-
-        spline_idx, local_t = self._map_parameter_to_spline(t)
-        third_derivative = self.splines[spline_idx].get_third_derivative(local_t)
-
-        # Check if we're in a reverse segment
-        # reverse_count = sum(1 for node in self.nodes[:spline_idx+1] if node.is_reverse_node)
-        # if reverse_count % 2 == 1:
-        #     third_derivative = -third_derivative
-
-        return third_derivative
-
     def _map_parameter_to_spline(self, t: float) -> Tuple[int, float]:
         """
         Map a global parameter t to a specific spline index and local parameter.
@@ -230,28 +244,6 @@ class QuinticHermiteSplineManager:
 
         # This should never happen due to our handling
         raise ValueError("Failed to map parameter to spline segment")
-
-    def _initialize_spline_segment(
-        self, points: np.ndarray, start_node: Node, end_node: Node
-    ) -> QuinticHermiteSpline:
-        """
-        Initialize a single spline segment between two nodes with given constraints.
-        """
-        pass
-
-    def _compute_transition_derivatives(
-        self,
-        prev_spline: QuinticHermiteSpline,
-        next_spline: QuinticHermiteSpline,
-        node: Node,
-    ) -> Tuple[np.ndarray, np.ndarray]:
-        """
-        Compute derivatives at transition points between splines to ensure continuity.
-
-        Returns:
-            Tuple of (first_derivative, second_derivative) at transition
-        """
-        pass
 
     def percent_to_parameter(self, percent: float) -> np.ndarray:
         """

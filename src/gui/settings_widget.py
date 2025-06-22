@@ -43,9 +43,9 @@ class SettingsWidget(QWidget):
 
         # Add Field Type drop-down menu
         self.field_type_combo = QComboBox()
-        self.field_type_combo.addItems(["High Stakes Match", "High Stakes Skills"])
+        self.field_type_combo.addItems(["Push Back Match", "Push Back Skills"])
         current_field_type = self.config_manager.get_value(
-            "field", "type", "High Stakes Match"
+            "field", "type", "Push Back Match"
         )
         index = self.field_type_combo.findText(current_field_type)
         self.field_type_combo.setCurrentIndex(index if index >= 0 else 0)

@@ -37,7 +37,7 @@ class ConfigManager:
                 "max_jerk": 16.0,  # ft/s³
             },
             "field": {
-                "type": "High Stakes Match",
+                "type": "Push Back Match",
             },
             "files": {
                 "header_folder": "",  # Header file output folder

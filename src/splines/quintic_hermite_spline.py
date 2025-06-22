@@ -25,6 +25,8 @@ class QuinticHermiteSpline(Spline):
         self.starting_tangent: Optional[np.ndarray] = None
         self.ending_tangent: Optional[np.ndarray] = None
 
+        self.set_tangents: Optional[np.ndarray] = None
+
     def fit(
         self,
         x: np.ndarray,
@@ -69,6 +71,7 @@ class QuinticHermiteSpline(Spline):
                 self._compute_derivatives()
 
             self.segments = []
+            self.segment_lengths = []
             logger.debug("\n=== Computing Segments ===")
             for i in range(len(x) - 1):
                 p0 = self.control_points[i]
@@ -79,6 +82,17 @@ class QuinticHermiteSpline(Spline):
                 dd1 = self.second_derivatives[i + 1]
 
                 segment_length = np.linalg.norm(p1 - p0)
+                self.segment_lengths.append(segment_length)
+                if (i > 0):
+                    prev_segment_length = (np.linalg.norm(self.control_points[i+1] - self.control_points[i]) + np.linalg.norm(self.control_points[i] - self.control_points[i-1])) / 2
+                # else:
+                prev_segment_length = segment_length
+
+                if (i < len(x) - 2):
+                    next_segment_length = (np.linalg.norm(self.control_points[i+2] - self.control_points[i+1]) + np.linalg.norm(self.control_points[i+1] - self.control_points[i])) / 2
+                # else:
+                next_segment_length = segment_length
+
                 logger.debug(f"\nSegment {i}:")
                 logger.debug(f"  Points: p0={p0}, p1={p1}")
                 logger.debug(f"  Original derivatives: d0={d0}, d1={d1}")
@@ -86,10 +100,19 @@ class QuinticHermiteSpline(Spline):
 
                 if segment_length > 0:
                     # Scale derivatives by segment length
-                    # d0_scaled = d0 * segment_length
-                    # d1_scaled = d1 * segment_length
-                    # dd0_scaled = dd0 * (segment_length**2)
-                    # dd1_scaled = dd1 * (segment_length**2)
+
+                    d0_scaled = d0 * prev_segment_length
+                    d1_scaled = d1 * next_segment_length
+                    dd0_scaled = dd0 * (prev_segment_length**2)
+                    dd1_scaled = dd1 * (next_segment_length**2)
+
+                    logger.info(f"Set tanents: {self.set_tangents}")
+                    if (self.set_tangents and self.set_tangents[i] and self.set_tangents[i][1]):
+                        logger.info(f"Setting tangent: {self.set_tangents[i][1]}")
+                        d0_scaled = self.set_tangents[i][1]
+                    if (self.set_tangents and self.set_tangents[i+1] and self.set_tangents[i+1][0]):
+                        logger.info(f"Setting tangent: {self.set_tangents[i+1][0]}")
+                        d1_scaled = self.set_tangents[i+1][0]
 
                     logger.debug(f"  Scaled derivatives: d0={d0}, d1={d1}")
                     logger.debug(
@@ -116,6 +139,16 @@ class QuinticHermiteSpline(Spline):
             logger.error(f"Error during fitting: {str(e)}")
             return False
 
+    def set_tangent(self, tangent: np.ndarray, index: int):
+        if (self.set_tangents is None):
+            self.set_tangents = np.zeros_like(self.control_points, dtype=float)
+        self.set_tangents[index] = tangent
+        print(f"Set tangents: {self.set_tangents}")
+
+    def set_all_tangents(self, tangents: np.ndarray):
+        logger.debug(f"Setting all tangents: {tangents}")
+        self.set_tangents = tangents
+
     def _compute_derivatives(self) -> None:
         """Modified version with corrected second derivative scaling"""
         logger.debug("\n=== Computing Derivatives ===")
@@ -137,13 +170,41 @@ class QuinticHermiteSpline(Spline):
 
         logger.debug("\nComputing first derivatives:")
         for i in range(num_points):
+            # if (self.set_tangents is not None):
+            #     logger.info(f"Comparing {self.set_tangents[i]} to {np.array([0, 0], dtype=float)}")
+            # if (self.set_tangents is not None and self.set_tangents[i][0] is not None):
+            #     logger.info(f"Setting tangent at index {i} to {self.set_tangents[i]}")
+            #     print(f"Setting tangent at index {i} to {self.set_tangents[i]}")
+            #     self.first_derivatives[i] = self.set_tangents[i]
+            #     if (i == 0):
+            #         self.first_derivatives[i] /= np.linalg.norm(self.control_points[i+1] - self.control_points[i])
+            #     elif i == num_points - 1:
+            #         self.first_derivatives[i] /= np.linalg.norm(self.control_points[i] - self.control_points[i-1])
+            #     else:
+            #         self.first_derivatives[i] /= (np.linalg.norm(self.control_points[i+1] - self.control_points[i]) + np.linalg.norm(self.control_points[i] - self.control_points[i-1])) / 2
+            #     self.first_derivatives[i] *= scale_factor
+
+            #     logger.info(f"First derivative: {self.first_derivatives[i]}")
+            #     continue
+            
             if i == 0:
-                self.first_derivatives[i] = chords[0] * scale_factor# / distances[0]
+
+                if (num_points == 2 and self.ending_tangent is not None):
+                    # If only one point and ending tangent is set, use it
+                    self.first_derivatives[i] = chords[0] * scale_factor
+                else:
+                    self.first_derivatives[i] = chords[0] * scale_factor / distances[0]
+                    
                 logger.debug(
                     f"First point: {self.first_derivatives[i]} (using distance {distances[0]})"
                 )
             elif i == num_points - 1:
-                self.first_derivatives[i] = chords[-1] * scale_factor# / distances[-1]
+
+                if (num_points == 2 and self.starting_tangent is not None):
+                    self.first_derivatives[i] = chords[-1] * scale_factor
+                else:
+                    self.first_derivatives[i] = chords[-1] * scale_factor / distances[-1]
+                    
                 logger.debug(
                     f"Last point: {self.first_derivatives[i]} (using distance {distances[-1]})"
                 )
@@ -164,6 +225,7 @@ class QuinticHermiteSpline(Spline):
 
             elif i == num_points - 1:
                 self.second_derivatives[i] = 0.0  # Natural boundary condition
+
                 logger.debug(f"Last point: {self.second_derivatives[i]}")
 
             else:
@@ -209,6 +271,10 @@ class QuinticHermiteSpline(Spline):
             logger.debug(f"Final point: {point}")
 
         return point
+    
+    def get_magnitude(self, idx):
+        logger.info(f"hello {idx}, {self.segment_lengths}")
+        return self.segment_lengths[idx]
     
     def percent_to_point(self, percent: float) -> np.ndarray:
         """
@@ -424,6 +490,8 @@ class QuinticHermiteSpline(Spline):
                 H5_triple_prime,
             ]
         )
+    
+    # def get_tangent(self, t: float) -> np.ndarray:
 
     def get_derivative(self, t: float, debug: bool = False) -> np.ndarray:
         """Enhanced get_derivative with optional logging"""
@@ -437,6 +505,9 @@ class QuinticHermiteSpline(Spline):
         derivative = np.zeros(2)
         for i in range(6):
             derivative += basis_derivatives[i] * self.segments[segment_idx][i]
+        # logger.info(f"t: {t}, local t: {local_t}, derivative: {derivative}")
+        # print(int(round(t)), "round")
+        # logger.info(f"tangent: {self.segments[segment_idx][2]}, {self.segments[segment_idx][3]}")
 
         return derivative
 
@@ -539,15 +610,15 @@ class QuinticHermiteSpline(Spline):
             return False
 
         # Check if spline has been fitted
-        if self.first_derivatives is None or not len(self.segments):
-            return False
+        # if self.first_derivatives is None or not len(self.segments):
+        #     return False
 
         # Normalize the tangent vector and scale by the average segment length
-        norm = np.linalg.norm(tangent)
-        if norm > 0:
-            distances = np.linalg.norm(np.diff(self.control_points, axis=0), axis=1)
-            scale = np.mean(distances)
-            tangent = (tangent / norm) * scale
+        # norm = np.linalg.norm(tangent)
+        # if norm > 0:
+        #     distances = np.linalg.norm(np.diff(self.control_points, axis=0), axis=1)
+        #     scale = np.mean(distances)
+        #     tangent = (tangent / norm) * scale
 
         # Update the first derivative
         self.first_derivatives[0] = tangent
@@ -582,15 +653,15 @@ class QuinticHermiteSpline(Spline):
             return False
 
         # Check if spline has been fitted
-        if self.first_derivatives is None or not len(self.segments):
-            return False
+        # if self.first_derivatives is None or not len(self.segments):
+        #     return False
 
         # Normalize the tangent vector and scale by the average segment length
-        norm = np.linalg.norm(tangent)
-        if norm > 0:
-            distances = np.linalg.norm(np.diff(self.control_points, axis=0), axis=1)
-            scale = np.mean(distances)
-            tangent = (tangent / norm) * scale
+        # norm = np.linalg.norm(tangent)
+        # if norm > 0:
+        #     distances = np.linalg.norm(np.diff(self.control_points, axis=0), axis=1)
+        #     scale = np.mean(distances)
+        #     tangent = (tangent / norm) * scale
 
         # Update the last first derivative
         self.first_derivatives[-1] = tangent
