@@ -84,7 +84,7 @@ class Spline(ABC):
         Calculate arc length between two parameter values
 
         Args:
-            t1: Starting parameter
+            t1: Starting warameter
             t2: Ending parameter
             segments: Number of segments for numerical integration
 

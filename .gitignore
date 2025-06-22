@@ -3,18 +3,18 @@ dist/
 __pycache__/
 env/
 
-# Ignore all .pyc files
 *.pyc
 
-# Ignore all test files
 test.py
 test*[0-9]*.py
 
-# Ignore all log files
 logs/
 *.log
 log*[0-9]*.txt
 log.txt
 
-# Ignore all routes
 routes/
+
+config.yaml
+
+settings.json
