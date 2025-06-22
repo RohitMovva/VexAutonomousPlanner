@@ -74,7 +74,7 @@ class AutonomousPlannerGUIManager(QMainWindow):
         self.config_manager: config_manager.ConfigManager = config_manager.ConfigManager(config_file_path)
 
         autonomous_path = (
-            self.config_manager.get_value("files", "header_folder") + "/routes.h"
+            self.config_manager.get_value("files", "header_folder")# + "/routes.h"
         )
         routes_path = self.config_manager.get_value("files", "routes_folder")
 
@@ -108,8 +108,6 @@ class AutonomousPlannerGUIManager(QMainWindow):
             Qt.DockWidgetArea.RightDockWidgetArea, self.settings_dock_widget
         )
 
-        # Optional: you can also set it to a specific height on the screen
-        # This will position the dock at its preferred size
         self.resizeDocks([self.settings_dock_widget], [300], Qt.Orientation.Horizontal)
         self.resizeDocks([self.settings_dock_widget], [400], Qt.Orientation.Vertical)
 
@@ -118,8 +116,8 @@ class AutonomousPlannerGUIManager(QMainWindow):
 
     def update_coords(self, p):
         # p = self.mapToScene(event.position().toPoint())
-        x = round(((p.x() / (2000)) - 0.5) * 12.3266567842 * 12, 3)
-        y = round(((p.y() / (2000)) - 0.5) * 12.3266567842 * 12, 3)
+        x = round(((p.x() / (2000)) - 0.5) * 145.308474301, 3)
+        y = round(((p.y() / (2000)) - 0.5) * 145.308474301, 3)
 
         self.settings_dock_widget.set_current_coordinates(x, y)
 
@@ -204,6 +202,16 @@ class AutonomousPlannerGUIManager(QMainWindow):
 
     def mirror_nodes(self):
         self.central_widget.mirror_nodes()
+
+    def fill_txt_file(self, nodes_data):
+        res = ""
+        for data in nodes_data:
+            for v in data:
+                res += f"{v} "
+            res += "\n"
+        
+        with open(self.routes_header_path + "/" + self.current_working_file + ".txt", "w") as file:
+            file.write(res)
 
     def save_nodes_to_file(self):
         nodes_string = ""
@@ -300,7 +308,8 @@ class AutonomousPlannerGUIManager(QMainWindow):
         for i in range(0, len(actions_map)):
             nodes_data.insert(int(actions_map[i] / 1) + i, actions_data[i])
 
-        self.fill_template(nodes_data)
+        # self.fill_template(nodes_data)
+        self.fill_txt_file(nodes_data)
         with open(full_path, "w") as file:
             file.write(nodes_string)
         logger.info(f"Route saved to {full_path}")
