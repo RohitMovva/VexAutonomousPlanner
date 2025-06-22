@@ -83,15 +83,6 @@ class QuinticHermiteSpline(Spline):
 
                 segment_length = np.linalg.norm(p1 - p0)
                 self.segment_lengths.append(segment_length)
-                # if (i > 0):
-                #     prev_segment_length = (np.linalg.norm(self.control_points[i+1] - self.control_points[i]) + np.linalg.norm(self.control_points[i] - self.control_points[i-1])) / 2
-                # # else:
-                # prev_segment_length = segment_length
-
-                # if (i < len(x) - 2):
-                #     next_segment_length = (np.linalg.norm(self.control_points[i+2] - self.control_points[i+1]) + np.linalg.norm(self.control_points[i+1] - self.control_points[i])) / 2
-                # # else:
-                # next_segment_length = segment_length
 
                 logger.debug(f"\nSegment {i}:")
                 logger.debug(f"  Points: p0={p0}, p1={p1}")
@@ -100,7 +91,6 @@ class QuinticHermiteSpline(Spline):
 
                 if segment_length > 0:
                     # Scale derivatives by segment length
-
                     d0_scaled = d0 * segment_length
                     d1_scaled = d1 * segment_length
                     dd0_scaled = dd0 * (segment_length**2)
@@ -254,7 +244,6 @@ class QuinticHermiteSpline(Spline):
         return point
     
     def get_magnitude(self, idx):
-        logger.info(f"hello {idx}, {self.segment_lengths}")
         return self.segment_lengths[idx]
     
     def percent_to_point(self, percent: float) -> np.ndarray:

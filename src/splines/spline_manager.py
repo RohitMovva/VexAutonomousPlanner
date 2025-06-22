@@ -64,7 +64,14 @@ class QuinticHermiteSplineManager:
                 current_points = points[current_start_idx : i + 1]
                 spline = QuinticHermiteSpline()
                 logger.info(f"Setting tangents: {self.set_tangents}")
-                spline.set_all_tangents(self.set_tangents)
+                tangents = []
+                for i in range(len(self.set_tangents)):
+                    if self.set_tangents[i] is not None and self.set_tangents[i][0] is not None:
+                        tangents.append([self.set_tangents[i][0]*self.set_tangents[i][1], self.set_tangents[i][0]*self.set_tangents[i][2]])
+                    else:
+                        tangents.append([None, None])
+
+                spline.set_all_tangents(tangents)
 
                 if start_tangent is not None:
                     spline.starting_tangent = start_tangent
@@ -144,21 +151,23 @@ class QuinticHermiteSplineManager:
         self.lookup_table = None
         return True
 
-    def set_tangent_at_node(self, node: Node, incoming_tangent: np.ndarray, outgoing_tangent: np.ndarray):
+    def set_tangent_at_node(self, node: Node, tangent: np.ndarray, incoming_magnitude: float, outgoing_magnitude: float) -> None:
         """
         Set the tangent at the given node.
         """
         if not self.splines:
             raise ValueError("No splines have been initialized")
         
-        self.set_tangents[self.nodes.index(node)] = [incoming_tangent, outgoing_tangent]
+        self.set_tangents[self.nodes.index(node)] = [tangent, incoming_magnitude, outgoing_magnitude]
         spline_idx, local_t = self._map_parameter_to_spline(self.nodes.index(node))
         
-        self.splines[spline_idx].set_tangent([incoming_tangent, outgoing_tangent], round(local_t))
+        self.splines[spline_idx].set_tangent([tangent*incoming_magnitude, tangent*outgoing_magnitude], round(local_t))
 
     def get_magnitudes_at_parameter(self, idx):
         spline_idx, local_t = self._map_parameter_to_spline(idx)
-
+        if (self.set_tangents[idx] is not None and self.set_tangents[idx][0] is not None):
+            return [self.set_tangents[idx][1], self.set_tangents[idx][2]]
+        
         if (spline_idx == 0 and local_t == 0):
             return [0, self.splines[spline_idx].get_magnitude(0)]
         elif (spline_idx == len(self.splines)-1 and local_t == self.splines[spline_idx].percent_to_parameter(100)):

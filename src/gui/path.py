@@ -361,7 +361,7 @@ class PathWidget(QGraphicsView):
             points[i][0] = (points[i][0] / (2000) - 0.5) * 12.1090395251
             points[i][1] = (points[i][1] / (2000) - 0.5) * 12.1090395251
 
-        set_tangents = [[self.tangent_map[node][0], self.tangent_map[node][1]] for node in nodes]
+        set_tangents = [[self.tangent_map[node][0], self.tangent_map[node][1], self.tangent_map[node][2]] for node in nodes]
 
         self.spline_manager.build_path(points, nodes, action_points, set_tangents)
         t_values = np.linspace(0, len(points) - 1, 25 * len(self.nodes))
@@ -438,7 +438,7 @@ class PathWidget(QGraphicsView):
         new_node.setPos(point)
         self.scene.addItem(new_node)
 
-        self.tangent_map[new_node] = [None, None]
+        self.tangent_map[new_node] = [None, None, None]
 
         new_node.show()
         self.update_path()
@@ -454,14 +454,13 @@ class PathWidget(QGraphicsView):
             self.action_points.append(new_action_point)
 
         else:
-
             for i in range(len(self.action_points)):
                 if self.action_points[i].t > t:
                     self.action_points.insert(i, new_action_point)
                     break
             if i == len(self.action_points)-1:
                 self.action_points.append(new_action_point)
-                
+
         self.scene.addItem(new_action_point)
         new_action_point.show()
 
@@ -520,8 +519,8 @@ class PathWidget(QGraphicsView):
             return [0, 0]
     
     def set_tangent_at_node(self, node, tangent, incoming_magnitude, outgoing_magnitude):
-        self.spline_manager.set_tangent_at_node(node, tangent*incoming_magnitude, tangent*outgoing_magnitude)
-        self.tangent_map[node] = [tangent*incoming_magnitude, tangent*outgoing_magnitude]
+        self.spline_manager.set_tangent_at_node(node, tangent, incoming_magnitude, outgoing_magnitude)
+        self.tangent_map[node] = [tangent, incoming_magnitude, outgoing_magnitude]
         self.update_path()
 
     def get_incoming_magnitude_at_node(self, node):
