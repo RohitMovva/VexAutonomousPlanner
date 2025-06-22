@@ -128,9 +128,15 @@ class AutonomousPlannerGUIManager(QMainWindow):
         """Get the tangent at the selected node"""
         return self.central_widget.get_tangent_at_node(node)
     
-    def set_tangent_at_node(self, node, tangent):
+    def get_incoming_magnitude_at_node(self, node):
+        return self.central_widget.get_incoming_magnitude_at_node(node)
+
+    def get_outgoing_magnitude_at_node(self, node):
+        return self.central_widget.get_outgoing_magnitude_at_node(node)
+    
+    def set_tangent_at_node(self, node, tangent, incoming_magnitude, outgoing_magnitude):
         """Set the tangent at the selected node"""
-        self.central_widget.set_tangent_at_node(node, tangent)
+        self.central_widget.set_tangent_at_node(node, tangent, incoming_magnitude, outgoing_magnitude)
 
     def create_menu_bar(self):
         menu_bar = self.menuBar()

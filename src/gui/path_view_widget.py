@@ -67,7 +67,6 @@ class PathViewWidget(QWidget):
         # Connect position spinboxes to update handler
 
 
-
         # Ending Tangent Section
         self.tangent_group = QGroupBox("Tangent")
         self.tangent_form = QFormLayout()
@@ -77,6 +76,7 @@ class PathViewWidget(QWidget):
         self.tangent_dx.setDecimals(3)
 
         self.tangent_dy = QDoubleSpinBox()
+        # self.tangent_dy.setSizePolicy(QSizePolicy.Ignored, self.tangent_dy.sizePolicy().verticalPolicy()) 
         self.tangent_dy.setRange(-10000.0, 10000.0)
         self.tangent_dy.setDecimals(3)
 
@@ -194,6 +194,9 @@ class PathViewWidget(QWidget):
         self.tangent_dx.setValue(tangent[0])
         self.tangent_dy.setValue(tangent[1])
 
+        self.magnitude_incoming.setValue(self.gui_manager.get_incoming_magnitude_at_node(node))
+        self.magnitude_outgoing.setValue(self.gui_manager.get_outgoing_magnitude_at_node(node))
+
         pos = (self.selected_node.get_abs_x(), self.selected_node.get_abs_y())
         self.position_x.setValue(pos[0])
         self.position_y.setValue(pos[1])
@@ -217,7 +220,7 @@ class PathViewWidget(QWidget):
         if self.selected_node is not None:
             print(f"Tangent changed: {self.tangent_dx.value()}, {self.tangent_dy.value()}")
             tangent = np.array([self.tangent_dx.value(), self.tangent_dy.value()])
-            self.gui_manager.set_tangent_at_node(self.selected_node, tangent)
+            self.gui_manager.set_tangent_at_node(self.selected_node, tangent, self.magnitude_incoming.value(), self.magnitude_outgoing.value())
 
     def on_position_changed(self):
         if (self.selected_node is not None):
