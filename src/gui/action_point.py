@@ -83,7 +83,6 @@ class ActionPoint(QGraphicsItem):
                     self.mouse_move_timer.start()
 
     def _execute_mouse_move(self):
-        print("heyo")
         # Perform the actual mouse move logic
         self.mouse_move_pending = False
         self.mouse_move_timer.stop()
@@ -95,7 +94,6 @@ class ActionPoint(QGraphicsItem):
             )
 
             self.setPos(closest_point)
-            print(self.mouse_event_pos, closest_point, closest_parameter)
             self.drag_start_position = closest_point
             self.t = closest_parameter
             self.parent.update_path()
