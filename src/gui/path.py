@@ -4,7 +4,7 @@ import math
 from typing import List
 
 import numpy as np
-from PyQt6.QtCore import QPointF, QRectF, QSize, QSizeF, Qt
+from PyQt6.QtCore import QTimer, QPointF, QRectF, QSize, QSizeF, Qt
 from PyQt6.QtGui import (
     QBrush,
     QColor,
@@ -129,6 +129,12 @@ class PathWidget(QGraphicsView):
 
         self.path = QPainterPath()
         self.spline_manager = QuinticHermiteSplineManager()
+
+        # Add a timer for throttling update_path calls
+        self.update_timer = QTimer()
+        self.update_timer.setInterval(10)  # 10 milliseconds
+        self.update_timer.timeout.connect(self._execute_update_path)
+        self.update_pending = False
 
     def fit_image_to_view(self):
         self.fitInView(self.image_item, Qt.AspectRatioMode.KeepAspectRatio)
@@ -384,7 +390,17 @@ class PathWidget(QGraphicsView):
         return spline_points
 
     def update_path(self):
-        # Should update with any new, moved, modified, or removed nodes
+        # Schedule the update if not already pending
+        if not self.update_pending:
+            self.update_pending = True
+            if not self.update_timer.isActive():
+                self.update_timer.start()
+
+    def _execute_update_path(self):
+        # Perform the actual update logic
+        self.update_pending = False
+        self.update_timer.stop()
+
         if self.start_node and self.end_node and len(self.nodes) > 1:
             points = [self.start_node.pos()]
             for node in self.nodes:
@@ -393,16 +409,13 @@ class PathWidget(QGraphicsView):
                 points.append(node.pos())
             points.append(self.end_node.pos())
             self.update_spline(points, self.nodes, self.action_points)
-
         else:
             self.path = QPainterPath()
 
         for action_node in self.action_points:
             t = action_node.t
             point = self.spline_manager.get_point_at_parameter(t)
-
             point = (point / (12.1090395251) + 0.5) * 2000
-
             action_node.setPos(QPointF(point[0], point[1]))
 
         pen = QPen(QColor("#0a0612"), 4)  # dark purple (looks cool)

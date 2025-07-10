@@ -94,12 +94,12 @@ def forward_backward_pass(
     node_num = 0
     action_idx = 0
     max_velocity = constraints.max_vel
-    max_accels = [constraints.max_acc for _ in spline_manager.nodes]
+    max_accels = [spline_manager.nodes[0].max_acceleration if spline_manager.nodes[0].max_acceleration > 0 else constraints.max_acc]
     boundary_map = {0: 0}
 
-    for i, node in enumerate(spline_manager.nodes):
-        if node.max_acceleration != 0:
-            max_accels[i] = node.max_acceleration
+    # for i, node in enumerate(spline_manager.nodes):
+    #     if node.max_acceleration != 0:
+    #         max_accels[i] = node.max_acceleration
 
     i = 0
     while current_dist < total_dist:
@@ -123,11 +123,12 @@ def forward_backward_pass(
                 max_velocity = spline_manager.nodes[node_num].max_velocity
 
             if spline_manager.nodes[node_num].max_acceleration > 0:
-                # boundary_map[i] = spline_manager.nodes[node_num].max_acceleration
-                max_accels[node_num] = spline_manager.nodes[node_num].max_acceleration
+                max_accels.append(spline_manager.nodes[node_num].max_acceleration)
+            else:
+                max_accels.append(constraints.max_acc)
             
             if (node_num != len(spline_manager.nodes)-1):
-                boundary_map[i] = node_num
+                boundary_map[i] = len(max_accels) - 1
 
         if (
             action_idx < len(spline_manager.action_points)
@@ -136,18 +137,26 @@ def forward_backward_pass(
         ):
             if spline_manager.action_points[action_idx].stop:
                 velocities[-1] = 0.01
+
+            if spline_manager.action_points[action_idx].max_acceleration > 0:
+                max_accels.append(spline_manager.action_points[action_idx].max_acceleration)
+            else:
+                max_accels.append(constraints.max_acc)
+            
+            boundary_map[i] = len(max_accels) - 1
             action_idx += 1
         i += 1
 
         prev_t = t
-    print(max_accels)
-    print(len(velocities))
-    print(boundary_map)
+
+    logger.info(f"Max Accels: {max_accels}")
+    logger.info(f"Boundary Map: {boundary_map}")
     # Add final point
     velocities.append(end_vel)
     t = spline_manager.distance_to_time(total_dist)
     headings.append(spline_manager.get_heading(t))
     curvatures.append(spline_manager.get_curvature(t))
+    max_accels.append(constraints.max_acc)  # Ensure last point has max_acc
 
     for i in range(len(curvatures)):
         if i == 0:
@@ -167,7 +176,6 @@ def forward_backward_pass(
     for i in range(len(velocities) - 1):
         if (i in boundary_map):
             constraints.max_acc = max_accels[boundary_map[i]]
-            print(f"set acc to: {constraints.max_acc} at i={i}")
 
         current_vel = velocities[i]
         curvature = curvatures[i]
@@ -216,20 +224,18 @@ def forward_backward_pass(
             velocities[i + 1],
             abs(
                 constraints.max_vel
-                / (1 + (constraints.track_width * abs(curvature) / 2))
+                / (1 + (constraints.track_widir * abs(curvature) / 2))
             ),
         )
+
 
     # Backward pass
     velocities[-1] = end_vel
     prev_ang_vel = 0
-    # constraints.max_acc = original_max_acc
-    print("MAX ACC: ", constraints.max_acc)
 
     for i in range(len(velocities) - 1, 0, -1):
         if (i in boundary_map):
             constraints.max_acc = max_accels[boundary_map[i]+1]
-            print(f"set acc to: {constraints.max_acc} at i={i}")
 
         current_vel = velocities[i]
         curvature = curvatures[i]
@@ -395,8 +401,7 @@ def generate_motion_profile(
     current_vel = velocities[0]
     total_length = spline_manager.get_total_arc_length()
     is_reversed = False
-    # if spline_manager.nodes[0].is_reverse_node:
-        # is_reversed = True
+
     node_idx = 0
     if spline_manager.nodes[node_idx].is_reverse_node:
         is_reversed = not is_reversed
@@ -448,7 +453,6 @@ def generate_motion_profile(
     prev_t = 0
     action_idx = 0
     node_idx = 0
-    # is_reversed = False
 
     # Pre-calculate velocity interpolation points for better performance
     velocity_points = [(i * dd, vel) for i, vel in enumerate(velocities)]

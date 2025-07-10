@@ -1,6 +1,6 @@
 import logging
 
-from PyQt6.QtCore import QPoint, QPointF, QRectF, Qt
+from PyQt6.QtCore import QTimer, QPoint, QPointF, QRectF, Qt
 from PyQt6.QtGui import QAction, QActionGroup, QColor, QPainter
 from PyQt6.QtWidgets import QGraphicsItem, QInputDialog, QMenu, QWidget
 
@@ -37,6 +37,16 @@ class ActionPoint(QGraphicsItem):
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemSendsGeometryChanges)
         self.drag_start_position = None
 
+        self.max_velocity = 0
+        self.max_acceleration = 0
+
+        # Add a timer for throttling mouse move updates
+        self.mouse_move_timer = QTimer()
+        self.mouse_move_timer.setInterval(5)  # 10 milliseconds
+        self.mouse_move_timer.timeout.connect(self._execute_mouse_move)
+        self.mouse_move_pending = False
+        self.mouse_move_event_data = None
+
     def get_abs_x(self):
         self.abs_x = ((self.x() / (self.image_size)) - 0.5) * 145.308474301
         return self.abs_x
@@ -65,18 +75,31 @@ class ActionPoint(QGraphicsItem):
 
     def mouseMoveEvent(self, event):
         if event.buttons() & Qt.MouseButton.LeftButton and self.drag_start_position:
-            # Find the closest point on the path to the mouse position
+            # Store the event data for throttled execution
+            self.mouse_event_pos = event.pos()
+            if not self.mouse_move_pending:
+                self.mouse_move_pending = True
+                if not self.mouse_move_timer.isActive():
+                    self.mouse_move_timer.start()
+
+    def _execute_mouse_move(self):
+        print("heyo")
+        # Perform the actual mouse move logic
+        self.mouse_move_pending = False
+        self.mouse_move_timer.stop()
+
+        if self.mouse_event_pos:
+            # event = self.mouse_move_event_data
             closest_point, closest_parameter = self.parent.find_closest_point_on_path(
-                self.parent.path, self.mapToScene(event.pos())
+                self.parent.path, self.mapToScene(self.mouse_event_pos)
             )
 
             self.setPos(closest_point)
+            print(self.mouse_event_pos, closest_point, closest_parameter)
             self.drag_start_position = closest_point
             self.t = closest_parameter
             self.parent.update_path()
-            logger.info(f"Moved action point to ({closest_point})")
-
-        # super().mouseMoveEvent(event)
+            # self.mouse_move_event_data = None
 
     def mouseReleaseEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
@@ -126,6 +149,14 @@ class ActionPoint(QGraphicsItem):
         wait_action = QAction("Wait time: " + str(self.wait_time))
         wait_action.triggered.connect(self.set_wait)
         attributes_menu.addAction(wait_action)
+
+        velocity_action = QAction("Max Velocity")
+        velocity_action.triggered.connect(self.set_velocity)
+        attributes_menu.addAction(velocity_action)
+
+        acceleration_action = QAction("Max Acceleration")
+        acceleration_action.triggered.connect(self.set_acceleration)
+        attributes_menu.addAction(acceleration_action)
 
         delete_action = QAction("Delete Node")
         delete_action.triggered.connect(self.delete_node)
@@ -209,6 +240,52 @@ class ActionPoint(QGraphicsItem):
         self.parent.remove_action_point(self)
         self.scene().removeItem(self)
         logger.info(f"Action point at ({self.abs_x}, {self.abs_y}) deleted")
+
+    
+    def set_velocity(self):
+        # Get the position of the node in screen coordinates
+        scene_pos = self.scenePos()
+        view_pos = self.scene().views()[0].mapFromScene(scene_pos)
+        screen_pos = self.scene().views()[0].viewport().mapToGlobal(view_pos)
+
+        # Create the dialog
+        dialog = QInputDialog(self.scene().views()[0])
+        dialog.setWindowTitle("Set Max Velocity")
+        dialog.setLabelText("Enter Velocity (0-128):")
+        dialog.setDoubleRange(0, 128)
+        dialog.setDoubleValue(self.max_velocity)
+
+        # Set the position of the dialog
+        dialog.move(
+            int(screen_pos.x() + self.radius), int(screen_pos.y() + self.radius)
+        )
+
+        # Show the dialog and get the result
+        if dialog.exec() == QInputDialog.DialogCode.Accepted:
+            self.max_velocity = dialog.doubleValue()
+            logger.info(f"Turn max velocity to: {self.max_velocity}")
+
+    def set_acceleration(self):
+        # Get the position of the node in screen coordinates
+        scene_pos = self.scenePos()
+        view_pos = self.scene().views()[0].mapFromScene(scene_pos)
+        screen_pos = self.scene().views()[0].viewport().mapToGlobal(view_pos)
+
+        # Create the dialog
+        dialog = QInputDialog(self.scene().views()[0])
+        dialog.setWindowTitle("Set Max Acceleration")
+        dialog.setLabelText("Enter Acceleration (0-128):")
+        dialog.setDoubleRange(0, 128)
+        dialog.setDoubleValue(self.max_acceleration)
+        # Set the position of the dialog
+        dialog.move(
+            int(screen_pos.x() + self.radius), int(screen_pos.y() + self.radius)
+        )
+
+        # Show the dialog and get the result
+        if dialog.exec() == QInputDialog.DialogCode.Accepted:
+            self.max_acceleration = dialog.doubleValue()
+            logger.info(f"Turn max acceleration to: {self.max_acceleration}")
 
     
     def action_handler(self, action_index):
