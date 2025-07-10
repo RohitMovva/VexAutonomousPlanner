@@ -49,6 +49,9 @@ class Node(QGraphicsItem):
         self.incoming_magnitude = None
         self.outgoing_magnitude = None
 
+        self.max_velocity = 0
+        self.max_acceleration = 0
+
     def get_abs_x(self):
         self.abs_x = ((self.x() / (self.image_size)) - 0.5) * 145.308474301
         return self.abs_x
@@ -221,6 +224,14 @@ class Node(QGraphicsItem):
         insert_node_after_action.triggered.connect(self.insert_node_after)
         node_menu.addAction(insert_node_after_action)
 
+        velocity_action = QAction("Max Velocity")
+        velocity_action.triggered.connect(self.set_velocity)
+        attributes_menu.addAction(velocity_action)
+
+        acceleration_action = QAction("Max Acceleration")
+        acceleration_action.triggered.connect(self.set_acceleration)
+        attributes_menu.addAction(acceleration_action)
+
         for i, action in enumerate(self.actions):
             new_action = QAction(f"{action}: {self.action_values[i]}")
             new_action.triggered.connect(lambda checked, p=i: self.action_handler(p))
@@ -343,6 +354,52 @@ class Node(QGraphicsItem):
         if dialog.exec() == QInputDialog.DialogCode.Accepted:
             self.wait_time = dialog.doubleValue()
             logger.info(f"Wait time set to: {self.wait_time}")
+
+    def set_velocity(self):
+        # Get the position of the node in screen coordinates
+        scene_pos = self.scenePos()
+        view_pos = self.scene().views()[0].mapFromScene(scene_pos)
+        screen_pos = self.scene().views()[0].viewport().mapToGlobal(view_pos)
+
+        # Create the dialog
+        dialog = QInputDialog(self.scene().views()[0])
+        dialog.setWindowTitle("Set Max Velocity")
+        dialog.setLabelText("Enter Velocity (0-128):")
+        dialog.setDoubleRange(0, 128)
+        dialog.setDoubleValue(self.max_velocity)
+
+        # Set the position of the dialog
+        dialog.move(
+            int(screen_pos.x() + self.radius), int(screen_pos.y() + self.radius)
+        )
+
+        # Show the dialog and get the result
+        if dialog.exec() == QInputDialog.DialogCode.Accepted:
+            self.max_velocity = dialog.doubleValue()
+            logger.info(f"Turn max velocity to: {self.max_velocity}")
+
+    def set_acceleration(self):
+        # Get the position of the node in screen coordinates
+        scene_pos = self.scenePos()
+        view_pos = self.scene().views()[0].mapFromScene(scene_pos)
+        screen_pos = self.scene().views()[0].viewport().mapToGlobal(view_pos)
+
+        # Create the dialog
+        dialog = QInputDialog(self.scene().views()[0])
+        dialog.setWindowTitle("Set Max Acceleration")
+        dialog.setLabelText("Enter Acceleration (0-128):")
+        dialog.setDoubleRange(0, 128)
+        dialog.setDoubleValue(self.max_acceleration)
+        # Set the position of the dialog
+        dialog.move(
+            int(screen_pos.x() + self.radius), int(screen_pos.y() + self.radius)
+        )
+
+        # Show the dialog and get the result
+        if dialog.exec() == QInputDialog.DialogCode.Accepted:
+            self.max_acceleration = dialog.doubleValue()
+            logger.info(f"Turn max acceleration to: {self.max_acceleration}")
+
 
     def delete_node(self):
         self.parent.remove_node(self)

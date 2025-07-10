@@ -170,8 +170,8 @@ class QuinticHermiteSpline(Spline):
                 logger.debug(
                     f"First point: {self.first_derivatives[i]} (using distance {distances[0]})"
                 )
-            elif i == num_points - 1:
 
+            elif i == num_points - 1:
                 if (num_points == 2 and self.starting_tangent is not None):
                     self.first_derivatives[i] = chords[-1] * scale_factor
                 else:
@@ -496,35 +496,6 @@ class QuinticHermiteSpline(Spline):
 
         return second_derivative
 
-    def get_third_derivative(self, t: float, debug: bool = False) -> np.ndarray:
-        """
-        Get the third derivative of the spline at parameter t.
-
-        Args:
-            t: Parameter value normalized to the entire path length
-            debug: Optional flag for debugging output
-
-        Returns:
-            np.ndarray: Third derivative vector [x''', y''']
-
-        Raises:
-            ValueError: If spline has not been fitted yet
-        """
-        if not self.segments:
-            raise ValueError("Spline has not been fitted yet")
-
-        local_t, segment_idx = self._normalize_parameter(t)
-
-        basis_third_derivatives = self._get_basis_third_derivatives(local_t)
-
-        third_derivative = np.zeros(2)
-        for i in range(6):
-            third_derivative += (
-                basis_third_derivatives[i] * self.segments[segment_idx][i]
-            )
-
-        return third_derivative
-
     def _normalize_parameter(self, t: float) -> Tuple[float, int]:
         """
         Convert global parameter t to local parameter and segment index.
@@ -638,7 +609,7 @@ class QuinticHermiteSpline(Spline):
             p0 = self.control_points[-2]  # Second-to-last point
             p1 = self.control_points[-1]  # Last point
             d0 = self.first_derivatives[-2]  # Second-to-last derivative
-            d1 = tangent  # New ending tangent
+            d1 = tangent # New ending tangent
             dd0 = self.second_derivatives[-2]  # Second-to-last second derivative
             dd1 = self.second_derivatives[-1]  # Last second derivative
 

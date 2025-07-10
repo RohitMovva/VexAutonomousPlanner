@@ -12,12 +12,6 @@ logger = logging.getLogger(__name__)
 
 
 @dataclass
-class ProfilePoint:
-    dist: float
-    vel: float
-
-
-@dataclass
 class Constraints:
     max_vel: float
     max_acc: float
@@ -37,6 +31,12 @@ class Constraints:
         )
 
         return min(max_turn_speed, self.max_vel)
+    
+    def set_max_vel(self, max_vel):
+        self.max_vel = max_vel
+
+    def set_max_acc(self, max_acc):
+        self.max_acc = max_acc
 
     def limit_velocity_by_ang_accel(
         self, dkappads: float, max_angular_accel: float
@@ -51,8 +51,6 @@ class Constraints:
 
     def max_accels_at_turn(self, angular_accel: float):
         """Calculate maximum linear acceleration based on angular acceleration"""
-        # if (angular_accel < 0):
-        #     return self.max_acc
         left_lin_ac = self.max_acc + angular_accel * self.track_width / 2
         right_lin_ac = self.max_acc - angular_accel * self.track_width / 2
         if abs(left_lin_ac) < abs(right_lin_ac):
@@ -95,6 +93,15 @@ def forward_backward_pass(
     prev_t = 0
     node_num = 0
     action_idx = 0
+    max_velocity = constraints.max_vel
+    max_accels = [constraints.max_acc for _ in spline_manager.nodes]
+    boundary_map = {0: 0}
+
+    for i, node in enumerate(spline_manager.nodes):
+        if node.max_acceleration != 0:
+            max_accels[i] = node.max_acceleration
+
+    i = 0
     while current_dist < total_dist:
         t = spline_manager.distance_to_time(current_dist)
 
@@ -104,13 +111,23 @@ def forward_backward_pass(
         headings.append(heading)
         curvatures.append(curvature)
 
-        velocities.append(1e9)  # Initialize velocities
+        velocities.append(max_velocity)  # Initialize velocities
         current_dist += delta_dist
 
         if (prev_t % 1) > (t % 1) and t < spline_manager.distance_to_time(total_dist):
             node_num += 1
             if spline_manager.nodes[node_num].stop:
                 velocities[-1] = 0.01
+
+            if spline_manager.nodes[node_num].max_velocity > 0:
+                max_velocity = spline_manager.nodes[node_num].max_velocity
+
+            if spline_manager.nodes[node_num].max_acceleration > 0:
+                # boundary_map[i] = spline_manager.nodes[node_num].max_acceleration
+                max_accels[node_num] = spline_manager.nodes[node_num].max_acceleration
+            
+            if (node_num != len(spline_manager.nodes)-1):
+                boundary_map[i] = node_num
 
         if (
             action_idx < len(spline_manager.action_points)
@@ -120,9 +137,12 @@ def forward_backward_pass(
             if spline_manager.action_points[action_idx].stop:
                 velocities[-1] = 0.01
             action_idx += 1
+        i += 1
 
         prev_t = t
-
+    print(max_accels)
+    print(len(velocities))
+    print(boundary_map)
     # Add final point
     velocities.append(end_vel)
     t = spline_manager.distance_to_time(total_dist)
@@ -141,10 +161,14 @@ def forward_backward_pass(
 
     # Forward pass
     velocities[0] = start_vel
-
+    
     prev_ang_vel = 0
     accel_ang = 0
     for i in range(len(velocities) - 1):
+        if (i in boundary_map):
+            constraints.max_acc = max_accels[boundary_map[i]]
+            print(f"set acc to: {constraints.max_acc} at i={i}")
+
         current_vel = velocities[i]
         curvature = curvatures[i]
         ang_vel = velocities[i] * abs(curvature)
@@ -199,8 +223,14 @@ def forward_backward_pass(
     # Backward pass
     velocities[-1] = end_vel
     prev_ang_vel = 0
+    # constraints.max_acc = original_max_acc
+    print("MAX ACC: ", constraints.max_acc)
 
     for i in range(len(velocities) - 1, 0, -1):
+        if (i in boundary_map):
+            constraints.max_acc = max_accels[boundary_map[i]+1]
+            print(f"set acc to: {constraints.max_acc} at i={i}")
+
         current_vel = velocities[i]
         curvature = curvatures[i]
         ang_vel = velocities[i] * abs(curvature)
