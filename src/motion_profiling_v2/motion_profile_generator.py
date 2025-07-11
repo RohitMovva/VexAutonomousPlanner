@@ -94,12 +94,11 @@ def forward_backward_pass(
     node_num = 0
     action_idx = 0
     max_velocity = constraints.max_vel
+    original_max_acc = constraints.max_acc
+    original_max_dec = constraints.max_dec
+
     max_accels = [spline_manager.nodes[0].max_acceleration if spline_manager.nodes[0].max_acceleration > 0 else constraints.max_acc]
     boundary_map = {0: 0}
-
-    # for i, node in enumerate(spline_manager.nodes):
-    #     if node.max_acceleration != 0:
-    #         max_accels[i] = node.max_acceleration
 
     i = 0
     while current_dist < total_dist:
@@ -127,7 +126,7 @@ def forward_backward_pass(
             else:
                 max_accels.append(constraints.max_acc)
             
-            if (node_num != len(spline_manager.nodes)-1):
+            if (node_num < len(spline_manager.nodes)-1):
                 boundary_map[i] = len(max_accels) - 1
 
         if (
@@ -173,9 +172,16 @@ def forward_backward_pass(
     
     prev_ang_vel = 0
     accel_ang = 0
+    print("Boundary Map:", boundary_map)
+    print("Max Accels:", max_accels)
+    print("FORWARD PASS")
+    print(len(velocities))
     for i in range(len(velocities) - 1):
+        print(constraints.max_acc)
         if (i in boundary_map):
+            print(i, constraints.max_acc, max_accels[boundary_map[i]])
             constraints.max_acc = max_accels[boundary_map[i]]
+            constraints.max_dec = max_accels[boundary_map[i]]
 
         current_vel = velocities[i]
         curvature = curvatures[i]
@@ -230,11 +236,13 @@ def forward_backward_pass(
 
 
     # Backward pass
+    print("BACKWARD PASS")
     velocities[-1] = end_vel
     prev_ang_vel = 0
 
     for i in range(len(velocities) - 1, 0, -1):
         if (i in boundary_map):
+            print(constraints.max_acc, max_accels[boundary_map[i]])
             constraints.max_acc = max_accels[boundary_map[i]+1]
 
         current_vel = velocities[i]
@@ -288,6 +296,9 @@ def forward_backward_pass(
                 / (1 + (constraints.track_width * abs(curvature) / 2))
             ),
         )
+
+    constraints.max_acc = original_max_acc
+    constraints.max_dec = original_max_dec
 
     return velocities
 
