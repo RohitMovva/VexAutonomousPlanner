@@ -110,10 +110,19 @@ class QuinticHermiteSplineManager:
 
                         # Apply rotation to the previous vector to get the next tangent
                         next_tangent = rotation_matrix @ prev_vector
-                        next_tangent = next_tangent# * min_length
+                        next_tangent = next_tangent * min_length
+
+                        prev_vector = prev_vector * min_length
+
+                        if (nodes[i].tangent is not None):
+                            # If tangent is set, use them
+                            prev_vector = nodes[i].tangent * nodes[i].incoming_magnitude
+
+                            next_tangent = nodes[i].tangent * -1 @ rotation_matrix
+                            next_tangent = next_tangent * nodes[i].outgoing_magnitude
 
                         # Set end tangent for current spline and start tangent for next spline
-                        spline.set_ending_tangent(prev_vector)# * min_length)
+                        spline.ending_tangent = prev_vector
                         start_tangent = next_tangent
 
                     else:  # Reverse node
@@ -128,9 +137,17 @@ class QuinticHermiteSplineManager:
                         min_length = min(prev_length, next_length)
                         dif_vector = dif_vector * min_length
 
+                        if (nodes[i].tangent is not None):
+                            # If tangent is set, scale it by the incoming magnitude
+                            dif_vector = nodes[i].tangent * nodes[i].incoming_magnitude
+
                         # Set end tangent for current spline
                         spline.ending_tangent = dif_vector
                         start_tangent = -1 * dif_vector
+
+                        if (nodes[i].tangent is not None):
+                            # If tangent is set, scale it by the outgoing magnitude
+                            start_tangent = -1 * nodes[i].tangent * nodes[i].outgoing_magnitude
 
                 if not spline.fit(current_points[:, 0], current_points[:, 1]):
                     logger.error(f"Failed to fit spline for points {current_points}")
@@ -157,6 +174,10 @@ class QuinticHermiteSplineManager:
             return [0, self.splines[spline_idx].get_magnitude(0)]
         elif (spline_idx == len(self.splines)-1 and local_t == self.splines[spline_idx].percent_to_parameter(100)):
             return [self.splines[spline_idx].get_magnitude(-1), 0]
+        elif (local_t == 0):
+            return [self.splines[spline_idx-1].get_magnitude(-1), self.splines[spline_idx].get_magnitude(0)]
+        elif (local_t == self.splines[spline_idx].percent_to_parameter(100)):
+            return [self.splines[spline_idx].get_magnitude(-1), self.splines[spline_idx+1].get_magnitude(0)]
         
         return [self.splines[spline_idx].get_magnitude(round(local_t)-1), self.splines[spline_idx].get_magnitude(round(local_t))]
         
