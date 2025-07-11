@@ -172,14 +172,8 @@ def forward_backward_pass(
     
     prev_ang_vel = 0
     accel_ang = 0
-    print("Boundary Map:", boundary_map)
-    print("Max Accels:", max_accels)
-    print("FORWARD PASS")
-    print(len(velocities))
     for i in range(len(velocities) - 1):
-        print(constraints.max_acc)
         if (i in boundary_map):
-            print(i, constraints.max_acc, max_accels[boundary_map[i]])
             constraints.max_acc = max_accels[boundary_map[i]]
             constraints.max_dec = max_accels[boundary_map[i]]
 
@@ -236,13 +230,11 @@ def forward_backward_pass(
 
 
     # Backward pass
-    print("BACKWARD PASS")
     velocities[-1] = end_vel
     prev_ang_vel = 0
 
     for i in range(len(velocities) - 1, 0, -1):
         if (i in boundary_map):
-            print(constraints.max_acc, max_accels[boundary_map[i]])
             constraints.max_acc = max_accels[boundary_map[i]+1]
 
         current_vel = velocities[i]
