@@ -224,7 +224,7 @@ def forward_backward_pass(
             velocities[i + 1],
             abs(
                 constraints.max_vel
-                / (1 + (constraints.track_widir * abs(curvature) / 2))
+                / (1 + (constraints.track_width * abs(curvature) / 2))
             ),
         )
 
