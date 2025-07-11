@@ -216,7 +216,7 @@ class ActionPoint(QGraphicsItem):
             logger.info(f"Wait time set to: {self.wait_time}")
 
     def delete_node(self):
-        self.parent.remove_node(self)
+        self.parent.remove_action_point(self)
         self.scene().removeItem(self)
         logger.info(f"Node at ({self.abs_x}, {self.abs_y}) deleted")
 
