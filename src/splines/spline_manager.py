@@ -37,10 +37,9 @@ class QuinticHermiteSplineManager:
         self.arc_length: float = 0.0  # Store the total arc length of the path
         self.lookup_table: Optional[PathLookupTable] = None
         self._precomputed_properties: Optional[Dict] = None
-        self.set_tangents: Optional[np.ndarray] = None
 
     def build_path(
-        self, points: np.ndarray, nodes: List[Node], action_points: List[ActionPoint], set_tangents: Optional[np.ndarray] = None
+        self, points: np.ndarray, nodes: List[Node], action_points: List[ActionPoint]
     ) -> bool:
         """
         Build a complete path through the given points and nodes.
@@ -53,7 +52,6 @@ class QuinticHermiteSplineManager:
         self.splines = []
         self.nodes = nodes
         self.action_points = action_points
-        self.set_tangents = set_tangents
 
         current_start_idx = 0
         start_tangent = None
@@ -63,8 +61,15 @@ class QuinticHermiteSplineManager:
                 # Create spline segment
                 current_points = points[current_start_idx : i + 1]
                 spline = QuinticHermiteSpline()
-                logger.info(f"Setting tangents: {self.set_tangents}")
-                spline.set_all_tangents(self.set_tangents)
+                tangents = []
+                print([node.tangent for node in self.nodes[current_start_idx:i + 1]])
+                for node in self.nodes[current_start_idx:i + 1]:
+                    if node.tangent is not None:
+                        tangents.append([node.tangent*node.incoming_magnitude, node.tangent*node.outgoing_magnitude])
+                    else:
+                        tangents.append([None, None])
+
+                spline.set_all_tangents(tangents)
 
                 if start_tangent is not None:
                     spline.starting_tangent = start_tangent
@@ -106,10 +111,19 @@ class QuinticHermiteSplineManager:
 
                         # Apply rotation to the previous vector to get the next tangent
                         next_tangent = rotation_matrix @ prev_vector
-                        next_tangent = next_tangent# * min_length
+                        next_tangent = next_tangent * min_length
+
+                        prev_vector = prev_vector * min_length
+
+                        if (nodes[i].tangent is not None):
+                            # If tangent is set, use them
+                            prev_vector = nodes[i].tangent * nodes[i].incoming_magnitude
+
+                            next_tangent = nodes[i].tangent @ rotation_matrix * -1
+                            next_tangent = next_tangent * nodes[i].outgoing_magnitude
 
                         # Set end tangent for current spline and start tangent for next spline
-                        spline.set_ending_tangent(prev_vector)# * min_length)
+                        spline.ending_tangent = prev_vector
                         start_tangent = next_tangent
 
                     else:  # Reverse node
@@ -124,14 +138,20 @@ class QuinticHermiteSplineManager:
                         min_length = min(prev_length, next_length)
                         dif_vector = dif_vector * min_length
 
+                        if (nodes[i].tangent is not None):
+                            # If tangent is set, scale it by the incoming magnitude
+                            dif_vector = nodes[i].tangent * nodes[i].incoming_magnitude
+
                         # Set end tangent for current spline
                         spline.ending_tangent = dif_vector
                         start_tangent = -1 * dif_vector
 
-                # spline.set_tangent(self.set_tangents[i], i)
+                        if (nodes[i].tangent is not None):
+                            # If tangent is set, scale it by the outgoing magnitude
+                            start_tangent = -1 * nodes[i].tangent * nodes[i].outgoing_magnitude
 
                 if not spline.fit(current_points[:, 0], current_points[:, 1]):
-                    print("Failed to fit spline")
+                    logger.error(f"Failed to fit spline for points {current_points}")
                     return False
                 self.splines.append(spline)
 
@@ -146,26 +166,19 @@ class QuinticHermiteSplineManager:
         self.lookup_table = None
         return True
 
-    def set_tangent_at_node(self, node: Node, tangent: np.ndarray):
-        """
-        Set the tangent at the given node.
-        """
-        if not self.splines:
-            raise ValueError("No splines have been initialized")
-        
-        print(f"Setting tangent at node {node} to {tangent}")
-        self.set_tangents[self.nodes.index(node)] = tangent
-        spline_idx, local_t = self._map_parameter_to_spline(self.nodes.index(node))
-        
-        self.splines[spline_idx].set_tangent(tangent, round(local_t))
-
     def get_magnitudes_at_parameter(self, idx):
         spline_idx, local_t = self._map_parameter_to_spline(idx)
-
+        if (self.nodes[idx].tangent is not None):
+            return [self.nodes[idx].incoming_magnitude, self.nodes[idx].outgoing_magnitude]
+        
         if (spline_idx == 0 and local_t == 0):
             return [0, self.splines[spline_idx].get_magnitude(0)]
         elif (spline_idx == len(self.splines)-1 and local_t == self.splines[spline_idx].percent_to_parameter(100)):
-            return [self.splines[spline_idx].get_magnitude[-1], 0]
+            return [self.splines[spline_idx].get_magnitude(-1), 0]
+        elif (local_t == 0):
+            return [self.splines[spline_idx-1].get_magnitude(-1), self.splines[spline_idx].get_magnitude(0)]
+        elif (local_t == self.splines[spline_idx].percent_to_parameter(100)):
+            return [self.splines[spline_idx].get_magnitude(-1), self.splines[spline_idx+1].get_magnitude(0)]
         
         return [self.splines[spline_idx].get_magnitude(round(local_t)-1), self.splines[spline_idx].get_magnitude(round(local_t))]
         

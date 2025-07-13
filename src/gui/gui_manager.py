@@ -14,11 +14,10 @@ from PyQt6.QtWidgets import (
     QPushButton,
     QTextEdit,
     QVBoxLayout,
-    QWidget
 )
 
 import utilities.file_management
-from gui import action_point, dock_widget, node, path
+from gui import dock_widget, node, path
 from utilities import config_manager
 
 logger = logging.getLogger(__name__)
@@ -132,9 +131,9 @@ class AutonomousPlannerGUIManager(QMainWindow):
     def get_outgoing_magnitude_at_node(self, node):
         return self.central_widget.get_outgoing_magnitude_at_node(node)
     
-    def set_tangent_at_node(self, node, tangent, incoming_magnitude, outgoing_magnitude):
+    def update_path(self):
         """Set the tangent at the selected node"""
-        self.central_widget.set_tangent_at_node(node, tangent, incoming_magnitude, outgoing_magnitude)
+        self.central_widget.update_path()
 
     def create_menu_bar(self):
         menu_bar = self.menuBar()
@@ -304,7 +303,7 @@ class AutonomousPlannerGUIManager(QMainWindow):
         ]
 
         logger.info(
-            f"nodes map length {len(nodes_map)}, node actions length {len(nodes_actions)}"
+            f"Nodes map length {len(nodes_map)}, Node actions length {len(nodes_actions)}"
         )
         for i in range(0, len(nodes_map)):
             nodes_data.insert(int(nodes_map[i] / 1) + i, nodes_actions[i])
@@ -400,9 +399,13 @@ class AutonomousPlannerGUIManager(QMainWindow):
                 int(cur_node.stop),
                 cur_node.turn,
                 cur_node.wait_time,
+                cur_node.get_tangent(True),
+                cur_node.get_incoming_magnitude(),
+                cur_node.get_outgoing_magnitude(),
             ] + cur_node.get_action_values()
             for cur_node in nodes
         ]
+        logger.info(f"Nodes data: {nodes_data}")
         action_data = [
             [
                 cur_action.get_abs_x(),
@@ -413,6 +416,14 @@ class AutonomousPlannerGUIManager(QMainWindow):
             ] + cur_action.get_action_values()
             for cur_action in self.central_widget.action_points
         ]
+        # for i in range(len(nodes_data)):
+        #     for j in range(0, len(nodes_data[i])):
+        #         if nodes_data[i][j] is None:
+        #             nodes_data[i][j] = 0
+
+
+        logger.info(f"nodes data {nodes_data}")
+
         if as_list:
             return [nodes_data, action_data]
         nodes_string = json.dumps([nodes_data, action_data], separators=(",", ":"))

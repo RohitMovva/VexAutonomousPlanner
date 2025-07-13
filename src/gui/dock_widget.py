@@ -90,13 +90,6 @@ class MultiPageDockWidget(QDockWidget):
         self.path_page.update_view()
         logger.info("Path page updated")
 
-    def get_tangent_at_node(self, node):
-        """Get the tangent at the selected node"""
-        return self.parent.get_tangent_at_node(node)
-    
-    def set_tangent_at_node(self, node, tangent):
-        """Set the tangent at the selected node"""
-        self.parent.set_tangent_at_node(node, tangent)
 
     def set_selected_node(self, node):
         """Set the selected node in the path page"""

@@ -2,6 +2,9 @@ build/
 dist/
 __pycache__/
 env/
+.VSCodeCounter/
+# Notebook whitepapers, not public (yet)
+whitepapers/
 
 *.pyc
 
