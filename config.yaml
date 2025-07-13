@@ -1,12 +1,13 @@
+actions: test_action
 field:
-  type: High Stakes Skills
+  type: Push Back Match
 files:
   autonomous_repository_file: routes.h
-  header_folder: C:/Users/tihor/Projects/HighStakesAutonomous/include/routes
-  routes_folder: C:/Users/tihor/Projects/VexAutonomousPlanner/routes
-max_acceleration: 4.55
+  header_folder: /home/tihor/Projects/PushBackAutonomous/include
+  routes_folder: /home/tihor/Projects/VexAutonomousPlanner/routes
+max_acceleration: 12.0
 motion:
-  max_acceleration: 4.55
+  max_acceleration: 12.0
   max_jerk: 43.0
   max_velocity: 4.0
 robot:
@@ -14,4 +15,3 @@ robot:
   track_width: 11.5
   visualization: false
   width: 18.0
-track_width: 1.125
