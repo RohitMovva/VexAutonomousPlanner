@@ -1,3 +1,4 @@
+import time
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QLabel, QHBoxLayout, QPushButton, QScrollArea, QSizePolicy, QGroupBox, QFormLayout, QDoubleSpinBox, QSpacerItem
 )
@@ -28,18 +29,14 @@ class PathViewWidget(QWidget):
         # Scroll area for node list
         self.node_area = QScrollArea(self)
         self.node_area.setWidgetResizable(True)
+        self.node_area.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Expanding)
+        # self.node_area.setHorizontalScroll
         self.node_content = QWidget()
         self.node_layout = QVBoxLayout(self.node_content)
 
         self.node_content.setLayout(self.node_layout)
         self.node_area.setWidget(self.node_content)
         main_layout.addWidget(self.node_area)
-
-        main_layout.addItem(
-            QSpacerItem(
-                20, 20, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Expanding
-            )
-        )
 
         self.selected_node: node.Node = None
 
@@ -88,6 +85,12 @@ class PathViewWidget(QWidget):
         self.tangent_form.addRow("dY:", self.tangent_dy)
         self.tangent_form.addRow("Incoming Magnitude:", self.magnitude_incoming)
         self.tangent_form.addRow("Outgoing Magnitude:", self.magnitude_outgoing)
+
+        self.reset_button = QPushButton("Reset Tangent")
+        self.reset_button.setToolTip("Reset tangent values to default")
+        self.reset_button.clicked.connect(self.reset_tangent)  # Connect to reset_tangent function
+        self.tangent_form.addRow(self.reset_button)
+
         self.tangent_group.setLayout(self.tangent_form)
         main_layout.addWidget(self.tangent_group)
 
@@ -178,6 +181,19 @@ class PathViewWidget(QWidget):
 
         self.node_layout.addStretch()
 
+    def reset_tangent(self):
+        if (not self.selected_node):
+            return
+        self.changing_node = True
+        self.selected_node.set_tangent(None)
+        self.selected_node.set_outgoing_magnitude(None)
+        self.selected_node.set_incoming_magnitude(None)
+
+        self.gui_manager.update_path()
+
+        self.update_selected_node()
+        self.changing_node = False
+
     # Placeholder callback methods
     def on_lock_clicked(self, node, button):
         node.set_locked(not node.is_locked())
@@ -200,6 +216,7 @@ class PathViewWidget(QWidget):
     def update_selected_node(self):
         if (self.gui_manager.get_incoming_magnitude_at_node(self.selected_node) != 0 or self.gui_manager.get_outgoing_magnitude_at_node(self.selected_node) != 0):
             tangent = self.gui_manager.get_tangent_at_node(self.selected_node)
+            print(tangent)
             if (self.gui_manager.get_outgoing_magnitude_at_node(self.selected_node) == 0):
                 self.tangent_dx.setValue(tangent[0] / self.gui_manager.get_incoming_magnitude_at_node(self.selected_node))
                 self.tangent_dy.setValue(tangent[1] / self.gui_manager.get_incoming_magnitude_at_node(self.selected_node))
@@ -230,11 +247,12 @@ class PathViewWidget(QWidget):
 
     def on_tangent_changed(self):
         """Handle changes to the tangent form values"""
-        if not self.changing_node and self.magnitude_outgoing.value() > 0:
+        if not self.changing_node and (self.magnitude_outgoing.value() > 0 or self.magnitude_incoming.value() > 0):
             tangent = np.array([self.tangent_dx.value(), self.tangent_dy.value()])
             self.selected_node.set_tangent(tangent)
             self.selected_node.set_incoming_magnitude(self.magnitude_incoming.value())
             self.selected_node.set_outgoing_magnitude(self.magnitude_outgoing.value())
+            print("UPDATING PATH")
             self.gui_manager.update_path()
             
     def on_position_changed(self):

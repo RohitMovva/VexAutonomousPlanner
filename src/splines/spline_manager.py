@@ -62,6 +62,7 @@ class QuinticHermiteSplineManager:
                 current_points = points[current_start_idx : i + 1]
                 spline = QuinticHermiteSpline()
                 tangents = []
+                print([node.tangent for node in self.nodes[current_start_idx:i + 1]])
                 for node in self.nodes[current_start_idx:i + 1]:
                     if node.tangent is not None:
                         tangents.append([node.tangent*node.incoming_magnitude, node.tangent*node.outgoing_magnitude])
@@ -118,7 +119,7 @@ class QuinticHermiteSplineManager:
                             # If tangent is set, use them
                             prev_vector = nodes[i].tangent * nodes[i].incoming_magnitude
 
-                            next_tangent = nodes[i].tangent * -1 @ rotation_matrix
+                            next_tangent = nodes[i].tangent @ rotation_matrix * -1
                             next_tangent = next_tangent * nodes[i].outgoing_magnitude
 
                         # Set end tangent for current spline and start tangent for next spline
