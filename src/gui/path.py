@@ -4,7 +4,7 @@ import math
 from typing import List
 
 import numpy as np
-from PyQt6.QtCore import QPointF, QRectF, QSize, QSizeF, Qt
+from PyQt6.QtCore import QTimer, QPointF, QRectF, QSize, QSizeF, Qt
 from PyQt6.QtGui import (
     QBrush,
     QColor,
@@ -100,7 +100,6 @@ class PathWidget(QGraphicsView):
         self.headings = []
         self.nodes_map = []  # Represents index of node n in any of the above lists
         self.actions_map = []  # Represents index of action point n in any of the above lists
-        self.tangent_map = {} # Node: Tangent
 
         self.nodes: List[node.Node] = []
         self.action_points: List[action_point.ActionPoint] = []
@@ -130,6 +129,12 @@ class PathWidget(QGraphicsView):
 
         self.path = QPainterPath()
         self.spline_manager = QuinticHermiteSplineManager()
+
+        # Add a timer for throttling update_path calls
+        self.update_timer = QTimer()
+        self.update_timer.setInterval(10)  # 10 milliseconds
+        self.update_timer.timeout.connect(self._execute_update_path)
+        self.update_pending = False
 
     def fit_image_to_view(self):
         self.fitInView(self.image_item, Qt.AspectRatioMode.KeepAspectRatio)
@@ -358,15 +363,10 @@ class PathWidget(QGraphicsView):
         points = np.array([[point.x(), point.y()] for point in points])
 
         for i in range(len(points)):
-            points[i][0] = (points[i][0] / (2000) - 0.5) * 12.3266567841
-            points[i][1] = (points[i][1] / (2000) - 0.5) * 12.3266567841
+            points[i][0] = (points[i][0] / (2000) - 0.5) * 12.1090395251
+            points[i][1] = (points[i][1] / (2000) - 0.5) * 12.1090395251
 
-        print(f"Tangent map: {self.tangent_map}")
-        set_tangents = [[self.tangent_map[node][0], self.tangent_map[node][1]] for node in nodes]
-        # set_tangents = np.zeros((len(nodes), 2))
-        print(f"Set tangents: {set_tangents}")
-
-        self.spline_manager.build_path(points, nodes, action_points, set_tangents)
+        self.spline_manager.build_path(points, nodes, action_points)
         t_values = np.linspace(0, len(points) - 1, 25 * len(self.nodes))
         spline_points = np.array(
             [self.spline_manager.get_point_at_parameter(t) for t in t_values]
@@ -376,10 +376,10 @@ class PathWidget(QGraphicsView):
             self.path = QPainterPath()
             for i in range(len(spline_points)):
                 spline_points[i][0] = (
-                    spline_points[i][0] / (12.3266567841) + 0.5
+                    spline_points[i][0] / (12.1090395251) + 0.5
                 ) * 2000
                 spline_points[i][1] = (
-                    spline_points[i][1] / (12.3266567841) + 0.5
+                    spline_points[i][1] / (12.1090395251) + 0.5
                 ) * 2000
             self.path.moveTo(spline_points[0][0], spline_points[0][1])
             for p in spline_points[1:]:
@@ -390,7 +390,17 @@ class PathWidget(QGraphicsView):
         return spline_points
 
     def update_path(self):
-        # Should update with any new, moved, modified, or removed nodes
+        # Schedule the update if not already pending
+        if not self.update_pending:
+            self.update_pending = True
+            if not self.update_timer.isActive():
+                self.update_timer.start()
+
+    def _execute_update_path(self):
+        # Perform the actual update logic
+        self.update_pending = False
+        self.update_timer.stop()
+
         if self.start_node and self.end_node and len(self.nodes) > 1:
             points = [self.start_node.pos()]
             for node in self.nodes:
@@ -399,19 +409,14 @@ class PathWidget(QGraphicsView):
                 points.append(node.pos())
             points.append(self.end_node.pos())
             self.update_spline(points, self.nodes, self.action_points)
-
         else:
             self.path = QPainterPath()
 
         for action_node in self.action_points:
-            # print("an")
             t = action_node.t
             point = self.spline_manager.get_point_at_parameter(t)
-
-            point = (point / (12.3266567842) + 0.5) * 2000
-
+            point = (point / (12.1090395251) + 0.5) * 2000
             action_node.setPos(QPointF(point[0], point[1]))
-        # print()
 
         pen = QPen(QColor("#0a0612"), 4)  # dark purple (looks cool)
         self.path_item.setPen(pen)
@@ -443,8 +448,6 @@ class PathWidget(QGraphicsView):
         new_node.setPos(point)
         self.scene.addItem(new_node)
 
-        self.tangent_map[new_node] = [None, None]
-
         new_node.show()
         self.update_path()
 
@@ -455,25 +458,16 @@ class PathWidget(QGraphicsView):
 
     def add_action_point(self, point: QPointF, t: float, pos=-1):
         new_action_point = action_point.ActionPoint(point.x(), point.y(), t, self)
-        # print("adding action point")
-        # print(self.action_points)
         if len(self.action_points) == 0:
             self.action_points.append(new_action_point)
 
         else:
-
             for i in range(len(self.action_points)):
                 if self.action_points[i].t > t:
                     self.action_points.insert(i, new_action_point)
                     break
             if i == len(self.action_points)-1:
                 self.action_points.append(new_action_point)
-        # print("action points after adding")
-        # print(self.action_points)
-        # print("Action points:")
-        # for p in self.action_points:
-        #     print(p.t)
-        # print()
 
         self.scene.addItem(new_action_point)
         new_action_point.show()
@@ -490,8 +484,6 @@ class PathWidget(QGraphicsView):
                 self.start_node = None
             if remove_node == self.end_node:
                 self.end_node = None
-
-            self.tangent_map.pop(remove_node)
 
         self.parent.update_path_page()
         self.update_path()
@@ -531,11 +523,6 @@ class PathWidget(QGraphicsView):
             return self.spline_manager.get_derivative_at_parameter(self.nodes.index(node))
         else:
             return [0, 0]
-    
-    def set_tangent_at_node(self, node, tangent, incoming_magnitude, outgoing_magnitude):
-        self.spline_manager.set_tangent_at_node(node, tangent)
-        self.tangent_map[node] = [tangent*incoming_magnitude, tangent*outgoing_magnitude]
-        self.update_path()
 
     def get_incoming_magnitude_at_node(self, node):
         if (self.spline_manager.splines):
@@ -628,9 +615,16 @@ class PathWidget(QGraphicsView):
                 node.stop = bool(node_data[5])
                 node.turn = node_data[6]
                 node.wait_time = node_data[7]
-                node.set_action_values(node_data[8:])
+                node.tangent = node_data[8]
+                node.incoming_magnitude = (node_data[9])
+                node.outgoing_magnitude = node_data[10]
+                node.set_action_values(node_data[11:])
 
+                if (node_data[8] is not None):
+                    node.set_tangent(np.array(node_data[8]))
                 node.show()
+
+                
 
         for action_data in action_data:
             action_point = self.add_action_point(
@@ -687,7 +681,7 @@ class PathWidget(QGraphicsView):
 
         # Convert point to numpy array w/ inches
         point = np.array([point.x(), point.y()])
-        point = (point / (2000) - 0.5) * 12.3266567841
+        point = (point / (2000) - 0.5) * 12.1090395251
 
         # First pass: coarse search with larger steps
         num_steps = 25 * len(self.nodes)
@@ -724,7 +718,7 @@ class PathWidget(QGraphicsView):
                 closest_parameter = path_param
 
         # Convert closest point to QPointF with pixels
-        closest_point = (closest_point / (12.3266567841) + 0.5) * 2000
+        closest_point = (closest_point / (12.1090395251) + 0.5) * 2000
 
         return QPointF(closest_point[0], closest_point[1]), closest_parameter
 

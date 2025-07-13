@@ -45,6 +45,13 @@ class Node(QGraphicsItem):
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemSendsGeometryChanges)
         self.drag_start_position = None
 
+        self.tangent = None
+        self.incoming_magnitude = None
+        self.outgoing_magnitude = None
+
+        self.max_velocity = 0
+        self.max_acceleration = 0
+
     def get_abs_x(self):
         self.abs_x = ((self.x() / (self.image_size)) - 0.5) * 145.308474301
         return self.abs_x
@@ -52,6 +59,26 @@ class Node(QGraphicsItem):
     def get_abs_y(self):
         self.abs_y = ((self.y() / (self.image_size)) - 0.5) * 145.308474301
         return self.abs_y
+    
+    def set_tangent(self, tangent):
+        self.tangent = tangent
+
+    def get_tangent(self, aslist=False):
+        if (aslist):
+            return self.tangent.tolist() if self.tangent is not None else None
+        return self.tangent
+
+    def set_incoming_magnitude(self, magnitude):
+        self.incoming_magnitude = magnitude
+
+    def get_incoming_magnitude(self):
+        return self.incoming_magnitude
+
+    def set_outgoing_magnitude(self, magnitude):
+        self.outgoing_magnitude = magnitude
+
+    def get_outgoing_magnitude(self):
+        return self.outgoing_magnitude
 
     def boundingRect(self):
         return QRectF(-self.radius, -self.radius, 2 * self.radius, 2 * self.radius)
@@ -92,7 +119,7 @@ class Node(QGraphicsItem):
         self.abs_x = x
         self.abs_y = y
         
-        new_pos = QPointF(((x / (12.3266567842 * 12)) + 0.5) * self.image_size, ((y / (12.3266567842 * 12)) + 0.5) * self.image_size)
+        new_pos = QPointF(((x / (12.1090395251 * 12)) + 0.5) * self.image_size, ((y / (12.1090395251 * 12)) + 0.5) * self.image_size)
         self.setPos(new_pos)
         self.parent.update_path()
         # self.update()
@@ -196,6 +223,14 @@ class Node(QGraphicsItem):
         insert_node_after_action = QAction("Insert Node After")
         insert_node_after_action.triggered.connect(self.insert_node_after)
         node_menu.addAction(insert_node_after_action)
+
+        velocity_action = QAction("Max Velocity")
+        velocity_action.triggered.connect(self.set_velocity)
+        attributes_menu.addAction(velocity_action)
+
+        acceleration_action = QAction("Max Acceleration")
+        acceleration_action.triggered.connect(self.set_acceleration)
+        attributes_menu.addAction(acceleration_action)
 
         for i, action in enumerate(self.actions):
             new_action = QAction(f"{action}: {self.action_values[i]}")
@@ -319,6 +354,52 @@ class Node(QGraphicsItem):
         if dialog.exec() == QInputDialog.DialogCode.Accepted:
             self.wait_time = dialog.doubleValue()
             logger.info(f"Wait time set to: {self.wait_time}")
+
+    def set_velocity(self):
+        # Get the position of the node in screen coordinates
+        scene_pos = self.scenePos()
+        view_pos = self.scene().views()[0].mapFromScene(scene_pos)
+        screen_pos = self.scene().views()[0].viewport().mapToGlobal(view_pos)
+
+        # Create the dialog
+        dialog = QInputDialog(self.scene().views()[0])
+        dialog.setWindowTitle("Set Max Velocity")
+        dialog.setLabelText("Enter Velocity (0-128):")
+        dialog.setDoubleRange(0, 128)
+        dialog.setDoubleValue(self.max_velocity)
+
+        # Set the position of the dialog
+        dialog.move(
+            int(screen_pos.x() + self.radius), int(screen_pos.y() + self.radius)
+        )
+
+        # Show the dialog and get the result
+        if dialog.exec() == QInputDialog.DialogCode.Accepted:
+            self.max_velocity = dialog.doubleValue()
+            logger.info(f"Turn max velocity to: {self.max_velocity}")
+
+    def set_acceleration(self):
+        # Get the position of the node in screen coordinates
+        scene_pos = self.scenePos()
+        view_pos = self.scene().views()[0].mapFromScene(scene_pos)
+        screen_pos = self.scene().views()[0].viewport().mapToGlobal(view_pos)
+
+        # Create the dialog
+        dialog = QInputDialog(self.scene().views()[0])
+        dialog.setWindowTitle("Set Max Acceleration")
+        dialog.setLabelText("Enter Acceleration (0-128):")
+        dialog.setDoubleRange(0, 128)
+        dialog.setDoubleValue(self.max_acceleration)
+        # Set the position of the dialog
+        dialog.move(
+            int(screen_pos.x() + self.radius), int(screen_pos.y() + self.radius)
+        )
+
+        # Show the dialog and get the result
+        if dialog.exec() == QInputDialog.DialogCode.Accepted:
+            self.max_acceleration = dialog.doubleValue()
+            logger.info(f"Turn max acceleration to: {self.max_acceleration}")
+
 
     def delete_node(self):
         self.parent.remove_node(self)
