@@ -1,7 +1,7 @@
 import logging
 
-from PyQt6.QtCore import QTimer, QPoint, QPointF, QRectF, Qt
-from PyQt6.QtGui import QAction, QActionGroup, QColor, QPainter
+from PyQt6.QtCore import QPoint, QPointF, QRectF, Qt, QTimer
+from PyQt6.QtGui import QAction, QColor, QPainter
 from PyQt6.QtWidgets import QGraphicsItem, QInputDialog, QMenu, QWidget
 
 logger = logging.getLogger(__name__)
@@ -182,11 +182,8 @@ class ActionPoint(QGraphicsItem):
         for action_value in self.action_values:
             if action_value != 0:
                 return True
-            
-        return (
-            self.stop
-            or self.wait_time != 0
-        )
+
+        return self.stop or self.wait_time != 0
 
     def is_stop_node(self):
         return self.stop
@@ -239,7 +236,6 @@ class ActionPoint(QGraphicsItem):
         self.scene().removeItem(self)
         logger.info(f"Action point at ({self.abs_x}, {self.abs_y}) deleted")
 
-    
     def set_velocity(self):
         # Get the position of the node in screen coordinates
         scene_pos = self.scenePos()
@@ -285,7 +281,6 @@ class ActionPoint(QGraphicsItem):
             self.max_acceleration = dialog.doubleValue()
             logger.info(f"Turn max acceleration to: {self.max_acceleration}")
 
-    
     def action_handler(self, action_index):
         action_name = self.actions[action_index]
 
@@ -310,11 +305,13 @@ class ActionPoint(QGraphicsItem):
         if dialog.exec() == QInputDialog.DialogCode.Accepted:
             self.action_values[action_index] = dialog.doubleValue()
             self.parent.update_path()
-            logger.info(f"{action_name} value set to: {self.action_values[action_index]}")
+            logger.info(
+                f"{action_name} value set to: {self.action_values[action_index]}"
+            )
 
     def get_action_values(self):
         return self.action_values
-    
+
     def set_action_values(self, values):
         if len(values) == len(self.action_values):
             self.action_values = values

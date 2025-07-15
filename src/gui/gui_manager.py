@@ -58,7 +58,7 @@ class AutonomousPlannerGUIManager(QMainWindow):
             QIcon(utilities.file_management.resource_path("../assets/flip_logo.ico"))
         )
         # Set default window size
-        self.resize(700, 400)  # Width: 1280px, Height: 720px
+        self.resize(700, 400)
         self.layout = QVBoxLayout()
         self.start_node = None
         self.end_node = None
@@ -71,10 +71,12 @@ class AutonomousPlannerGUIManager(QMainWindow):
 
         # Get parent of current working directory
         config_file_path = os.path.join(os.getcwd(), "..", "config.yaml")
-        self.config_manager: config_manager.ConfigManager = config_manager.ConfigManager(config_file_path)
+        self.config_manager: config_manager.ConfigManager = (
+            config_manager.ConfigManager(config_file_path)
+        )
 
         autonomous_path = (
-            self.config_manager.get_value("files", "header_folder")# + "/routes.h"
+            self.config_manager.get_value("files", "header_folder")  # + "/routes.h"
         )
         routes_path = self.config_manager.get_value("files", "routes_folder")
 
@@ -100,7 +102,6 @@ class AutonomousPlannerGUIManager(QMainWindow):
             self.config_manager, self
         )
 
-        # Add widgets to layout
         self.central_widget.setLayout(self.layout)
         self.setCentralWidget(self.central_widget)
 
@@ -115,7 +116,6 @@ class AutonomousPlannerGUIManager(QMainWindow):
         self.create_menu_bar()
 
     def update_coords(self, p):
-        # p = self.mapToScene(event.position().toPoint())
         x = round(((p.x() / (2000)) - 0.5) * 145.308474301, 3)
         y = round(((p.y() / (2000)) - 0.5) * 145.308474301, 3)
 
@@ -124,13 +124,13 @@ class AutonomousPlannerGUIManager(QMainWindow):
     def get_tangent_at_node(self, node):
         """Get the tangent at the selected node"""
         return self.central_widget.get_tangent_at_node(node)
-    
+
     def get_incoming_magnitude_at_node(self, node):
         return self.central_widget.get_incoming_magnitude_at_node(node)
 
     def get_outgoing_magnitude_at_node(self, node):
         return self.central_widget.get_outgoing_magnitude_at_node(node)
-    
+
     def update_path(self):
         """Set the tangent at the selected node"""
         self.central_widget.update_path()
@@ -223,8 +223,10 @@ class AutonomousPlannerGUIManager(QMainWindow):
             for v in data:
                 res += f"{v} "
             res += "\n"
-        
-        with open(self.routes_header_path + "/" + self.current_working_file + ".txt", "w") as file:
+
+        with open(
+            self.routes_header_path + "/" + self.current_working_file + ".txt", "w"
+        ) as file:
             file.write(res)
 
     def save_nodes_to_file(self):
@@ -292,10 +294,7 @@ class AutonomousPlannerGUIManager(QMainWindow):
                     ]
                 )
         logger.info(f"nodes map: {nodes_map} traj length {len(nodes_data)}")
-        nodes_actions = [
-            [1] + cur_node.get_action_values()
-            for cur_node in nodes
-        ]
+        nodes_actions = [[1] + cur_node.get_action_values() for cur_node in nodes]
 
         actions_data = [
             [1] + cur_action.get_action_values()
@@ -334,9 +333,10 @@ class AutonomousPlannerGUIManager(QMainWindow):
 
     def load_route_file(self, file_path):
         """Load a route file"""
-        
-        if (not file_path.endswith(".txt")
-                or not os.path.exists(os.path.join(self.routes_folder_path, file_path))):
+
+        if not file_path.endswith(".txt") or not os.path.exists(
+            os.path.join(self.routes_folder_path, file_path)
+        ):
             logger.error(f"Invalid file path: {file_path}")
             return
         self.current_working_file = file_path[:-4]  # cut off the .txt
@@ -402,7 +402,8 @@ class AutonomousPlannerGUIManager(QMainWindow):
                 cur_node.get_tangent(True),
                 cur_node.get_incoming_magnitude(),
                 cur_node.get_outgoing_magnitude(),
-            ] + cur_node.get_action_values()
+            ]
+            + cur_node.get_action_values()
             for cur_node in nodes
         ]
         logger.info(f"Nodes data: {nodes_data}")
@@ -413,14 +414,10 @@ class AutonomousPlannerGUIManager(QMainWindow):
                 cur_action.t,
                 int(cur_action.stop),
                 cur_action.wait_time,
-            ] + cur_action.get_action_values()
+            ]
+            + cur_action.get_action_values()
             for cur_action in self.central_widget.action_points
         ]
-        # for i in range(len(nodes_data)):
-        #     for j in range(0, len(nodes_data[i])):
-        #         if nodes_data[i][j] is None:
-        #             nodes_data[i][j] = 0
-
 
         logger.info(f"nodes data {nodes_data}")
 

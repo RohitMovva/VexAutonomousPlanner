@@ -4,7 +4,7 @@ import math
 from typing import List
 
 import numpy as np
-from PyQt6.QtCore import QTimer, QPointF, QRectF, QSize, QSizeF, Qt
+from PyQt6.QtCore import QPointF, QRectF, QSize, QSizeF, Qt, QTimer
 from PyQt6.QtGui import (
     QBrush,
     QColor,
@@ -466,7 +466,7 @@ class PathWidget(QGraphicsView):
                 if self.action_points[i].t > t:
                     self.action_points.insert(i, new_action_point)
                     break
-            if i == len(self.action_points)-1:
+            if i == len(self.action_points) - 1:
                 self.action_points.append(new_action_point)
 
         self.scene.addItem(new_action_point)
@@ -519,20 +519,26 @@ class PathWidget(QGraphicsView):
         self.parent.set_selected_node(node)
 
     def get_tangent_at_node(self, node):
-        if (self.spline_manager.splines):
-            return self.spline_manager.get_derivative_at_parameter(self.nodes.index(node))
+        if self.spline_manager.splines:
+            return self.spline_manager.get_derivative_at_parameter(
+                self.nodes.index(node)
+            )
         else:
             return [0, 0]
 
     def get_incoming_magnitude_at_node(self, node):
-        if (self.spline_manager.splines):
-            return self.spline_manager.get_magnitudes_at_parameter(self.nodes.index(node))[0]
+        if self.spline_manager.splines:
+            return self.spline_manager.get_magnitudes_at_parameter(
+                self.nodes.index(node)
+            )[0]
         else:
             return 0
-        
+
     def get_outgoing_magnitude_at_node(self, node):
-        if (self.spline_manager.splines):
-            return self.spline_manager.get_magnitudes_at_parameter(self.nodes.index(node))[1]
+        if self.spline_manager.splines:
+            return self.spline_manager.get_magnitudes_at_parameter(
+                self.nodes.index(node)
+            )[1]
         else:
             return 0
 
@@ -595,7 +601,7 @@ class PathWidget(QGraphicsView):
 
     def load_nodes(self, node_str: str) -> None:
         data = json.loads(node_str)
-        if (len(data) == 2):
+        if len(data) == 2:
             nodes_data = data[0]
             action_data = data[1]
         else:
@@ -616,15 +622,13 @@ class PathWidget(QGraphicsView):
                 node.turn = node_data[6]
                 node.wait_time = node_data[7]
                 node.tangent = node_data[8]
-                node.incoming_magnitude = (node_data[9])
+                node.incoming_magnitude = node_data[9]
                 node.outgoing_magnitude = node_data[10]
                 node.set_action_values(node_data[11:])
 
-                if (node_data[8] is not None):
+                if node_data[8] is not None:
                     node.set_tangent(np.array(node_data[8]))
                 node.show()
-
-                
 
         for action_data in action_data:
             action_point = self.add_action_point(
@@ -767,7 +771,7 @@ class PathWidget(QGraphicsView):
         if path_point is None:
             self.rect_item.hide()
             return
-        if (path_point == QPointF(0, 0)):
+        if path_point == QPointF(0, 0):
             self.rect_item.hide()
             return
 
