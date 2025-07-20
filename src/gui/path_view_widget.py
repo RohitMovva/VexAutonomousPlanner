@@ -25,7 +25,7 @@ logger = logging.getLogger(__name__)
 class PathViewWidget(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.gui_manager = parent  # Assuming parent is the gui manager
+        self.gui_manager = parent
 
         scroll_area = QScrollArea()
         scroll_area.setWidgetResizable(True)
@@ -116,6 +116,12 @@ class PathViewWidget(QWidget):
 
         self.changing_node = False
 
+        self.lock_pixmap = QIcon(utilities.file_management.resource_path("../assets/lock.png"))
+        self.unlock_pixmap = QIcon(utilities.file_management.resource_path("../assets/unlock.png"))
+        self.eye_pixmap = QIcon(utilities.file_management.resource_path("../assets/eye.png"))
+        self.noeye_pixmap = QIcon(utilities.file_management.resource_path("../assets/noeye.png"))
+        self.trash_pixmap = QIcon(utilities.file_management.resource_path("../assets/trash.png"))
+
         scroll_area.setWidget(path_view_content)
 
         # Pin spline options to bottom
@@ -151,15 +157,7 @@ class PathViewWidget(QWidget):
 
             # Lock button
             lock_button = QPushButton()
-            if node.is_locked():
-                lock_icon_path = utilities.file_management.resource_path(
-                    "../assets/lock.png"
-                )
-            else:
-                lock_icon_path = utilities.file_management.resource_path(
-                    "../assets/unlock.png"
-                )
-            lock_button.setIcon(QIcon(lock_icon_path))
+            lock_button.setIcon(self.lock_pixmap if node.is_locked() else self.unlock_pixmap)
             lock_button.setIconSize(QSize(24, 24))
             lock_button.setFixedSize(24, 24)
             lock_button.setFlat(True)
@@ -171,15 +169,7 @@ class PathViewWidget(QWidget):
 
             # Eye (visibility) button
             eye_button = QPushButton()
-            if node.is_visible():
-                eye_icon_path = utilities.file_management.resource_path(
-                    "../assets/eye.png"
-                )
-            else:
-                eye_icon_path = utilities.file_management.resource_path(
-                    "../assets/noeye.png"
-                )
-            eye_button.setIcon(QIcon(eye_icon_path))
+            eye_button.setIcon(self.eye_pixmap if node.is_visible() else self.noeye_pixmap)
             eye_button.setIconSize(QSize(24, 24))
             eye_button.setFixedSize(24, 24)
             eye_button.setFlat(True)
@@ -191,10 +181,7 @@ class PathViewWidget(QWidget):
 
             # Trash (delete) button
             trash_button = QPushButton()
-            trash_icon_path = utilities.file_management.resource_path(
-                "../assets/trash.png"
-            )
-            trash_button.setIcon(QIcon(trash_icon_path))
+            trash_button.setIcon(self.trash_pixmap)
             trash_button.setIconSize(QSize(24, 24))
             trash_button.setFixedSize(24, 24)
             trash_button.setFlat(True)
@@ -206,7 +193,6 @@ class PathViewWidget(QWidget):
 
             node_widget.setLayout(node_layout)
             if node is self.selected_node:
-                # highlight the node
                 node_widget.setStyleSheet("background-color: #000000;")
             self.node_layout.addWidget(node_widget)
 
