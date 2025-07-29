@@ -553,32 +553,13 @@ class QuinticHermiteSpline(Spline):
         # Validate input
         if not isinstance(tangent, np.ndarray) or tangent.shape != (2,):
             return False
-
-        # Check if spline has been fitted
-        # if self.first_derivatives is None or not len(self.segments):
-        #     return False
-
-        # Normalize the tangent vector and scale by the average segment length
-        # norm = np.linalg.norm(tangent)
-        # if norm > 0:
-        #     distances = np.linalg.norm(np.diff(self.control_points, axis=0), axis=1)
-        #     scale = np.mean(distances)
-        #     tangent = (tangent / norm) * scale
-
-        # Update the first derivative
+        
         self.first_derivatives[0] = tangent
 
         # Update only the first segment since other segments are unaffected
         if len(self.segments) > 0:
-            p0 = self.control_points[0]
-            p1 = self.control_points[1]
-            d0 = tangent  # New tangent
-            d1 = self.first_derivatives[1]
-            dd0 = self.second_derivatives[0]
-            dd1 = self.second_derivatives[1]
+            self.segments[-1][2] = tangent  # Update the first segment's tangent
 
-            # Update the first segment matrix
-            self.segments[0] = np.vstack([p0, p1, d0, d1, dd0, dd1])
 
         self.starting_tangent = tangent
         return True
@@ -597,31 +578,12 @@ class QuinticHermiteSpline(Spline):
         if not isinstance(tangent, np.ndarray) or tangent.shape != (2,):
             return False
 
-        # Check if spline has been fitted
-        # if self.first_derivatives is None or not len(self.segments):
-        #     return False
-
-        # Normalize the tangent vector and scale by the average segment length
-        # norm = np.linalg.norm(tangent)
-        # if norm > 0:
-        #     distances = np.linalg.norm(np.diff(self.control_points, axis=0), axis=1)
-        #     scale = np.mean(distances)
-        #     tangent = (tangent / norm) * scale
-
         # Update the last first derivative
         self.first_derivatives[-1] = tangent
 
         # Update only the last segment since other segments are unaffected
         if len(self.segments) > 0:
-            p0 = self.control_points[-2]  # Second-to-last point
-            p1 = self.control_points[-1]  # Last point
-            d0 = self.first_derivatives[-2]  # Second-to-last derivative
-            d1 = tangent  # New ending tangent
-            dd0 = self.second_derivatives[-2]  # Second-to-last second derivative
-            dd1 = self.second_derivatives[-1]  # Last second derivative
-
-            # Update the last segment matrix
-            self.segments[-1] = np.vstack([p0, p1, d0, d1, dd0, dd1])
+            self.segments[-1][3] = tangent  # Update the last segment's tangent
 
         self.ending_tangent = tangent
 
