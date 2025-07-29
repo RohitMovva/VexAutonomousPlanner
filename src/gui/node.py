@@ -24,7 +24,7 @@ class Node(QGraphicsItem):
         self.locked = False
         self.visible = True
 
-        self.actions = list(self.parent.config_manager.get_section("actions"))
+        self.actions = self.parent.config_manager.get_value("robot", "actions")
         self.action_values = [0 for _ in self.actions]
 
         self.offset = QPoint(0, 0)

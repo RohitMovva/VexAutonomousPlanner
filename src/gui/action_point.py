@@ -16,7 +16,7 @@ class ActionPoint(QGraphicsItem):
         self.is_reverse_node = False
         self.turn = 0
         self.wait_time = 0
-        self.actions = self.parent.config_manager.get_section("actions")
+        self.actions = self.parent.config_manager.get_value("robot", "actions")
         self.action_values = [0 for _ in self.actions]
         self.dragging = False
         self.offset = QPoint(0, 0)
