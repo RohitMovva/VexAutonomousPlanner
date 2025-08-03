@@ -237,10 +237,11 @@ class Node(QGraphicsItem):
         acceleration_action.triggered.connect(self.set_acceleration)
         attributes_menu.addAction(acceleration_action)
 
+        new_actions = []
         for i, action in enumerate(self.actions):
-            new_action = QAction(f"{action}: {self.action_values[i]}")
-            new_action.triggered.connect(lambda checked, p=i: self.action_handler(p))
-            attributes_menu.addAction(new_action)
+            new_actions.append(QAction(f"{action}: {self.action_values[i]}"))
+            new_actions[i].triggered.connect(lambda checked, p=i: self.action_handler(p))
+            attributes_menu.addAction(new_actions[i])
 
         context_menu.addMenu(attributes_menu)
         context_menu.addMenu(node_menu)
