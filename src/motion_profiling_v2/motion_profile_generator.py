@@ -102,6 +102,10 @@ def forward_backward_pass(
         if spline_manager.nodes[0].max_acceleration > 0
         else constraints.max_acc
     ]
+
+    if spline_manager.nodes[0].max_velocity > 0:
+        max_velocity = spline_manager.nodes[0].max_velocity
+
     boundary_map = {0: 0}
 
     i = 0
@@ -114,7 +118,7 @@ def forward_backward_pass(
         headings.append(heading)
         curvatures.append(curvature)
 
-        velocities.append(max_velocity)  # Initialize velocities
+        velocities.append(max_velocity)
         current_dist += delta_dist
 
         if (prev_t % 1) > (t % 1) and t < spline_manager.distance_to_time(total_dist):
@@ -124,6 +128,8 @@ def forward_backward_pass(
 
             if spline_manager.nodes[node_num].max_velocity > 0:
                 max_velocity = spline_manager.nodes[node_num].max_velocity
+            else:
+                max_velocity = constraints.max_vel
 
             if spline_manager.nodes[node_num].max_acceleration > 0:
                 max_accels.append(spline_manager.nodes[node_num].max_acceleration)
@@ -138,6 +144,11 @@ def forward_backward_pass(
             and prev_t < spline_manager.action_points[action_idx].t
             and t >= spline_manager.action_points[action_idx].t
         ):
+            if spline_manager.action_points[action_idx].max_velocity > 0:
+                max_velocity = spline_manager.action_points[action_idx].max_velocity
+            else:
+                max_velocity = constraints.max_vel
+                
             if spline_manager.action_points[action_idx].stop:
                 velocities[-1] = 0.01
 
@@ -150,6 +161,7 @@ def forward_backward_pass(
 
             boundary_map[i] = len(max_accels) - 1
             action_idx += 1
+            
         i += 1
 
         prev_t = t
@@ -172,7 +184,7 @@ def forward_backward_pass(
             curvature_derivs.append(
                 (curvatures[i + 1] - curvatures[i - 1]) / (2 * delta_dist)
             )
-
+    
     # Forward pass
     velocities[0] = start_vel
 
@@ -200,11 +212,11 @@ def forward_backward_pass(
                 2 * constraints.max_vel / (constraints.track_width * abs(curvature) + 2)
             )
             max_curve_vel = constraints.max_speed_at_curvature(abs(curvature))
-            max_ang_acc_vel = constraints.limit_velocity_by_ang_accel(
-                curvature_derivs[i], max_angular_accel
-            )
+            # max_ang_acc_vel = constraints.limit_velocity_by_ang_accel(
+            #     curvature_derivs[i], max_angular_accel
+            # )
             max_linear_vel = min(
-                max_vel_ang, max_vel_kin, max_curve_vel, max_ang_acc_vel
+                max_vel_ang, max_vel_kin, max_curve_vel #, max_ang_acc_vel
             )
 
             max_accel_ang = max_angular_accel / abs(curvature)
@@ -261,11 +273,11 @@ def forward_backward_pass(
                 2 * constraints.max_vel / (constraints.track_width * abs(curvature) + 2)
             )
             max_curve_vel = constraints.max_speed_at_curvature(curvature)
-            max_ang_acc_vel = constraints.limit_velocity_by_ang_accel(
-                curvature_derivs[i], max_angular_accel
-            )
+            # max_ang_acc_vel = constraints.limit_velocity_by_ang_accel(
+            #     curvature_derivs[i], max_angular_accel
+            # )
             max_linear_vel = min(
-                max_vel_ang, max_vel_kin, max_curve_vel, max_ang_acc_vel
+                max_vel_ang, max_vel_kin, max_curve_vel #, max_ang_acc_vel
             )
 
             max_decel_ang = max_angular_accel / abs(curvature)
