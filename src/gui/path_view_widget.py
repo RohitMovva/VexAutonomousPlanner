@@ -1,22 +1,31 @@
-import time
-from PyQt6.QtWidgets import (
-    QWidget, QVBoxLayout, QLabel, QHBoxLayout, QPushButton, QScrollArea, QSizePolicy, QGroupBox, QFormLayout, QDoubleSpinBox, QSpacerItem
-)
-from PyQt6.QtGui import QIcon
-from PyQt6.QtCore import QSize, Qt
-import numpy as np
-
-from gui import node
-
-import utilities
 import logging
 
+import numpy as np
+from PyQt6.QtCore import QSize, Qt
+from PyQt6.QtGui import QIcon
+from PyQt6.QtWidgets import (
+    QDoubleSpinBox,
+    QFormLayout,
+    QGroupBox,
+    QHBoxLayout,
+    QLabel,
+    QPushButton,
+    QScrollArea,
+    QSizePolicy,
+    QVBoxLayout,
+    QWidget,
+)
+
+import utilities
+from gui import node
+
 logger = logging.getLogger(__name__)
+
 
 class PathViewWidget(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.gui_manager = parent  # Assuming parent is the gui manager
+        self.gui_manager = parent
 
         scroll_area = QScrollArea()
         scroll_area.setWidgetResizable(True)
@@ -29,7 +38,9 @@ class PathViewWidget(QWidget):
         # Scroll area for node list
         self.node_area = QScrollArea(self)
         self.node_area.setWidgetResizable(True)
-        self.node_area.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Expanding)
+        self.node_area.setSizePolicy(
+            QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Expanding
+        )
         # self.node_area.setHorizontalScroll
         self.node_content = QWidget()
         self.node_layout = QVBoxLayout(self.node_content)
@@ -88,7 +99,9 @@ class PathViewWidget(QWidget):
 
         self.reset_button = QPushButton("Reset Tangent")
         self.reset_button.setToolTip("Reset tangent values to default")
-        self.reset_button.clicked.connect(self.reset_tangent)  # Connect to reset_tangent function
+        self.reset_button.clicked.connect(
+            self.reset_tangent
+        )  # Connect to reset_tangent function
         self.tangent_form.addRow(self.reset_button)
 
         self.tangent_group.setLayout(self.tangent_form)
@@ -102,6 +115,12 @@ class PathViewWidget(QWidget):
         self.magnitude_outgoing.valueChanged.connect(self.on_tangent_changed)
 
         self.changing_node = False
+
+        self.lock_pixmap = QIcon(utilities.file_management.resource_path("../assets/lock.png"))
+        self.unlock_pixmap = QIcon(utilities.file_management.resource_path("../assets/unlock.png"))
+        self.eye_pixmap = QIcon(utilities.file_management.resource_path("../assets/eye.png"))
+        self.noeye_pixmap = QIcon(utilities.file_management.resource_path("../assets/noeye.png"))
+        self.trash_pixmap = QIcon(utilities.file_management.resource_path("../assets/trash.png"))
 
         scroll_area.setWidget(path_view_content)
 
@@ -123,66 +142,64 @@ class PathViewWidget(QWidget):
         # Get nodes from gui_manager
         nodes = self.gui_manager.get_nodes()
 
-        for node in nodes:                
+        for node in nodes:
             node_widget = QWidget()
             node_layout = QHBoxLayout(node_widget)
             node_layout.setContentsMargins(0, 0, 0, 0)
 
             node_label = QLabel(node.get_name())
-            node_label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+            node_label.setSizePolicy(
+                QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred
+            )
             node_layout.addWidget(node_label)
 
             node_layout.addStretch()
 
             # Lock button
             lock_button = QPushButton()
-            if node.is_locked():
-                lock_icon_path = utilities.file_management.resource_path("../assets/lock.png")
-            else:
-                lock_icon_path = utilities.file_management.resource_path("../assets/unlock.png")
-            lock_button.setIcon(QIcon(lock_icon_path))
+            lock_button.setIcon(self.lock_pixmap if node.is_locked() else self.unlock_pixmap)
             lock_button.setIconSize(QSize(24, 24))
             lock_button.setFixedSize(24, 24)
             lock_button.setFlat(True)
             lock_button.setToolTip("Lock/Unlock Node")
-            lock_button.clicked.connect(lambda checked, n=node, b=lock_button: self.on_lock_clicked(n, b))
+            lock_button.clicked.connect(
+                lambda checked, n=node, b=lock_button: self.on_lock_clicked(n, b)
+            )
             node_layout.addWidget(lock_button)
 
             # Eye (visibility) button
             eye_button = QPushButton()
-            if node.is_visible():
-                eye_icon_path = utilities.file_management.resource_path("../assets/eye.png")
-            else:
-                eye_icon_path = utilities.file_management.resource_path("../assets/noeye.png")
-            eye_button.setIcon(QIcon(eye_icon_path))
+            eye_button.setIcon(self.eye_pixmap if node.is_visible() else self.noeye_pixmap)
             eye_button.setIconSize(QSize(24, 24))
             eye_button.setFixedSize(24, 24)
             eye_button.setFlat(True)
             eye_button.setToolTip("Show/Hide Node")
-            eye_button.clicked.connect(lambda checked, n=node, b=eye_button: self.on_eye_clicked(n, b))
+            eye_button.clicked.connect(
+                lambda checked, n=node, b=eye_button: self.on_eye_clicked(n, b)
+            )
             node_layout.addWidget(eye_button)
 
             # Trash (delete) button
             trash_button = QPushButton()
-            trash_icon_path = utilities.file_management.resource_path("../assets/trash.png")
-            trash_button.setIcon(QIcon(trash_icon_path))
+            trash_button.setIcon(self.trash_pixmap)
             trash_button.setIconSize(QSize(24, 24))
             trash_button.setFixedSize(24, 24)
             trash_button.setFlat(True)
             trash_button.setToolTip("Delete Node")
-            trash_button.clicked.connect(lambda checked, n=node: self.on_trash_clicked(n))
+            trash_button.clicked.connect(
+                lambda checked, n=node: self.on_trash_clicked(n)
+            )
             node_layout.addWidget(trash_button)
 
             node_widget.setLayout(node_layout)
             if node is self.selected_node:
-                # highlight the node
                 node_widget.setStyleSheet("background-color: #000000;")
             self.node_layout.addWidget(node_widget)
 
         self.node_layout.addStretch()
 
     def reset_tangent(self):
-        if (not self.selected_node):
+        if not self.selected_node:
             return
         self.changing_node = True
         self.selected_node.set_tangent(None)
@@ -214,23 +231,49 @@ class PathViewWidget(QWidget):
         self.update_view()
 
     def update_selected_node(self):
-        if (self.gui_manager.get_incoming_magnitude_at_node(self.selected_node) != 0 or self.gui_manager.get_outgoing_magnitude_at_node(self.selected_node) != 0):
+        if (
+            self.gui_manager.get_incoming_magnitude_at_node(self.selected_node) != 0
+            or self.gui_manager.get_outgoing_magnitude_at_node(self.selected_node) != 0
+        ):
             tangent = self.gui_manager.get_tangent_at_node(self.selected_node)
-            print(tangent)
-            if (self.gui_manager.get_outgoing_magnitude_at_node(self.selected_node) == 0):
-                self.tangent_dx.setValue(tangent[0] / self.gui_manager.get_incoming_magnitude_at_node(self.selected_node))
-                self.tangent_dy.setValue(tangent[1] / self.gui_manager.get_incoming_magnitude_at_node(self.selected_node))
+            if self.gui_manager.get_outgoing_magnitude_at_node(self.selected_node) == 0:
+                self.tangent_dx.setValue(
+                    tangent[0]
+                    / self.gui_manager.get_incoming_magnitude_at_node(
+                        self.selected_node
+                    )
+                )
+                self.tangent_dy.setValue(
+                    tangent[1]
+                    / self.gui_manager.get_incoming_magnitude_at_node(
+                        self.selected_node
+                    )
+                )
             else:
-                self.tangent_dx.setValue(tangent[0] / self.gui_manager.get_outgoing_magnitude_at_node(self.selected_node))
-                self.tangent_dy.setValue(tangent[1] / self.gui_manager.get_outgoing_magnitude_at_node(self.selected_node))
+                self.tangent_dx.setValue(
+                    tangent[0]
+                    / self.gui_manager.get_outgoing_magnitude_at_node(
+                        self.selected_node
+                    )
+                )
+                self.tangent_dy.setValue(
+                    tangent[1]
+                    / self.gui_manager.get_outgoing_magnitude_at_node(
+                        self.selected_node
+                    )
+                )
 
-            self.magnitude_incoming.setValue(self.gui_manager.get_incoming_magnitude_at_node(self.selected_node))
-            self.magnitude_outgoing.setValue(self.gui_manager.get_outgoing_magnitude_at_node(self.selected_node))
+            self.magnitude_incoming.setValue(
+                self.gui_manager.get_incoming_magnitude_at_node(self.selected_node)
+            )
+            self.magnitude_outgoing.setValue(
+                self.gui_manager.get_outgoing_magnitude_at_node(self.selected_node)
+            )
 
         pos = (self.selected_node.get_abs_x(), self.selected_node.get_abs_y())
         self.position_x.setValue(pos[0])
         self.position_y.setValue(pos[1])
-    
+
         self.update_view()
 
     def on_eye_clicked(self, node, button):
@@ -247,16 +290,16 @@ class PathViewWidget(QWidget):
 
     def on_tangent_changed(self):
         """Handle changes to the tangent form values"""
-        if not self.changing_node and (self.magnitude_outgoing.value() > 0 or self.magnitude_incoming.value() > 0):
+        if not self.changing_node and (
+            self.magnitude_outgoing.value() > 0 or self.magnitude_incoming.value() > 0
+        ):
             tangent = np.array([self.tangent_dx.value(), self.tangent_dy.value()])
             self.selected_node.set_tangent(tangent)
             self.selected_node.set_incoming_magnitude(self.magnitude_incoming.value())
             self.selected_node.set_outgoing_magnitude(self.magnitude_outgoing.value())
-            print("UPDATING PATH")
             self.gui_manager.update_path()
-            
+
     def on_position_changed(self):
-        if (self.selected_node is not None):
+        if self.selected_node is not None:
             position = (self.position_x.value(), self.position_y.value())
             self.selected_node.set_position(position[0], position[1])
-            

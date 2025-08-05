@@ -1,10 +1,8 @@
 import logging
 
-from PyQt6.QtCore import QPoint, QPointF, QRectF, Qt, QObject
-from PyQt6.QtGui import QAction, QActionGroup, QColor, QPainter
+from PyQt6.QtCore import QPoint, QPointF, QRectF, Qt
+from PyQt6.QtGui import QAction, QColor, QPainter
 from PyQt6.QtWidgets import QGraphicsItem, QInputDialog, QMenu, QWidget
-
-from utilities import config_manager
 
 logger = logging.getLogger(__name__)
 
@@ -26,7 +24,7 @@ class Node(QGraphicsItem):
         self.locked = False
         self.visible = True
 
-        self.actions = list(self.parent.config_manager.get_section("actions"))
+        self.actions = self.parent.config_manager.get_value("robot", "actions")
         self.action_values = [0 for _ in self.actions]
 
         self.offset = QPoint(0, 0)
@@ -59,12 +57,12 @@ class Node(QGraphicsItem):
     def get_abs_y(self):
         self.abs_y = ((self.y() / (self.image_size)) - 0.5) * 145.308474301
         return self.abs_y
-    
+
     def set_tangent(self, tangent):
         self.tangent = tangent
 
     def get_tangent(self, aslist=False):
-        if (aslist):
+        if aslist:
             return self.tangent.tolist() if self.tangent is not None else None
         return self.tangent
 
@@ -108,7 +106,11 @@ class Node(QGraphicsItem):
         super().mousePressEvent(event)
 
     def mouseMoveEvent(self, event):
-        if event.buttons() & Qt.MouseButton.LeftButton and self.drag_start_position and not self.locked:
+        if (
+            event.buttons() & Qt.MouseButton.LeftButton
+            and self.drag_start_position
+            and not self.locked
+        ):
             drag_distance = event.pos() - self.drag_start_position
             self.setPos(self.pos() + drag_distance)
             self.drag_start_position = event.pos()
@@ -118,8 +120,11 @@ class Node(QGraphicsItem):
     def set_position(self, x, y):
         self.abs_x = x
         self.abs_y = y
-        
-        new_pos = QPointF(((x / (12.1090395251 * 12)) + 0.5) * self.image_size, ((y / (12.1090395251 * 12)) + 0.5) * self.image_size)
+
+        new_pos = QPointF(
+            ((x / (12.1090395251 * 12)) + 0.5) * self.image_size,
+            ((y / (12.1090395251 * 12)) + 0.5) * self.image_size,
+        )
         self.setPos(new_pos)
         self.parent.update_path()
         # self.update()
@@ -134,11 +139,11 @@ class Node(QGraphicsItem):
 
     def is_visible(self):
         return self.visible
-    
+
     def set_locked(self, locked: bool):
         self.locked = locked
         logger.info(f"Node locked set to: {self.locked}")
-    
+
     def is_locked(self):
         return self.locked
 
@@ -156,7 +161,7 @@ class Node(QGraphicsItem):
             change == QGraphicsItem.GraphicsItemChange.ItemPositionChange
             and self.scene()
         ):
-            if (self.locked):
+            if self.locked:
                 return self.pos()
             new_pos = value
             if self.image_rect:
@@ -232,11 +237,12 @@ class Node(QGraphicsItem):
         acceleration_action.triggered.connect(self.set_acceleration)
         attributes_menu.addAction(acceleration_action)
 
+        new_actions = []
         for i, action in enumerate(self.actions):
-            new_action = QAction(f"{action}: {self.action_values[i]}")
-            new_action.triggered.connect(lambda checked, p=i: self.action_handler(p))
-            attributes_menu.addAction(new_action)
-                
+            new_actions.append(QAction(f"{action}: {self.action_values[i]}"))
+            new_actions[i].triggered.connect(lambda checked, p=i: self.action_handler(p))
+            attributes_menu.addAction(new_actions[i])
+
         context_menu.addMenu(attributes_menu)
         context_menu.addMenu(node_menu)
 
@@ -269,9 +275,9 @@ class Node(QGraphicsItem):
         logger.info(f"End Node: {self.is_end_node}")
 
     def get_name(self):
-        if (self.is_start_node):
+        if self.is_start_node:
             return "Start Node"
-        elif (self.is_end_node):
+        elif self.is_end_node:
             return "End Node"
         else:
             return "Node"
@@ -280,17 +286,14 @@ class Node(QGraphicsItem):
         for action_value in self.action_values:
             if action_value != 0:
                 return True
-            
+
         return (
-            self.is_reverse_node
-            or self.stop
-            or self.turn != 0
-            or self.wait_time != 0
+            self.is_reverse_node or self.stop or self.turn != 0 or self.wait_time != 0
         )
-    
+
     def get_action_values(self):
         return self.action_values
-    
+
     def set_action_values(self, values):
         if len(values) == len(self.action_values):
             self.action_values = values
@@ -400,7 +403,6 @@ class Node(QGraphicsItem):
             self.max_acceleration = dialog.doubleValue()
             logger.info(f"Turn max acceleration to: {self.max_acceleration}")
 
-
     def delete_node(self):
         self.parent.remove_node(self)
         self.scene().removeItem(self)
@@ -444,8 +446,9 @@ class Node(QGraphicsItem):
         if dialog.exec() == QInputDialog.DialogCode.Accepted:
             self.action_values[action_index] = dialog.doubleValue()
             self.parent.update_path()
-            logger.info(f"{action_name} value set to: {self.action_values[action_index]}")
-
+            logger.info(
+                f"{action_name} value set to: {self.action_values[action_index]}"
+            )
 
     def __str__(self):
         return (

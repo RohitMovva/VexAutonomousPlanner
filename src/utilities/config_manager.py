@@ -30,6 +30,7 @@ class ConfigManager:
                 "length": 18.0,  # inches
                 "track_width": 12.5,  # inches
                 "visualization": False,  # robot visualization on/off
+                "actions": []
             },
             "motion": {
                 "max_velocity": 4.0,  # ft/s
@@ -70,7 +71,7 @@ class ConfigManager:
                             for key, value in values.items():
                                 if key not in config[section]:
                                     config[section][key] = value
-
+                                    
                 return config
         except Exception as e:
             logger.error(f"Error loading configuration: {e}")

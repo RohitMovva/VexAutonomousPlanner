@@ -11,6 +11,7 @@ from splines.quintic_hermite_spline import QuinticHermiteSpline
 
 logger = logging.getLogger(__name__)
 
+
 @dataclass
 class PathLookupTable:
     """Cache for quick parameter lookups based on distance"""
@@ -62,10 +63,14 @@ class QuinticHermiteSplineManager:
                 current_points = points[current_start_idx : i + 1]
                 spline = QuinticHermiteSpline()
                 tangents = []
-                print([node.tangent for node in self.nodes[current_start_idx:i + 1]])
-                for node in self.nodes[current_start_idx:i + 1]:
+                for node in self.nodes[current_start_idx : i + 1]:
                     if node.tangent is not None:
-                        tangents.append([node.tangent*node.incoming_magnitude, node.tangent*node.outgoing_magnitude])
+                        tangents.append(
+                            [
+                                node.tangent * node.incoming_magnitude,
+                                node.tangent * node.outgoing_magnitude,
+                            ]
+                        )
                     else:
                         tangents.append([None, None])
 
@@ -115,7 +120,7 @@ class QuinticHermiteSplineManager:
 
                         prev_vector = prev_vector * min_length
 
-                        if (nodes[i].tangent is not None):
+                        if nodes[i].tangent is not None:
                             # If tangent is set, use them
                             prev_vector = nodes[i].tangent * nodes[i].incoming_magnitude
 
@@ -138,7 +143,7 @@ class QuinticHermiteSplineManager:
                         min_length = min(prev_length, next_length)
                         dif_vector = dif_vector * min_length
 
-                        if (nodes[i].tangent is not None):
+                        if nodes[i].tangent is not None:
                             # If tangent is set, scale it by the incoming magnitude
                             dif_vector = nodes[i].tangent * nodes[i].incoming_magnitude
 
@@ -146,9 +151,11 @@ class QuinticHermiteSplineManager:
                         spline.ending_tangent = dif_vector
                         start_tangent = -1 * dif_vector
 
-                        if (nodes[i].tangent is not None):
+                        if nodes[i].tangent is not None:
                             # If tangent is set, scale it by the outgoing magnitude
-                            start_tangent = -1 * nodes[i].tangent * nodes[i].outgoing_magnitude
+                            start_tangent = (
+                                -1 * nodes[i].tangent * nodes[i].outgoing_magnitude
+                            )
 
                 if not spline.fit(current_points[:, 0], current_points[:, 1]):
                     logger.error(f"Failed to fit spline for points {current_points}")
@@ -160,30 +167,39 @@ class QuinticHermiteSplineManager:
                 ) - 1:
                     current_start_idx = i
 
-            
-
         self.arc_length = None
         self.lookup_table = None
         return True
 
     def get_magnitudes_at_parameter(self, idx):
         spline_idx, local_t = self._map_parameter_to_spline(idx)
-        if (self.nodes[idx].tangent is not None):
-            return [self.nodes[idx].incoming_magnitude, self.nodes[idx].outgoing_magnitude]
-        
-        if (spline_idx == 0 and local_t == 0):
-            return [0, self.splines[spline_idx].get_magnitude(0)]
-        elif (spline_idx == len(self.splines)-1 and local_t == self.splines[spline_idx].percent_to_parameter(100)):
-            return [self.splines[spline_idx].get_magnitude(-1), 0]
-        elif (local_t == 0):
-            return [self.splines[spline_idx-1].get_magnitude(-1), self.splines[spline_idx].get_magnitude(0)]
-        elif (local_t == self.splines[spline_idx].percent_to_parameter(100)):
-            return [self.splines[spline_idx].get_magnitude(-1), self.splines[spline_idx+1].get_magnitude(0)]
-        
-        return [self.splines[spline_idx].get_magnitude(round(local_t)-1), self.splines[spline_idx].get_magnitude(round(local_t))]
-        
+        if self.nodes[idx].tangent is not None:
+            return [
+                self.nodes[idx].incoming_magnitude,
+                self.nodes[idx].outgoing_magnitude,
+            ]
 
-        
+        if spline_idx == 0 and local_t == 0:
+            return [0, self.splines[spline_idx].get_magnitude(0)]
+        elif spline_idx == len(self.splines) - 1 and local_t == self.splines[
+            spline_idx
+        ].percent_to_parameter(100):
+            return [self.splines[spline_idx].get_magnitude(-1), 0]
+        elif local_t == 0:
+            return [
+                self.splines[spline_idx - 1].get_magnitude(-1),
+                self.splines[spline_idx].get_magnitude(0),
+            ]
+        elif local_t == self.splines[spline_idx].percent_to_parameter(100):
+            return [
+                self.splines[spline_idx].get_magnitude(-1),
+                self.splines[spline_idx + 1].get_magnitude(0),
+            ]
+
+        return [
+            self.splines[spline_idx].get_magnitude(round(local_t) - 1),
+            self.splines[spline_idx].get_magnitude(round(local_t)),
+        ]
 
     def get_point_at_parameter(self, t: float) -> np.ndarray:
         """
@@ -459,7 +475,6 @@ class QuinticHermiteSplineManager:
         )
 
     def precompute_path_properties(self, samples_per_node: int = 1000) -> None:
-
         """
         Precompute curvature and heading at regular intervals for faster lookup.
         Optimized version with vectorization and reduced redundant calculations.
@@ -468,80 +483,85 @@ class QuinticHermiteSplineManager:
             raise ValueError("No splines initialized")
 
         num_samples = len(self.nodes) * samples_per_node
-        
+
         parameters = np.linspace(0, len(self.nodes) - 1, num_samples)
-        
+
         # Precompute properties
         curvatures = np.zeros(num_samples)
 
         headings = np.zeros(num_samples)
-        
+
         # Time measurement variables
         start_time_total = time.time()
-        
+
         # Vectorize the derivative calculations where possible
         start_time_derivative = time.time()
-        first_derivs = np.array([self.get_derivative_at_parameter(t) for t in parameters])
-        second_derivs = np.array([self.get_second_derivative_at_parameter(t) for t in parameters])
+        first_derivs = np.array(
+            [self.get_derivative_at_parameter(t) for t in parameters]
+        )
+        second_derivs = np.array(
+            [self.get_second_derivative_at_parameter(t) for t in parameters]
+        )
         end_time_derivative = time.time()
-        logger.info(f"Derivative compute time: {end_time_derivative - start_time_derivative} seconds")
+        logger.info(
+            f"Derivative compute time: {end_time_derivative - start_time_derivative} seconds"
+        )
 
         # Extract components
         x_primes = first_derivs[:, 0]
         y_primes = first_derivs[:, 1]
         x_double_primes = second_derivs[:, 0]
         y_double_primes = second_derivs[:, 1]
-        
+
         # Calculate speed squared (denominator for curvature)
         speed_squared = x_primes**2 + y_primes**2
-        
+
         # Start curvature calculation timing
         start_time_curvature = time.time()
-        
+
         # Vectorized curvature calculation
         numerator = x_primes * y_double_primes - y_primes * x_double_primes
-        
+
         # Handle special case where speed is near zero
         mask = speed_squared >= 1e-10
-        curvatures[mask] = numerator[mask] / (speed_squared[mask]**1.5)
+        curvatures[mask] = numerator[mask] / (speed_squared[mask] ** 1.5)
         # For points where speed is near zero, curvature remains 0.0
-        
+
         total_curvature_compute_time = time.time() - start_time_curvature
-        
+
         # Start heading calculation timing
         start_time_heading = time.time()
-        
+
         # Vectorized heading calculation
         headings = np.arctan2(y_primes, x_primes)
-        
+
         total_heading_compute_time = time.time() - start_time_heading
-        
+
         logger.info(f"Total compute time: {time.time() - start_time_total} seconds")
         logger.info(f"Curvature compute time: {total_curvature_compute_time} seconds")
         logger.info(f"Heading compute time: {total_heading_compute_time} seconds")
-        
+
         self._precomputed_properties = {
             "parameters": parameters,
             "curvatures": curvatures,
-
             "headings": headings,
         }
 
     def _interpolate_property(self, t: float, property_name: str) -> float:
         """
         Get a property value at parameter t using linear interpolation of precomputed values.
-        
+
         Args:
             t: Parameter value to interpolate at
             property_name: Name of the property to interpolate ('curvatures' or 'headings')
-            
+
         Returns:
             float: Interpolated property value
         """
         # Cache property values to avoid repeated dictionary access
         params = self._precomputed_properties["parameters"]
         vals = self._precomputed_properties[property_name]
-        
+
         # Find surrounding indices
         idx = np.searchsorted(params, t)
         if idx == 0:
@@ -556,7 +576,7 @@ class QuinticHermiteSplineManager:
         # Handle spline segment transitions
         if t0 % 1 != t1 % 1:
             return vals[idx - 1] if t % 1 > 0.5 else vals[idx]
-            
+
         return v0 + (v1 - v0) * (t - t0) / (t1 - t0)
 
     def rebuild_tables(self):
@@ -572,4 +592,3 @@ class QuinticHermiteSplineManager:
         self.precompute_path_properties()
         precompute_time = time.time() - start_time
         logger.info(f"Precompute time: {precompute_time} seconds")
-
