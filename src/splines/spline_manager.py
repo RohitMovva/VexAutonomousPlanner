@@ -474,15 +474,17 @@ class QuinticHermiteSplineManager:
             total_length=current_dist,
         )
 
-    def precompute_path_properties(self, samples_per_node: int = 1000) -> None:
+    def precompute_path_properties(self, samples_per_foot: int = 1000) -> None:
         """
         Precompute curvature and heading at regular intervals for faster lookup.
         Optimized version with vectorization and reduced redundant calculations.
         """
         if not self.splines:
             raise ValueError("No splines initialized")
-
-        num_samples = len(self.nodes) * samples_per_node
+        
+        total_arc_length = self.get_total_arc_length()
+        print(total_arc_length)
+        num_samples = int(total_arc_length * samples_per_foot)
 
         parameters = np.linspace(0, len(self.nodes) - 1, num_samples)
 
