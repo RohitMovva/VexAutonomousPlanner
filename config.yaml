@@ -11,6 +11,7 @@ motion:
   max_jerk: 43.0
   max_velocity: 4.0
 robot:
+  actions: []
   length: 15.0
   track_width: 11.5
   visualization: false

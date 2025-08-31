@@ -147,7 +147,7 @@ class QuinticHermiteSpline(Spline):
         self.set_tangents = tangents
 
     def _compute_derivatives(self) -> None:
-        """Modified version with corrected second derivative scaling"""
+        """Default derivative calculations"""
         logger.debug("\n=== Computing Derivatives ===")
         num_points = len(self.control_points)
 

@@ -476,14 +476,12 @@ class QuinticHermiteSplineManager:
 
     def precompute_path_properties(self, samples_per_foot: int = 1000) -> None:
         """
-        Precompute curvature and heading at regular intervals for faster lookup.
-        Optimized version with vectorization and reduced redundant calculations.
+        Precomputes commonly queried properties to speed up motion profiling (python is slow)
         """
         if not self.splines:
             raise ValueError("No splines initialized")
         
         total_arc_length = self.get_total_arc_length()
-        print(total_arc_length)
         num_samples = int(total_arc_length * samples_per_foot)
 
         parameters = np.linspace(0, len(self.nodes) - 1, num_samples)
@@ -527,7 +525,6 @@ class QuinticHermiteSplineManager:
         # Handle special case where speed is near zero
         mask = speed_squared >= 1e-10
         curvatures[mask] = numerator[mask] / (speed_squared[mask] ** 1.5)
-        # For points where speed is near zero, curvature remains 0.0
 
         total_curvature_compute_time = time.time() - start_time_curvature
 
