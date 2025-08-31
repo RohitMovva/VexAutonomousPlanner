@@ -60,8 +60,7 @@ class PathWidget(QGraphicsView):
         config_manager: config_manager.ConfigManager,
         parent=None,
         image_path=utilities.file_management.resource_path(
-            # "../assets/V5RC-PushBack-Match-2000x2000.png"
-            "../assets/square.png"
+            "../assets/V5RC-PushBack-Match-2000x2000.png"
         ),
         size=QSize(250, 250),
     ):
@@ -76,7 +75,7 @@ class PathWidget(QGraphicsView):
         self.setScene(self.scene)
 
         # Load the image and add it to the scene
-        pixmap = QPixmap("../assets/square.png")
+        pixmap = QPixmap(image_path)
         self.image_item = QGraphicsPixmapItem(pixmap)
         self.scene.addItem(self.image_item)
 

@@ -62,6 +62,7 @@ class QuinticHermiteSplineManager:
                 # Create spline segment
                 current_points = points[current_start_idx : i + 1]
                 spline = QuinticHermiteSpline()
+
                 tangents = []
                 for node in self.nodes[current_start_idx : i + 1]:
                     if node.tangent is not None:
@@ -74,11 +75,8 @@ class QuinticHermiteSplineManager:
                     else:
                         tangents.append([None, None])
 
-                spline.set_all_tangents(tangents)
-
-                if start_tangent is not None:
-                    spline.starting_tangent = start_tangent
-                    start_tangent = None
+                if (start_tangent is not None):
+                    tangents[0][1] = start_tangent
 
                 # Handle tangent continuity at split points
                 if nodes[i].is_reverse_node or nodes[i].turn != 0:
@@ -128,8 +126,9 @@ class QuinticHermiteSplineManager:
                             next_tangent = next_tangent * nodes[i].outgoing_magnitude
 
                         # Set end tangent for current spline and start tangent for next spline
-                        spline.ending_tangent = prev_vector
+                        tangents[-1][1] = prev_vector
                         start_tangent = next_tangent
+
 
                     else:  # Reverse node
                         # Calculate difference vector and normalize for reverse nodes
@@ -143,23 +142,25 @@ class QuinticHermiteSplineManager:
                         min_length = min(prev_length, next_length)
                         dif_vector = dif_vector * min_length
 
-                        if nodes[i].tangent is not None:
-                            # If tangent is set, scale it by the incoming magnitude
-                            dif_vector = nodes[i].tangent * nodes[i].incoming_magnitude
-
-                        # Set end tangent for current spline
-                        spline.ending_tangent = dif_vector
+                        tangents[-1][0] = dif_vector
                         start_tangent = -1 * dif_vector
-
+                        
                         if nodes[i].tangent is not None:
                             # If tangent is set, scale it by the outgoing magnitude
+                            tangents[-1][0] = (nodes[i].tangent * nodes[i].incoming_magnitude
+                            )
+
                             start_tangent = (
                                 -1 * nodes[i].tangent * nodes[i].outgoing_magnitude
                             )
 
+
+                spline.set_all_tangents(tangents)
+
                 if not spline.fit(current_points[:, 0], current_points[:, 1]):
                     logger.error(f"Failed to fit spline for points {current_points}")
                     return False
+                                
                 self.splines.append(spline)
 
                 if (nodes[i].is_reverse_node or nodes[i].turn != 0) and i < len(
