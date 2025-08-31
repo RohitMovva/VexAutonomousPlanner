@@ -119,7 +119,7 @@ class QuinticHermiteSplineManager:
                         next_tangent = next_tangent * min_length
 
                         prev_vector = prev_vector * min_length
-
+ 
                         if nodes[i].tangent is not None:
                             # If tangent is set, use them
                             prev_vector = nodes[i].tangent * nodes[i].incoming_magnitude
