@@ -166,6 +166,8 @@ def forward_backward_pass(
 
         prev_t = t
 
+    print(curvatures)
+
     logger.info(f"Max Accels: {max_accels}")
     logger.info(f"Boundary Map: {boundary_map}")
     # Add final point
