@@ -231,7 +231,19 @@ class PathViewWidget(QWidget):
         self.update_view()
 
     def update_selected_node(self):
-        if (
+        if(self.selected_node.get_tangent() is not None):
+            self.tangent_dx.setValue(self.selected_node.get_tangent()[0])
+            self.tangent_dy.setValue(self.selected_node.get_tangent()[1])
+
+            self.magnitude_incoming.setValue(
+                self.selected_node.get_incoming_magnitude()
+            )
+
+            self.magnitude_outgoing.setValue(
+                self.selected_node.get_outgoing_magnitude()
+            )
+
+        elif (
             self.gui_manager.get_incoming_magnitude_at_node(self.selected_node) != 0
             or self.gui_manager.get_outgoing_magnitude_at_node(self.selected_node) != 0
         ):

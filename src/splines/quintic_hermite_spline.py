@@ -147,7 +147,7 @@ class QuinticHermiteSpline(Spline):
         self.set_tangents = tangents
 
     def _compute_derivatives(self) -> None:
-        """Modified version with corrected second derivative scaling"""
+        """Default derivative calculations"""
         logger.debug("\n=== Computing Derivatives ===")
         num_points = len(self.control_points)
 
@@ -167,23 +167,16 @@ class QuinticHermiteSpline(Spline):
         logger.debug("\nComputing first derivatives:")
         for i in range(num_points):
             if i == 0:
-                if num_points == 2 and self.ending_tangent is not None:
-                    # If only one point and ending tangent is set, use it
-                    self.first_derivatives[i] = chords[0] * scale_factor
-                else:
-                    self.first_derivatives[i] = chords[0] * scale_factor / distances[0]
+                self.first_derivatives[i] = chords[0] * scale_factor / distances[0]
 
                 logger.debug(
                     f"First point: {self.first_derivatives[i]} (using distance {distances[0]})"
                 )
 
             elif i == num_points - 1:
-                if num_points == 2 and self.starting_tangent is not None:
-                    self.first_derivatives[i] = chords[-1] * scale_factor
-                else:
-                    self.first_derivatives[i] = (
-                        chords[-1] * scale_factor / distances[-1]
-                    )
+                self.first_derivatives[i] = (
+                    chords[-1] * scale_factor / distances[-1]
+                )
 
                 logger.debug(
                     f"Last point: {self.first_derivatives[i]} (using distance {distances[-1]})"

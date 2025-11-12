@@ -36,8 +36,8 @@ class Node(QGraphicsItem):
 
         # Scale pixel value down to account for the extra padding that isn't part of the field on either side, scale to between 0-1, subtract 0.5 to center and turn into inches
         self.image_size = 2000
-        self.abs_x = ((self.x() / (self.image_size)) - 0.5) * 145.308474301
-        self.abs_y = ((self.y() / (self.image_size)) - 0.5) * 145.308474301
+        self.abs_x = ((self.x() / (self.image_size)) - 0.5) * 146.446120719
+        self.abs_y = ((self.y() / (self.image_size)) - 0.5) * 146.446120719
 
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsMovable)
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemSendsGeometryChanges)
@@ -51,11 +51,11 @@ class Node(QGraphicsItem):
         self.max_acceleration = 0
 
     def get_abs_x(self):
-        self.abs_x = ((self.x() / (self.image_size)) - 0.5) * 145.308474301
+        self.abs_x = ((self.x() / (self.image_size)) - 0.5) * 146.446120719
         return self.abs_x
 
     def get_abs_y(self):
-        self.abs_y = ((self.y() / (self.image_size)) - 0.5) * 145.308474301
+        self.abs_y = ((self.y() / (self.image_size)) - 0.5) * 146.446120719
         return self.abs_y
 
     def set_tangent(self, tangent):
@@ -122,8 +122,8 @@ class Node(QGraphicsItem):
         self.abs_y = y
 
         new_pos = QPointF(
-            ((x / (12.1090395251 * 12)) + 0.5) * self.image_size,
-            ((y / (12.1090395251 * 12)) + 0.5) * self.image_size,
+            ((x / (12.2038433932 * 12)) + 0.5) * self.image_size,
+            ((y / (12.2038433932 * 12)) + 0.5) * self.image_size,
         )
         self.setPos(new_pos)
         self.parent.update_path()
@@ -150,8 +150,8 @@ class Node(QGraphicsItem):
     def mouseReleaseEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton and not self.locked:
             self.drag_start_position = None
-            self.abs_x = ((self.x() / (self.image_size)) - 0.5) * 145.308474301
-            self.abs_y = ((self.y() / (self.image_size)) - 0.5) * 145.308474301
+            self.abs_x = ((self.x() / (self.image_size)) - 0.5) * 146.446120719
+            self.abs_y = ((self.y() / (self.image_size)) - 0.5) * 146.446120719
             self.parent.update_path()
             # self.parent.save()
         super().mouseReleaseEvent(event)
