@@ -64,6 +64,7 @@ class QuinticHermiteSplineManager:
                 spline = QuinticHermiteSpline()
 
                 tangents = []
+                curvatures = []
                 for node in self.nodes[current_start_idx : i + 1]:
                     if node.tangent is not None:
                         tangents.append(
@@ -74,6 +75,16 @@ class QuinticHermiteSplineManager:
                         )
                     else:
                         tangents.append([None, None])
+
+                    if node.curvature is not None:
+                        curvatures.append(
+                            [
+                                node.curvature,
+                                node.curvature,
+                            ]
+                        )
+                    else:
+                        curvatures.append([None, None])
 
                 if (start_tangent is not None):
                     tangents[0][1] = start_tangent
@@ -156,6 +167,8 @@ class QuinticHermiteSplineManager:
 
 
                 spline.set_all_tangents(tangents)
+                spline.set_all_curvatures(curvatures)
+                print("Curvatures:", curvatures)
 
                 if not spline.fit(current_points[:, 0], current_points[:, 1]):
                     logger.error(f"Failed to fit spline for points {current_points}")

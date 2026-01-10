@@ -318,6 +318,11 @@ class ActionPoint(QGraphicsItem):
             self.action_values = values
             self.parent.update_path()
             logger.info(f"Action values set to: {self.action_values}")
+        elif (len(values) < len(self.action_values)):
+            for i in range(len(values)):
+                self.action_values[i] = values[i]
+            self.parent.update_path()
+            logger.info(f"Action values set to: {self.action_values}")
         else:
             logger.error("Invalid action values length")
 

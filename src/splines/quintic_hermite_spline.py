@@ -26,6 +26,7 @@ class QuinticHermiteSpline(Spline):
         self.ending_tangent: Optional[np.ndarray] = None
 
         self.set_tangents: Optional[np.ndarray] = None
+        self.set_curvatures: Optional[np.ndarray] = None
 
     def fit(
         self,
@@ -99,6 +100,9 @@ class QuinticHermiteSpline(Spline):
                     logger.info(f"Set tanents: {self.set_tangents}, i={i}, i+1={i + 1}")
                     logger.info(f"Tangents i: {self.set_tangents[i]}")
                     logger.info(f"Tangents i 1: {self.set_tangents[i][1]}")
+                    logger.info(f"Set Curvatures: {self.set_curvatures}, i={i}, i+1={i + 1}")
+                    logger.info(f"Curvatures i: {self.set_curvatures[i]}")
+                    logger.info(f"Curvatures i 1: {self.set_curvatures[i][1]}")
                     if (
                         self.set_tangents is not None
                         and self.set_tangents[i] is not None
@@ -113,6 +117,23 @@ class QuinticHermiteSpline(Spline):
                     ):
                         logger.info(f"Setting tangent: {self.set_tangents[i + 1][0]}")
                         d1_scaled = self.set_tangents[i + 1][0]
+
+                    if (
+                        self.set_curvatures is not None
+                        and self.set_curvatures[i] is not None
+                        and self.set_curvatures[i][1] is not None
+                    ):
+                        logger.info(f"Setting curvature: {self.set_curvatures[i][1]}")
+                        dd0_scaled = self.set_curvatures[i][1]
+
+                    if (
+                        self.set_curvatures is not None
+                        and self.set_curvatures[i + 1] is not None
+                        and self.set_curvatures[i + 1][0] is not None
+                    ):
+                        logger.info(f"Setting curvature: {self.set_curvatures[i + 1][0]}")
+                        dd1_scaled = self.set_curvatures[i + 1][0]
+
 
                     logger.debug(f"  Scaled derivatives: d0={d0}, d1={d1}")
                     logger.debug(f"  Scaled second derivatives: dd0={dd0}, dd1={dd1}")
@@ -145,6 +166,10 @@ class QuinticHermiteSpline(Spline):
     def set_all_tangents(self, tangents: np.ndarray):
         logger.debug(f"Setting all tangents: {tangents}")
         self.set_tangents = tangents
+
+    def set_all_curvatures(self, curvatures: np.ndarray):
+        logger.debug(f"Setting all curvatures: {curvatures}")
+        self.set_curvatures = curvatures
 
     def _compute_derivatives(self) -> None:
         """Default derivative calculations"""
@@ -244,6 +269,8 @@ class QuinticHermiteSpline(Spline):
         return point
 
     def get_magnitude(self, idx):
+        if not self.segments:
+            raise ValueError("Spline has not been fitted yet")
         return self.segment_lengths[idx]
 
     def percent_to_point(self, percent: float) -> np.ndarray:

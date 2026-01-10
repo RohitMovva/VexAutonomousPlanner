@@ -295,7 +295,7 @@ class PathWidget(QGraphicsView):
 
     def update_image_path(self, new_path: str):
         self.image = QPixmap(new_path)
-        # self.image_item.setPixmap(self.image)
+        self.image_item.setPixmap(self.image)
         self.update()
 
     def generate_motion_profile_lists(
@@ -367,7 +367,7 @@ class PathWidget(QGraphicsView):
             points[i][1] = (points[i][1] / (2000) - 0.5) * 12.2038433932
 
         self.spline_manager.build_path(points, nodes, action_points)
-        t_values = np.linspace(0, len(points) - 1, 25 * len(self.nodes))
+        t_values = np.linspace(0, len(points) - 1, 100 * len(self.nodes))
         spline_points = np.array(
             [self.spline_manager.get_point_at_parameter(t) for t in t_values]
         )
@@ -418,7 +418,8 @@ class PathWidget(QGraphicsView):
             point = (point / (12.2038433932) + 0.5) * 2000
             action_node.setPos(QPointF(point[0], point[1]))
 
-        pen = QPen(QColor("#0a0612"), 4)  # dark purple (looks cool)
+        pen = QPen(QColor("#008080"), 4)  # dark purple (looks cool)
+        # pen = QPen(QColor("#0a0612"), 4)  # dark purple (looks cool)
         self.path_item.setPen(pen)
         self.path_item.setPath(self.path)
 
@@ -478,12 +479,18 @@ class PathWidget(QGraphicsView):
         return new_action_point
 
     def remove_node(self, remove_node):
+        node_idx = self.nodes.index(remove_node)
+        for action_point in self.action_points:
+            if action_point.t >= node_idx and node_idx != 0:
+                action_point.t -= 1
+
         if remove_node in self.nodes:
             self.nodes.remove(remove_node)
             if remove_node == self.start_node:
                 self.start_node = None
             if remove_node == self.end_node:
                 self.end_node = None
+
 
         self.parent.update_path_page()
         self.update_path()
@@ -521,6 +528,14 @@ class PathWidget(QGraphicsView):
     def get_tangent_at_node(self, node):
         if self.spline_manager.splines:
             return self.spline_manager.get_derivative_at_parameter(
+                self.nodes.index(node)
+            )
+        else:
+            return [0, 0]
+        
+    def get_tangent_derivative_at_node(self, node):
+        if self.spline_manager.splines:
+            return self.spline_manager.get_second_derivative_at_parameter(
                 self.nodes.index(node)
             )
         else:
@@ -610,6 +625,8 @@ class PathWidget(QGraphicsView):
         self.clear_nodes()
         for node_data in nodes_data:
             if len(node_data) > 4:
+                logger.info(f"Loading node data: {node_data}")
+                print(node_data)
                 node = self.add_node(
                     self.convert_point(QPointF(node_data[0], node_data[1]))
                 )
@@ -620,14 +637,36 @@ class PathWidget(QGraphicsView):
                 node.is_reverse_node = bool(node_data[4])
                 node.stop = bool(node_data[5])
                 node.turn = node_data[6]
-                node.wait_time = node_data[7]
-                node.tangent = node_data[8]
-                node.incoming_magnitude = node_data[9]
-                node.outgoing_magnitude = node_data[10]
-                node.set_action_values(node_data[11:])
 
-                if node_data[8] is not None:
-                    node.set_tangent(np.array(node_data[8]))
+                node.wait_time = node_data[7]
+                node.max_velocity = node_data[8]
+                node.max_acceleration = node_data[9]
+                node.tangent = node_data[10]
+                
+                # node.incoming_magnitude = node_data[9]
+                # node.outgoing_magnitude = node_data[10]
+                # node.set_action_values(node_data[11:])
+                node.curvature = node_data[11]
+                node.incoming_magnitude = node_data[12]
+                node.outgoing_magnitude = node_data[13]
+                node.set_action_values(node_data[14:])
+
+
+                # node.wait_time = node_data[7]
+                # node.tangent = node_data[8]
+                # # node.incoming_magnitude = node_data[9]
+                # # node.outgoing_magnitude = node_data[10]
+                # # node.set_action_values(node_data[11:])
+                # node.curvature = node_data[9]
+                # node.incoming_magnitude = node_data[10]
+                # node.outgoing_magnitude = node_data[11]
+                # node.set_action_values(node_data[12:])
+
+                if node_data[10] is not None:
+                    node.set_tangent(np.array(node_data[10]))
+
+                if node_data[11] is not None:
+                    node.set_tangent_derivative(np.array(node_data[11]))
                 node.show()
 
         for action_data in action_data:
@@ -637,7 +676,9 @@ class PathWidget(QGraphicsView):
             )
             action_point.stop = action_data[3]
             action_point.wait_time = action_data[4]
-            action_point.set_action_values(action_data[5:])
+            action_point.max_velocity = 0
+            action_point.max_acceleration = 0
+            action_point.set_action_values(action_data[7:])
 
             action_point.show()
 

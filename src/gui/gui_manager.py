@@ -124,6 +124,10 @@ class AutonomousPlannerGUIManager(QMainWindow):
     def get_tangent_at_node(self, node):
         """Get the tangent at the selected node"""
         return self.central_widget.get_tangent_at_node(node)
+    
+    def get_tangent_derivative_at_node(self, node):
+        """Get the tangent derivative at the selected node"""
+        return self.central_widget.get_tangent_derivative_at_node(node)
 
     def get_incoming_magnitude_at_node(self, node):
         return self.central_widget.get_incoming_magnitude_at_node(node)
@@ -261,8 +265,7 @@ class AutonomousPlannerGUIManager(QMainWindow):
         nodes_map = []
         actions_map = []
         if (
-            len(self.central_widget.get_nodes()) > 2
-            and self.central_widget.start_node
+            self.central_widget.start_node
             and self.central_widget.end_node
         ):
             (
@@ -399,7 +402,10 @@ class AutonomousPlannerGUIManager(QMainWindow):
                 int(cur_node.stop),
                 cur_node.turn,
                 cur_node.wait_time,
+                cur_node.max_velocity,
+                cur_node.max_acceleration,
                 cur_node.get_tangent(True),
+                cur_node.get_tangent_derivative(True),
                 cur_node.get_incoming_magnitude(),
                 cur_node.get_outgoing_magnitude(),
             ]
@@ -414,6 +420,8 @@ class AutonomousPlannerGUIManager(QMainWindow):
                 cur_action.t,
                 int(cur_action.stop),
                 cur_action.wait_time,
+                cur_action.max_velocity,
+                cur_action.max_acceleration,
             ]
             + cur_action.get_action_values()
             for cur_action in self.central_widget.action_points
@@ -511,6 +519,7 @@ class AutonomousPlannerGUIManager(QMainWindow):
         self.settings_dock_widget.set_selected_node(node)
 
     def switch_field(self, fieldType: str):
+        print(fieldType)
         if fieldType == "Push Back Match":
             self.central_widget.update_image_path(
                 utilities.file_management.resource_path(

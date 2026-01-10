@@ -46,6 +46,7 @@ class Node(QGraphicsItem):
         self.tangent = None
         self.incoming_magnitude = None
         self.outgoing_magnitude = None
+        self.curvature = None
 
         self.max_velocity = 0
         self.max_acceleration = 0
@@ -77,6 +78,14 @@ class Node(QGraphicsItem):
 
     def get_outgoing_magnitude(self):
         return self.outgoing_magnitude
+    
+    def set_tangent_derivative(self, derivative):
+        self.curvature = derivative
+
+    def get_tangent_derivative(self, aslist=False):
+        if aslist:
+            return self.curvature.tolist() if self.curvature is not None else None
+        return self.curvature
 
     def boundingRect(self):
         return QRectF(-self.radius, -self.radius, 2 * self.radius, 2 * self.radius)

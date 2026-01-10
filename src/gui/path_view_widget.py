@@ -84,6 +84,14 @@ class PathViewWidget(QWidget):
         self.tangent_dy.setRange(-10000.0, 10000.0)
         self.tangent_dy.setDecimals(3)
 
+        self.tangent_ddx = QDoubleSpinBox()
+        self.tangent_ddx.setRange(-10000.0, 10000.0)
+        self.tangent_ddx.setDecimals(3)
+
+        self.tangent_ddy = QDoubleSpinBox()
+        self.tangent_ddy.setRange(-10000.0, 10000.0)
+        self.tangent_ddy.setDecimals(3)
+
         self.magnitude_incoming = QDoubleSpinBox()
         self.magnitude_incoming.setRange(0.0, 10000.0)
         self.magnitude_incoming.setDecimals(3)
@@ -94,6 +102,8 @@ class PathViewWidget(QWidget):
 
         self.tangent_form.addRow("dX:", self.tangent_dx)
         self.tangent_form.addRow("dY:", self.tangent_dy)
+        self.tangent_form.addRow("ddX:", self.tangent_ddx)
+        self.tangent_form.addRow("ddY:", self.tangent_ddy)
         self.tangent_form.addRow("Incoming Magnitude:", self.magnitude_incoming)
         self.tangent_form.addRow("Outgoing Magnitude:", self.magnitude_outgoing)
 
@@ -110,6 +120,8 @@ class PathViewWidget(QWidget):
         # Connect tangent spinboxes to update handler
         self.tangent_dx.valueChanged.connect(self.on_tangent_changed)
         self.tangent_dy.valueChanged.connect(self.on_tangent_changed)
+        self.tangent_ddx.valueChanged.connect(self.on_tangent_changed)
+        self.tangent_ddy.valueChanged.connect(self.on_tangent_changed)
 
         self.magnitude_incoming.valueChanged.connect(self.on_tangent_changed)
         self.magnitude_outgoing.valueChanged.connect(self.on_tangent_changed)
@@ -205,6 +217,7 @@ class PathViewWidget(QWidget):
         self.selected_node.set_tangent(None)
         self.selected_node.set_outgoing_magnitude(None)
         self.selected_node.set_incoming_magnitude(None)
+        self.selected_node.set_tangent_derivative(None)
 
         self.gui_manager.update_path()
 
@@ -248,6 +261,7 @@ class PathViewWidget(QWidget):
             or self.gui_manager.get_outgoing_magnitude_at_node(self.selected_node) != 0
         ):
             tangent = self.gui_manager.get_tangent_at_node(self.selected_node)
+            curvature = self.gui_manager.get_tangent_derivative_at_node(self.selected_node)
             if self.gui_manager.get_outgoing_magnitude_at_node(self.selected_node) == 0:
                 self.tangent_dx.setValue(
                     tangent[0]
@@ -261,6 +275,20 @@ class PathViewWidget(QWidget):
                         self.selected_node
                     )
                 )
+
+                self.tangent_ddx.setValue(
+                    curvature[0]
+                    / self.gui_manager.get_incoming_magnitude_at_node(
+                        self.selected_node
+                    ) ** 2
+                )
+                self.tangent_ddy.setValue(
+                    curvature[1]
+                    / self.gui_manager.get_incoming_magnitude_at_node(
+                        self.selected_node
+                    ) ** 2
+                )
+
             else:
                 self.tangent_dx.setValue(
                     tangent[0]
@@ -273,6 +301,19 @@ class PathViewWidget(QWidget):
                     / self.gui_manager.get_outgoing_magnitude_at_node(
                         self.selected_node
                     )
+                )
+
+                self.tangent_ddx.setValue(
+                    curvature[0]
+                    / self.gui_manager.get_outgoing_magnitude_at_node(
+                        self.selected_node
+                    ) ** 2
+                )
+                self.tangent_ddy.setValue(
+                    curvature[1]
+                    / self.gui_manager.get_outgoing_magnitude_at_node(
+                        self.selected_node
+                    ) ** 2
                 )
 
             self.magnitude_incoming.setValue(
@@ -307,6 +348,7 @@ class PathViewWidget(QWidget):
         ):
             tangent = np.array([self.tangent_dx.value(), self.tangent_dy.value()])
             self.selected_node.set_tangent(tangent)
+            self.selected_node.set_tangent_derivative(np.array([self.tangent_ddx.value(), self.tangent_ddy.value()]))
             self.selected_node.set_incoming_magnitude(self.magnitude_incoming.value())
             self.selected_node.set_outgoing_magnitude(self.magnitude_outgoing.value())
             self.gui_manager.update_path()
