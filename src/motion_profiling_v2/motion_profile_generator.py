@@ -10,14 +10,10 @@ import motion_profiling_v2.one_dim_mp_generator as one_dim_mp_generator
 
 logger = logging.getLogger(__name__)
 
-
-def wrap_angle(angle: float) -> float:
-    """Wrap an angle difference into [-pi, pi].
-
-    Headings come from arctan2, so a path crossing +-pi produces a raw difference
-    of ~2*pi where the robot actually barely turned at all.
-    """
-    return (angle + math.pi) % (2 * math.pi) - math.pi
+# Stopped points are held at this speed rather than a true zero, so that a sample
+# the robot is stopped at still takes a finite time to traverse. forward_backward_pass
+# floors stop nodes here, and the distance -> time inversion relies on that.
+MIN_PROFILE_SPEED = 0.01
 
 
 @dataclass
@@ -58,14 +54,21 @@ class Constraints:
             return 0.0
         return min(math.sqrt(max_v_sq), self.max_vel)
 
-    def max_accels_at_turn(self, angular_accel: float):
-        """Calculate maximum linear acceleration based on angular acceleration"""
-        left_lin_ac = self.max_acc + angular_accel * self.track_width / 2
-        right_lin_ac = self.max_acc - angular_accel * self.track_width / 2
-        if abs(left_lin_ac) < abs(right_lin_ac):
-            return left_lin_ac
-        else:
-            return right_lin_ac
+    def max_accel_at_curvature(
+        self,
+        velocity: float,
+        curvature: float,
+        dkappads: float,
+        accel_limit: float = None,
+    ) -> float:
+        """Largest linear acceleration that keeps the outer wheel within max_acc.
+        """
+        base = self.max_acc if accel_limit is None else accel_limit
+        half_tw = self.track_width / 2
+        limit = (base - velocity**2 * abs(dkappads) * half_tw) / (
+            1 + abs(curvature) * half_tw
+        )
+        return max(limit, 0.0)
 
     def get_wheel_speeds(
         self, linear_vel: float, angular_vel: float
@@ -93,7 +96,6 @@ def forward_backward_pass(
     velocities = []
     curvatures = []
     curvature_derivs = []
-    headings = []
 
     # Calculate total path length and gather curvatures
     total_dist = spline_manager.get_total_arc_length()
@@ -121,11 +123,7 @@ def forward_backward_pass(
     while current_dist < total_dist:
         t = spline_manager.distance_to_time(current_dist)
 
-        curvature = spline_manager.get_curvature(t)
-        heading = spline_manager.get_heading(t)
-
-        headings.append(heading)
-        curvatures.append(curvature)
+        curvatures.append(spline_manager.get_curvature(t))
 
         velocities.append(max_velocity)
         current_dist += delta_dist
@@ -182,15 +180,14 @@ def forward_backward_pass(
     # Add final point
     velocities.append(end_vel)
     t = spline_manager.distance_to_time(total_dist)
-    headings.append(spline_manager.get_heading(t))
     curvatures.append(spline_manager.get_curvature(t))
     max_accels.append(constraints.max_acc)  # Ensure last point has max_acc
 
     for i in range(len(curvatures)):
         if i == 0:
-            curvature_derivs.append((curvatures[i + 1] + curvatures[i]) / delta_dist)
+            curvature_derivs.append((curvatures[i + 1] - curvatures[i]) / delta_dist)
         elif i == len(curvatures) - 1:
-            curvature_derivs.append((curvatures[i] + curvatures[i - 1]) / delta_dist)
+            curvature_derivs.append((curvatures[i] - curvatures[i - 1]) / delta_dist)
         else:
             curvature_derivs.append(
                 (curvatures[i + 1] - curvatures[i - 1]) / (2 * delta_dist)
@@ -199,10 +196,6 @@ def forward_backward_pass(
     # Forward pass
     velocities[0] = start_vel
 
-    prev_ang_vel = 0
-    accel_ang = 0
-    print(max_accels)
-    print(boundary_map)
     for i in range(len(velocities) - 1):
         if i in boundary_map:
             constraints.max_acc = max_accels[boundary_map[i]]
@@ -210,18 +203,12 @@ def forward_backward_pass(
 
         current_vel = velocities[i]
         curvature = curvatures[i]
-        ang_vel = velocities[i] * abs(curvature)
         max_ang_acc_vel = constraints.max_vel
 
         if abs(curvature) < 1e-6:
             max_linear_vel = constraints.max_vel
             max_accel = constraints.max_acc
         else:
-            delta_theta = wrap_angle(headings[i + 1] - headings[i])
-            if abs(delta_theta) > 1e-9:
-                accel_ang = (ang_vel**2 - prev_ang_vel**2) / (2 * abs(delta_theta))
-            else:
-                accel_ang = 0.0  # not turning here, so no angular-accel limit
             max_vel_ang = max_angular_vel / abs(curvature)
             max_vel_kin = (
                 2 * constraints.max_vel / (constraints.track_width * abs(curvature) + 2)
@@ -235,24 +222,17 @@ def forward_backward_pass(
             )
 
             max_accel_ang = max_angular_accel / abs(curvature)
-            max_accel_kin = (
-                2 * constraints.max_acc / (constraints.track_width * abs(curvature) + 2)
+            max_accel_wheel = constraints.max_accel_at_curvature(
+                current_vel, curvature, curvature_derivs[i]
             )
 
-            max_accel_wheel = constraints.max_accels_at_turn(abs(accel_ang))
-            if max_accel_wheel < 0:
-                max_accel_wheel = 0
-
-            max_accel = min(
-                max_accel_ang, max_accel_kin, max_accel_wheel, constraints.max_acc
-            )
+            max_accel = min(max_accel_ang, max_accel_wheel, constraints.max_acc)
 
         next_vel = min(
             max_linear_vel, math.sqrt(current_vel**2 + 2 * max_accel * delta_dist)
         )
 
         velocities[i + 1] = min(velocities[i + 1], next_vel)
-        prev_ang_vel = ang_vel
 
         velocities[i + 1] = min(
             velocities[i + 1],
@@ -264,29 +244,20 @@ def forward_backward_pass(
 
     # Backward pass
     velocities[-1] = end_vel
-    prev_ang_vel = 0
 
     for i in range(len(velocities) - 1, 0, -1):
         if i in boundary_map and i > 0:
             constraints.max_acc = max_accels[boundary_map[i] - 1]
             constraints.max_dec = max_accels[boundary_map[i] - 1]
 
-
         current_vel = velocities[i]
         curvature = curvatures[i]
-        ang_vel = velocities[i] * abs(curvature)
         max_ang_acc_vel = constraints.max_vel
 
         if abs(curvature) < 1e-6:
             max_linear_vel = constraints.max_vel
             max_decel = constraints.max_dec
         else:
-            delta_theta = wrap_angle(headings[i - 1] - headings[i])
-            if abs(delta_theta) > 1e-9:
-                accel_ang = (ang_vel**2 - prev_ang_vel**2) / (2 * abs(delta_theta))
-            else:
-                accel_ang = 0.0  # not turning here, so no angular-accel limit
-
             max_vel_ang = max_angular_vel / abs(curvature)
             max_vel_kin = (
                 2 * constraints.max_vel / (constraints.track_width * abs(curvature) + 2)
@@ -300,16 +271,11 @@ def forward_backward_pass(
             )
 
             max_decel_ang = max_angular_accel / abs(curvature)
-            max_decel_kin = (
-                2 * constraints.max_dec / (constraints.track_width * abs(curvature) + 2)
+            max_decel_wheel = constraints.max_accel_at_curvature(
+                current_vel, curvature, curvature_derivs[i], constraints.max_dec
             )
 
-            max_accel_wheel = constraints.max_accels_at_turn(accel_ang)
-            if max_accel_wheel < 0:
-                max_accel_wheel = 0
-            max_decel = min(
-                max_decel_ang, max_decel_kin, max_accel_wheel, constraints.max_dec
-            )
+            max_decel = min(max_decel_ang, max_decel_wheel, constraints.max_dec)
 
         # Calculate maximum achievable velocity considering deceleration
         prev_vel = math.sqrt(current_vel**2 + 2 * max_decel * delta_dist)
@@ -317,8 +283,6 @@ def forward_backward_pass(
         prev_vel = min(prev_vel, velocities[i - 1], max_linear_vel)
 
         velocities[i - 1] = prev_vel
-
-        prev_ang_vel = ang_vel
 
         velocities[i - 1] = min(
             velocities[i - 1],
@@ -505,9 +469,14 @@ def generate_motion_profile(
     action_idx = 0
     node_idx = 0
 
-    # Pre-calculate velocity interpolation points for better performance
-    velocity_points = [(i * dd, vel) for i, vel in enumerate(velocities)]
-    velocity_xs, velocity_ys = zip(*velocity_points)
+    sample_dists = [i * dd for i in range(len(velocities))]
+    sample_times = [0.0]
+    for i in range(len(velocities) - 1):
+        v_sum = max(velocities[i] + velocities[i + 1], 2 * MIN_PROFILE_SPEED)
+        sample_times.append(sample_times[-1] + 2 * dd / v_sum)
+
+    profile_duration = sample_times[-1]
+    pos_cache, vel_cache, next_vel_cache = {}, {}, {}
 
     def handle_turn(angle, start_heading, current_time, dt):
         ins_headings, ins_ang_vels = motion_profile_angle(angle, constraints, dt)
@@ -533,7 +502,7 @@ def generate_motion_profile(
 
     def handle_wait(wait_time, current_time, dt):
         steps = int(wait_time / dt)
-        positions.extend(0 for _ in range(steps))
+        positions.extend(positions[-1] for _ in range(steps))
         linear_vels.extend(0 for _ in range(steps))
         accelerations.extend(0 for _ in range(steps))
         headings.extend(headings[-1] for _ in range(steps))
@@ -543,9 +512,13 @@ def generate_motion_profile(
         return current_time + steps * dt
 
     end_param = spline_manager.distance_to_time(total_length)
-    left_wheel_vels = []
-    right_wheel_vels = []
-    while current_pos < total_length:
+    elapsed = 0.0
+    while elapsed < profile_duration:
+        current_pos = min(
+            lerp(elapsed, sample_times, sample_dists, pos_cache), total_length
+        )
+        current_vel = lerp(elapsed, sample_times, velocities, vel_cache)
+
         t = spline_manager.distance_to_time(current_pos)
 
         # Handle node transitions
@@ -589,23 +562,12 @@ def generate_motion_profile(
 
         coord = spline_manager.get_point_at_parameter(t)
 
-        # Optimized velocity interpolation
-        target_vel = lerp(current_pos, velocity_xs, velocity_ys)
-        next_target_vel = lerp(current_pos + dd, velocity_xs, velocity_ys)
-        target_vel = max((target_vel + next_target_vel) / 2, 0.001)  # minimum velocity
 
-        # Calculate acceleration and angular velocity
-        accel = np.clip(
-            (target_vel - current_vel) / dt, -constraints.max_dec, constraints.max_acc
-        )
-        angular_vel = target_vel * curvature * -1
+        next_vel = lerp(elapsed + dt, sample_times, velocities, next_vel_cache)
+        accel = (next_vel - current_vel) / dt
 
-        # Update state
-        current_vel = np.clip(current_vel + accel * dt, 0, target_vel)
-        delta_pos = current_vel * dt + 0.5 * accel * dt * dt
-        if current_vel <= 0.1:
-            delta_pos = 0.1 * dt + 0.5 * accel * dt * dt
-        current_pos += delta_pos
+        # omega = v * kappa
+        angular_vel = current_vel * curvature * -1
 
         # Store results
         times.append(current_time)
@@ -616,12 +578,7 @@ def generate_motion_profile(
         headings.append(heading)
         coords.append(coord)
 
-        left_wheel_vels.append(
-            current_vel - (angular_vel * constraints.track_width / 2)
-        )
-        right_wheel_vels.append(
-            current_vel + (angular_vel * constraints.track_width / 2)
-        )
+        elapsed += dt
         current_time += dt
 
     other_lists_end_time = time.time()
@@ -634,11 +591,6 @@ def generate_motion_profile(
     logger.info(f"Generated {len(times)} points")
     logger.debug(f"headings: {headings}")
     logger.debug(f"angular_vels: {angular_vels}")
-    left_wheel_accs = []
-    right_wheel_accs = []
-    for i in range(len(left_wheel_vels)):
-        left_wheel_accs.append((left_wheel_vels[i] - left_wheel_vels[i - 1]) / dt)
-        right_wheel_accs.append((right_wheel_vels[i] - right_wheel_vels[i - 1]) / dt)
 
     return (
         times,
