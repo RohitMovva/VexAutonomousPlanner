@@ -128,16 +128,19 @@ class QuinticHermiteSplineManager:
                         next_tangent = next_tangent * min_length
 
                         prev_vector = prev_vector * min_length
- 
+
                         if nodes[i].tangent is not None:
-                            # If tangent is set, use them
+                            # Rotate the custom tangent by the same angle, so the
+                            # outgoing direction is still incoming + turn. The pi for
+                            # a reverse node is already folded into target_angle_rad.
                             prev_vector = nodes[i].tangent * nodes[i].incoming_magnitude
 
-                            next_tangent = nodes[i].tangent @ rotation_matrix * -1
+                            next_tangent = rotation_matrix @ nodes[i].tangent
                             next_tangent = next_tangent * nodes[i].outgoing_magnitude
 
                         # Set end tangent for current spline and start tangent for next spline
-                        tangents[-1][1] = prev_vector
+                        # (fit() reads a segment's ending tangent from slot 0 of its last point)
+                        tangents[-1][0] = prev_vector
                         start_tangent = next_tangent
 
 
