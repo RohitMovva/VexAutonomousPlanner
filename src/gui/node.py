@@ -6,6 +6,11 @@ from PyQt6.QtWidgets import QGraphicsItem, QInputDialog, QMenu, QWidget
 
 logger = logging.getLogger(__name__)
 
+# Stop flags
+STOP_AUTO = 0 # Will stop if reverse node or turn node
+STOP_FORCED = 1 # Will stop
+STOP_DISABLED = 2 # Won't stop
+
 
 # Node that stores data for auton route
 class Node(QGraphicsItem):
@@ -29,7 +34,7 @@ class Node(QGraphicsItem):
 
         self.offset = QPoint(0, 0)
         self.radius = radius
-        self.stop = False
+        self.stop_mode = STOP_AUTO
         self.setPos(x, y)
         self.setAcceptHoverEvents(True)
         self.image_rect = QRectF(0, 0, 2000, 2000)
@@ -208,7 +213,12 @@ class Node(QGraphicsItem):
         end_action.triggered.connect(self.toggle_end_node)
         attributes_menu.addAction(end_action)
 
-        stop_action = QAction("Stop at Node", checkable=True)
+        stop_label = "Stop at Node"
+        if self.auto_stop():
+            stop_label += (
+                " (auto)" if self.stop_mode == STOP_AUTO else " (override: no stop)"
+            )
+        stop_action = QAction(stop_label, checkable=True)
         stop_action.setChecked(self.stop)
         stop_action.triggered.connect(self.toggle_stop)
         attributes_menu.addAction(stop_action)
@@ -310,6 +320,18 @@ class Node(QGraphicsItem):
             logger.info(f"Action values set to: {self.action_values}")
         else:
             logger.error("Invalid action values length")
+
+    def auto_stop(self):
+        """Whether the path geometry at this node requires a full stop."""
+        return self.is_reverse_node or self.turn != 0
+
+    @property
+    def stop(self):
+        if self.stop_mode == STOP_FORCED:
+            return True
+        if self.stop_mode == STOP_DISABLED:
+            return False
+        return self.auto_stop()
 
     def is_stop_node(self):
         return self.stop
@@ -418,8 +440,15 @@ class Node(QGraphicsItem):
         logger.info(f"Node at ({self.abs_x}, {self.abs_y}) deleted")
 
     def toggle_stop(self):
-        self.stop = not self.stop
-        logger.info(f"Stop at Node: {self.stop}")
+        desired = not self.stop
+        # Fall back to AUTO whenever the user lands back on the geometric
+        # default, so the flag keeps tracking reverse/turn if those change.
+        if desired == self.auto_stop():
+            self.stop_mode = STOP_AUTO
+        else:
+            self.stop_mode = STOP_FORCED if desired else STOP_DISABLED
+        self.parent.update_path()
+        logger.info(f"Stop at Node: {self.stop} (mode {self.stop_mode})")
 
     def insert_node_before(self):
         logger.info(f"Inserting node before at {self.pos()}")

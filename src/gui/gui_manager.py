@@ -399,7 +399,7 @@ class AutonomousPlannerGUIManager(QMainWindow):
                 int(cur_node.is_start_node),
                 int(cur_node.is_end_node),
                 int(cur_node.is_reverse_node),
-                int(cur_node.stop),
+                int(cur_node.stop_mode),
                 cur_node.turn,
                 cur_node.wait_time,
                 cur_node.max_velocity,

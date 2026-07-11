@@ -401,6 +401,13 @@ def generate_motion_profile(
     logger.info("Generating motion profile")
     start_time = time.time()
 
+    for i, node in enumerate(spline_manager.nodes):
+        if (node.is_reverse_node or node.turn != 0) and not node.stop:
+            logger.warning(
+                f"Node {i} reverses/turns but has its stop overridden off; the "
+                f"profile will step discontinuously through it."
+            )
+
     # Rebuild spline tables
     sm_start_time = time.time()
     spline_manager.rebuild_tables()
