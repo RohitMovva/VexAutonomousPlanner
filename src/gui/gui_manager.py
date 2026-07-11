@@ -523,7 +523,7 @@ class AutonomousPlannerGUIManager(QMainWindow):
         if fieldType == "Push Back Match":
             self.central_widget.update_image_path(
                 utilities.file_management.resource_path(
-                    "../assets/V5RC-PushBack-Match-2000x2000.png"
+                    "../assets/V5RC-Override-Match-2000x2000.png"
                 )
             )
         else:

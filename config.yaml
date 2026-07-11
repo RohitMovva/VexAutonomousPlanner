@@ -1,14 +1,14 @@
 field:
   type: Push Back Match
 files:
-  header_folder: E:/routes
+  header_folder: F:/routes
   routes_folder: C:/Users/tihor/Projects/VexAutonomousPlanner/routes
-max_acceleration: 6.0
-max_velocity: 4.7
+max_acceleration: 7.5
+max_velocity: 4.0
 motion:
-  max_acceleration: 6.5
+  max_acceleration: 7.5
   max_jerk: 16.0
-  max_velocity: 4.7
+  max_velocity: 4.0
 robot:
   actions:
   - intake
@@ -21,7 +21,7 @@ robot:
   - front_reset
   - color_sort_toggle
   length: 13.5
-  track_width: 12.5
+  track_width: 13.0
   visualization: false
   width: 16.0
 track_width: 1.0416666666666667

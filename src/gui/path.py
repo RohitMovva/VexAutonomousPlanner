@@ -446,6 +446,10 @@ class PathWidget(QGraphicsView):
         else:
             self.nodes.insert(pos, new_node)
 
+        for p in self.action_points:
+            if (p.t//1 >= pos):
+                p.t += 1
+
         new_node.setPos(point)
         self.scene.addItem(new_node)
 
@@ -610,8 +614,10 @@ class PathWidget(QGraphicsView):
 
     def mirror_nodes(self):
         for n in self.nodes:
-            n.setPos(QPointF(2000 - n.x(), n.y()))
-            n.turn = -n.turn
+            n.setPos(QPointF(n.x(), 2000 - n.y()))
+            # n.turn = -n.turn
+            # if (n.get_tangent() is not None):
+            #     n.set_tangent(n.get_tangent() * -1)
         self.update_path()
 
     def load_nodes(self, node_str: str) -> None:
@@ -676,8 +682,8 @@ class PathWidget(QGraphicsView):
             )
             action_point.stop = action_data[3]
             action_point.wait_time = action_data[4]
-            action_point.max_velocity = 0
-            action_point.max_acceleration = 0
+            action_point.max_velocity = action_data[5]
+            action_point.max_acceleration = action_data[6]
             action_point.set_action_values(action_data[7:])
 
             action_point.show()
