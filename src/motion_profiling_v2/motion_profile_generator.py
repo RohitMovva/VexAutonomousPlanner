@@ -11,6 +11,15 @@ import motion_profiling_v2.one_dim_mp_generator as one_dim_mp_generator
 logger = logging.getLogger(__name__)
 
 
+def wrap_angle(angle: float) -> float:
+    """Wrap an angle difference into [-pi, pi].
+
+    Headings come from arctan2, so a path crossing +-pi produces a raw difference
+    of ~2*pi where the robot actually barely turned at all.
+    """
+    return (angle + math.pi) % (2 * math.pi) - math.pi
+
+
 @dataclass
 class Constraints:
     max_vel: float
@@ -203,14 +212,16 @@ def forward_backward_pass(
         curvature = curvatures[i]
         ang_vel = velocities[i] * abs(curvature)
         max_ang_acc_vel = constraints.max_vel
-        delta_theta = headings[i + 1] - headings[i]
 
         if abs(curvature) < 1e-6:
             max_linear_vel = constraints.max_vel
             max_accel = constraints.max_acc
         else:
-            delta_theta = headings[i + 1] - headings[i]
-            accel_ang = (ang_vel**2 - prev_ang_vel**2) / (2 * abs(delta_theta))
+            delta_theta = wrap_angle(headings[i + 1] - headings[i])
+            if abs(delta_theta) > 1e-9:
+                accel_ang = (ang_vel**2 - prev_ang_vel**2) / (2 * abs(delta_theta))
+            else:
+                accel_ang = 0.0  # not turning here, so no angular-accel limit
             max_vel_ang = max_angular_vel / abs(curvature)
             max_vel_kin = (
                 2 * constraints.max_vel / (constraints.track_width * abs(curvature) + 2)
@@ -270,8 +281,11 @@ def forward_backward_pass(
             max_linear_vel = constraints.max_vel
             max_decel = constraints.max_dec
         else:
-            delta_theta = headings[i - 1] - headings[i]
-            accel_ang = (ang_vel**2 - prev_ang_vel**2) / (2 * abs(delta_theta))
+            delta_theta = wrap_angle(headings[i - 1] - headings[i])
+            if abs(delta_theta) > 1e-9:
+                accel_ang = (ang_vel**2 - prev_ang_vel**2) / (2 * abs(delta_theta))
+            else:
+                accel_ang = 0.0  # not turning here, so no angular-accel limit
 
             max_vel_ang = max_angular_vel / abs(curvature)
             max_vel_kin = (

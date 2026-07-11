@@ -585,15 +585,34 @@ class QuinticHermiteSplineManager:
         if idx >= len(params):
             return vals[-1]
 
-        # Linear interpolation
         t0, t1 = params[idx - 1], params[idx]
         v0, v1 = vals[idx - 1], vals[idx]
 
-        # Handle spline segment transitions
-        if t0 % 1 != t1 % 1:
-            return vals[idx - 1] if t % 1 > 0.5 else vals[idx]
+        # The path is split into separate splines at reverse and turn nodes, and
+        # heading/curvature jump across such a split (by pi, at a reverse node).
+        # Splits land on integer parameters, so if an integer falls inside this
+        # sample interval, snap to whichever side of it t is on. Blending across a
+        # split would return a value the path never actually takes. Nodes that
+        # aren't splits are continuous and lose nothing by being snapped too.
+        # At the split itself, take the left-hand value, matching what
+        # _map_parameter_to_spline (and so get_point_at_parameter) resolves to.
+        floor_t0 = np.floor(t0)
+        split = t0 if t0 == floor_t0 else floor_t0 + 1
+        if 0 < split <= t1:
+            return v0 if t <= split else v1
 
-        return v0 + (v1 - v0) * (t - t0) / (t1 - t0)
+        if t1 == t0:
+            return v0
+
+        alpha = (t - t0) / (t1 - t0)
+
+        if property_name == "headings":
+            # Headings come from arctan2 and wrap at +-pi. Interpolate along the
+            # shortest arc so a wrap doesn't sweep the heading back through zero.
+            delta = (v1 - v0 + np.pi) % (2 * np.pi) - np.pi
+            return v0 + delta * alpha
+
+        return v0 + (v1 - v0) * alpha
 
     def rebuild_tables(self):
         """
