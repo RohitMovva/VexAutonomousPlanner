@@ -89,6 +89,13 @@ class AutonomousPlannerGUIManager(QMainWindow):
         )
         self.max_jerk = self.config_manager.get_value("motion", "max_jerk")
 
+        # A drivetrain usually brakes harder than it accelerates. Falls back to
+        # max_acceleration, so leaving it out of the config changes nothing.
+        self.max_deceleration = (
+            self.config_manager.get_value("motion", "max_deceleration")
+            or self.max_acceleration
+        )
+
         self.track_width = self.config_manager.get_value("robot", "track_width") / 12
 
         # Image and path widget
@@ -283,6 +290,7 @@ class AutonomousPlannerGUIManager(QMainWindow):
                 self.max_acceleration,
                 self.max_jerk,
                 self.track_width,
+                self.max_deceleration,
             )
             for i in range(0, len(time_intervals), 1):  # Every 10ms save data
                 nodes_data.append(
@@ -561,7 +569,11 @@ class AutonomousPlannerGUIManager(QMainWindow):
 
     def position_graph(self):
         self.central_widget.generate_motion_profile_lists(
-            self.max_velocity, self.max_acceleration, self.max_jerk, self.track_width
+            self.max_velocity,
+            self.max_acceleration,
+            self.max_jerk,
+            self.track_width,
+            self.max_deceleration,
         )
 
         utilities.file_management.create_mpl_plot(
@@ -576,7 +588,11 @@ class AutonomousPlannerGUIManager(QMainWindow):
 
     def velocity_graph(self):
         self.central_widget.generate_motion_profile_lists(
-            self.max_velocity, self.max_acceleration, self.max_jerk, self.track_width
+            self.max_velocity,
+            self.max_acceleration,
+            self.max_jerk,
+            self.track_width,
+            self.max_deceleration,
         )
 
         utilities.file_management.create_mpl_plot(
@@ -591,7 +607,11 @@ class AutonomousPlannerGUIManager(QMainWindow):
 
     def acceleration_graph(self):
         self.central_widget.generate_motion_profile_lists(
-            self.max_velocity, self.max_acceleration, self.max_jerk, self.track_width
+            self.max_velocity,
+            self.max_acceleration,
+            self.max_jerk,
+            self.track_width,
+            self.max_deceleration,
         )
 
         utilities.file_management.create_mpl_plot(
@@ -606,7 +626,11 @@ class AutonomousPlannerGUIManager(QMainWindow):
 
     def heading_graph(self):
         self.central_widget.generate_motion_profile_lists(
-            self.max_velocity, self.max_acceleration, self.max_jerk, self.track_width
+            self.max_velocity,
+            self.max_acceleration,
+            self.max_jerk,
+            self.track_width,
+            self.max_deceleration,
         )
 
         utilities.file_management.create_mpl_plot(
@@ -621,7 +645,11 @@ class AutonomousPlannerGUIManager(QMainWindow):
 
     def angular_velocity_graph(self):
         self.central_widget.generate_motion_profile_lists(
-            self.max_velocity, self.max_acceleration, self.max_jerk, self.track_width
+            self.max_velocity,
+            self.max_acceleration,
+            self.max_jerk,
+            self.track_width,
+            self.max_deceleration,
         )
 
         utilities.file_management.create_mpl_plot(
@@ -636,7 +664,11 @@ class AutonomousPlannerGUIManager(QMainWindow):
 
     def coords_graph(self):
         self.central_widget.generate_motion_profile_lists(
-            self.max_velocity, self.max_acceleration, self.max_jerk, self.track_width
+            self.max_velocity,
+            self.max_acceleration,
+            self.max_jerk,
+            self.track_width,
+            self.max_deceleration,
         )
 
         x, y = zip(*self.central_widget.coords)

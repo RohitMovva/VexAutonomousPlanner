@@ -3,12 +3,12 @@ field:
 files:
   header_folder: F:/routes
   routes_folder: C:/Users/tihor/Projects/VexAutonomousPlanner/routes
-max_acceleration: 7.5
-max_velocity: 4.0
+max_velocity: 4.25
 motion:
-  max_acceleration: 7.5
+  max_acceleration: 7.3
+  max_deceleration: 9.0
   max_jerk: 16.0
-  max_velocity: 4.0
+  max_velocity: 4.25
 robot:
   actions:
   - intake
@@ -20,7 +20,7 @@ robot:
   - rake
   - front_reset
   - color_sort_toggle
-  length: 13.5
+  length: 15.0
   track_width: 13.0
   visualization: false
   width: 16.0

@@ -299,7 +299,12 @@ class PathWidget(QGraphicsView):
         self.update()
 
     def generate_motion_profile_lists(
-        self, v_max: float, a_max: float, j_max: float, track_width: float
+        self,
+        v_max: float,
+        a_max: float,
+        j_max: float,
+        track_width: float,
+        d_max: float = None,
     ):
         # Clear lists
         self.time_intervals: List[float] = []
@@ -312,12 +317,12 @@ class PathWidget(QGraphicsView):
         self.coords: List[float] = []
 
         constraints = motion_profile_generator.Constraints(
-            max_vel=v_max,  # Maximum velocity in meters/second
-            max_acc=a_max,  # Maximum acceleration in meters/second^2
-            max_dec=a_max,  # Maximum deceleration in meters/second^2
+            max_vel=v_max,  # Maximum velocity in ft/s
+            max_acc=a_max,  # Maximum acceleration in ft/s^2
+            max_dec=a_max if d_max is None else d_max,  # Max deceleration in ft/s^2
             friction_coef=0.8,  # Coefficient of friction
-            max_jerk=j_max,  # Maximum jerk (rate of change of acceleration) in meters/second^3
-            track_width=track_width,  # Distance between wheels in meters
+            max_jerk=j_max,  # Maximum jerk in ft/s^3
+            track_width=track_width,  # Distance between wheels in ft
         )
 
         (
