@@ -69,8 +69,9 @@ class AutonomousPlannerGUIManager(QMainWindow):
 
         self.clearing_nodes = False
 
-        # Get parent of current working directory
-        config_file_path = os.path.join(os.getcwd(), "..", "config.yaml")
+        config_file_path = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)), "..", "..", "config.yaml"
+        )
         self.config_manager: config_manager.ConfigManager = (
             config_manager.ConfigManager(config_file_path)
         )

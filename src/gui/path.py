@@ -316,6 +316,7 @@ class PathWidget(QGraphicsView):
         self.nodes_map: List[int] = []
         self.coords: List[float] = []
 
+        cfg = self.config_manager
         constraints = motion_profile_generator.Constraints(
             max_vel=v_max,  # Maximum velocity in ft/s
             max_acc=a_max,  # Maximum acceleration in ft/s^2
@@ -323,6 +324,11 @@ class PathWidget(QGraphicsView):
             friction_coef=0.8,  # Coefficient of friction
             max_jerk=j_max,  # Maximum jerk in ft/s^3
             track_width=track_width,  # Distance between wheels in ft
+            # Optional drivetrain model. Absent from the config -> None -> the flat
+            # max_acc / max_dec above are used, exactly as before.
+            stall_accel=cfg.get_value("motion", "stall_accel"),
+            free_speed=cfg.get_value("motion", "free_speed"),
+            traction_accel=cfg.get_value("motion", "traction_accel"),
         )
 
         (

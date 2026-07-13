@@ -10,15 +10,7 @@ import motion_profiling_v2.one_dim_mp_generator as one_dim_mp_generator
 
 logger = logging.getLogger(__name__)
 
-# Stopped points are held at this speed rather than a true zero, so that a sample
-# the robot is stopped at still takes a finite time to traverse. forward_backward_pass
-# floors stop nodes here, and the distance -> time inversion relies on that.
-#
-# It also sets how sharp a reversal looks: the exported velocity steps straight from
-# -MIN_PROFILE_SPEED to +MIN_PROFILE_SPEED at a reverse node, which reads as a spurious
-# 2 * MIN_PROFILE_SPEED / dt of acceleration on top of the real decel. Keep it small
-# enough that this stays well under the noise floor - it costs no meaningful time,
-# because the samples either side of a stop dominate the distance -> time integral.
+# Min speed for any point (have be low)
 MIN_PROFILE_SPEED = 0.001
 
 
@@ -30,6 +22,55 @@ class Constraints:
     friction_coef: float
     max_jerk: float
     track_width: float
+
+    # Quicker dt model to take advantage of high accel for AC motors at lower speeds (still capped at some num to prevent wheel slip)
+    stall_accel: float = None  # ft/s^2 available at a standstill
+    free_speed: float = None  # ft/s at which motor torque reaches zero
+    traction_accel: float = None  # ft/s^2 the wheels can transmit (mu * g)
+
+    def has_drivetrain_model(self) -> bool:
+        return self.stall_accel is not None and bool(self.free_speed)
+
+    def _apply_ceilings(self, accel: float, ceiling: float, cap: float) -> float:
+        """Traction and the configured ceiling always bind; a per-node override replaces
+        the ceiling for that node."""
+        limit = min(accel, cap if cap is not None else ceiling)
+        if self.traction_accel is not None:
+            limit = min(limit, self.traction_accel)
+        return max(limit, 0.0)
+
+    def accel_limit(self, velocity: float, cap: float = None) -> float:
+        """Linear acceleration to command at this speed.
+
+        The torque-speed line says what the motors *can* do; max_acc is a ceiling on what
+        we are willing to ask for, and traction is what the tyres can transmit. All three
+        bind. cap is a per-node max_acceleration override and replaces max_acc.
+        """
+        available = float("inf")
+        if self.has_drivetrain_model():
+            available = self.stall_accel * (
+                1.0 - min(abs(velocity), self.free_speed) / self.free_speed
+            )
+        return self._apply_ceilings(available, self.max_acc, cap)
+
+    def decel_limit(self, velocity: float, cap: float = None) -> float:
+        """Braking limit, which is near-flat with speed.
+
+        Driving reverse voltage into a motor that is still spinning forwards puts the
+        back-EMF in series with the supply, so the controller pins itself to its current
+        limit and holds roughly stall torque the whole way down. Torque is therefore
+        never what limits braking - max_dec and traction are. That matters when the
+        encoders are also the odometry: braking from speed is the likeliest moment to
+        break traction, and a locked wheel corrupts the pose estimate permanently, so
+        max_dec is the knob to keep braking inside the friction budget.
+        """
+        available = self.stall_accel if self.has_drivetrain_model() else float("inf")
+        return self._apply_ceilings(available, self.max_dec, cap)
+
+    def angular_accel_limit(self, velocity: float, cap: float = None) -> float:
+        """The wheels' force budget spends on angular acceleration too, so this tracks
+        whatever linear acceleration is available at this speed."""
+        return 2 * self.accel_limit(velocity, cap) / self.track_width
 
     def max_speed_at_curvature(self, curvature: float) -> float:
         """Calculate maximum safe speed based on curvature"""
@@ -49,31 +90,93 @@ class Constraints:
     def set_max_acc(self, max_acc):
         self.max_acc = max_acc
 
-    def limit_velocity_by_ang_accel(
-        self, dkappads: float, max_angular_accel: float
-    ) -> float:
-        """Calculate maximum velocity based on angular acceleration and rate of change of curvature."""
+    def limit_velocity_by_ang_accel(self, dkappads: float, cap: float = None) -> float:
+        """Fastest the robot may travel and still have the angular acceleration to follow
+        the curvature ramp ahead of it.
+
+        Steering through a curvature that changes at dkappa/ds costs an angular
+        acceleration of v^2 * dkappa/ds, so the limit is the v where that equals what the
+        wheels can deliver. With a flat limit A that is just sqrt(A / |dkappa/ds|). With
+        the torque-speed model, A itself falls with v - A(v) = (2/tw) * stall * (1 - v/vf)
+        - so v solves the quadratic k*v^2 + (A0/vf)*v - A0 = 0 instead. Traction gives a
+        second, flat bound; the answer is whichever binds first.
+        """
         if abs(dkappads) < 1e-9:
             return self.max_vel
-        max_v_sq = max_angular_accel / abs(dkappads)
-        if max_v_sq < 0:
-            return 0.0
-        return min(math.sqrt(max_v_sq), self.max_vel)
+
+        k = abs(dkappads)
+        tw = self.track_width
+
+        def flat(accel):
+            """v where v^2 * k exactly spends a constant angular-accel budget."""
+            return math.sqrt((2 * accel / tw) / k)
+
+        if cap is not None:
+            bounds = [flat(cap)]
+        else:
+            bounds = [flat(self.max_acc)]
+            if self.has_drivetrain_model():
+                a0 = 2 * self.stall_accel / tw
+                b = a0 / self.free_speed
+                bounds.append((-b + math.sqrt(b * b + 4 * k * a0)) / (2 * k))
+
+        if self.traction_accel is not None:
+            bounds.append(flat(self.traction_accel))
+
+        return min(min(bounds), self.max_vel)
 
     def max_accel_at_curvature(
         self,
         velocity: float,
         curvature: float,
         dkappads: float,
-        accel_limit: float = None,
+        accel_limit: float,
     ) -> float:
-        """Largest linear acceleration that keeps the outer wheel within max_acc.
+        """Largest linear acceleration that keeps the outer wheel within accel_limit.
+
+        A wheel accelerates at a +- alpha * track_width / 2, and since omega = v * kappa
+        the angular acceleration is alpha = kappa * a + v^2 * dkappa/ds. Substituting and
+        solving the outer wheel's bound provides whats below
         """
-        base = self.max_acc if accel_limit is None else accel_limit
         half_tw = self.track_width / 2
-        limit = (base - velocity**2 * abs(dkappads) * half_tw) / (
+        limit = (accel_limit - velocity**2 * abs(dkappads) * half_tw) / (
             1 + abs(curvature) * half_tw
         )
+        return max(limit, 0.0)
+
+    def max_accel_across_interval(
+        self,
+        start_vel: float,
+        curvature: float,
+        dkappads: float,
+        ds: float,
+        accel_limit: float,
+    ) -> float:
+        """Largest acceleration that can be *held across* an interval of length ds and
+        still satisfy the outer wheel's bound at the FAR end of it.
+
+        max_accel_at_curvature only checks the end you are standing on. But the same
+        acceleration is still in force when the robot arrives at the other end, where
+        dkappa/ds may be far worse - and if nothing checks it there, the profile
+        accelerates hard into a curvature ramp that has no room for it.
+
+        The far end's velocity is not known independently: v1^2 = v0^2 + 2*a*ds.
+        Substituting that into
+
+            a * (1 + |k|*tw/2)  +  v1^2 * |k'| * tw/2  <=  A
+
+        leaves an inequality that is *linear* in a, so it solves exactly:
+
+            a  <=  (A - v0^2 * |k'| * tw/2) / (1 + |k|*tw/2 + ds*|k'|*tw)
+
+        Solving it exactly matters. Bounding v1 above instead and reusing
+        max_accel_at_curvature charges the robot for speed it has not reached yet, which
+        at a standstill (v0 = 0, where the steering debit must vanish) drives the limit to
+        zero and strands the profile at the stop it is trying to leave.
+        """
+        half_tw = self.track_width / 2
+        denom = 1 + abs(curvature) * half_tw + ds * abs(dkappads) * self.track_width
+        limit = (accel_limit - start_vel**2 * abs(dkappads) * half_tw) / denom
         return max(limit, 0.0)
 
     def get_wheel_speeds(
@@ -102,22 +205,9 @@ def forward_backward_pass(
     Performs forward-backward smoothing with proper consideration of all constraints
 
     Returns the velocity profile, node_samples (node index -> the sample that node sits
-    at) and the distance of every sample. The samples are NOT uniformly spaced: each node
-    and action point is pinned to a sample of its own, so a stop node's velocity is
-    floored at exactly the distance the spline's heading and curvature jump at. Rounding
-    a node onto a uniform grid instead puts the profile's zero up to delta_dist away from
-    the node it belongs to, and since v ~ sqrt(2 * a * ds) near a stop, that gap is worth
-    a real velocity - so the exported profile reverses direction while still moving, and
-    the heading picks up a spurious pi over the samples in between.
+    at) and the distance of every sample.
     """
-    # Derive angular constraints from linear constraints and track width
-    max_angular_vel = 2 * constraints.max_vel / constraints.track_width
-    max_angular_accel = 2 * constraints.max_acc / constraints.track_width
-
     total_dist = spline_manager.get_total_arc_length()
-
-    original_max_acc = constraints.max_acc
-    original_max_dec = constraints.max_dec
 
     # Nodes sit at integer parameters; action points carry their parameter directly.
     boundaries = [
@@ -153,19 +243,11 @@ def forward_backward_pass(
     if spline_manager.nodes[0].max_velocity > 0:
         max_velocity = spline_manager.nodes[0].max_velocity
 
-    # A node's max_acceleration override caps both ramps, but where it is unset the two
-    # ramps fall back to their own global limits. Resolving the deceleration limit
-    # against max_acc instead of max_dec - as this used to - silently discards max_dec
-    # entirely, since every boundary overwrote it with the acceleration value.
-    max_accels = [
+    # Optional node custom max_acceleration override
+    accel_caps = [
         spline_manager.nodes[0].max_acceleration
         if spline_manager.nodes[0].max_acceleration > 0
-        else constraints.max_acc
-    ]
-    max_decs = [
-        spline_manager.nodes[0].max_acceleration
-        if spline_manager.nodes[0].max_acceleration > 0
-        else constraints.max_dec
+        else None
     ]
 
     boundary_map = {0: 0}
@@ -191,127 +273,84 @@ def forward_backward_pass(
             max_velocity = (
                 point.max_velocity if point.max_velocity > 0 else constraints.max_vel
             )
-            max_accels.append(
-                point.max_acceleration
-                if point.max_acceleration > 0
-                else constraints.max_acc
+            accel_caps.append(
+                point.max_acceleration if point.max_acceleration > 0 else None
             )
-            max_decs.append(
-                point.max_acceleration
-                if point.max_acceleration > 0
-                else constraints.max_dec
-            )
-            boundary_map[i] = len(max_accels) - 1
+            boundary_map[i] = len(accel_caps) - 1
 
-    logger.info(f"Max Accels: {max_accels}")
+    logger.info(f"Accel caps: {accel_caps}")
     logger.info(f"Boundary Map: {boundary_map}")
-    max_accels.append(constraints.max_acc)  # Ensure last point has max_acc
-    max_decs.append(constraints.max_dec)
 
     # np.gradient is second-order accurate on the non-uniform grid.
     curvature_derivs = np.gradient(np.array(curvatures), dists)
     # Spacing between successive samples, used in v^2 = v0^2 + 2 * a * ds.
     deltas = np.diff(dists)
 
-    # Forward pass
+    # Custom accel bounds mapped into actual list to make logic easier in both passes
+    caps = []
+    cap = accel_caps[0]
+    for i in range(len(dists)):
+        if i in boundary_map:
+            cap = accel_caps[boundary_map[i]]
+        caps.append(cap)
+
+    # The speed cap before the passes
+    for i in range(len(velocities)):
+        velocities[i] = min(
+            velocities[i],
+            constraints.max_speed_at_curvature(abs(curvatures[i])),
+            constraints.limit_velocity_by_ang_accel(curvature_derivs[i], caps[i]),
+        )
+
+    def ramp_limit(near, far, ds, avail):
+        """Acceleration allowed over the interval between samples `near` and `far`.
+
+        `near` is the end the sweep is standing on, whose velocity is known; `far` is the
+        end it is solving for. The wheel budget has to hold at both, so take whichever
+        binds harder. Curvature constraints are asked for unconditionally - neither
+        divides by kappa (they bind on dkappa/ds), and skipping them where kappa ~ 0 skips
+        them at precisely the inflection points, where |dkappa/ds| peaks.
+        """
+        v = velocities[near]
+        return min(
+            constraints.max_accel_at_curvature(
+                v, curvatures[near], curvature_derivs[near], avail
+            ),
+            constraints.max_accel_across_interval(
+                v, curvatures[far], curvature_derivs[far], ds, avail
+            ),
+            avail,
+        )
+
+    # Forward pass. The sweeps now do nothing but the recursion - no clamping.
     velocities[0] = start_vel
 
     for i in range(len(velocities) - 1):
-        if i in boundary_map:
-            constraints.max_acc = max_accels[boundary_map[i]]
-
         current_vel = velocities[i]
-        curvature = curvatures[i]
-        max_ang_acc_vel = constraints.max_vel
 
-        if abs(curvature) < 1e-6:
-            max_linear_vel = constraints.max_vel
-            max_accel = constraints.max_acc
-        else:
-            max_vel_ang = max_angular_vel / abs(curvature)
-            max_vel_kin = (
-                2 * constraints.max_vel / (constraints.track_width * abs(curvature) + 2)
-            )
-            max_curve_vel = constraints.max_speed_at_curvature(abs(curvature))
-            max_ang_acc_vel = constraints.limit_velocity_by_ang_accel(
-                curvature_derivs[i], max_angular_accel
-            )
-            max_linear_vel = min(
-                max_vel_ang, max_vel_kin, max_curve_vel, max_ang_acc_vel
-            )
-
-            max_accel_ang = max_angular_accel / abs(curvature)
-            max_accel_wheel = constraints.max_accel_at_curvature(
-                current_vel, curvature, curvature_derivs[i]
-            )
-
-            max_accel = min(max_accel_ang, max_accel_wheel, constraints.max_acc)
-
-        next_vel = min(
-            max_linear_vel, math.sqrt(current_vel**2 + 2 * max_accel * deltas[i])
-        )
-
-        velocities[i + 1] = min(velocities[i + 1], next_vel)
+        # What the drivetrain has to spend at this speed. Under the torque-speed model
+        # this is large at low speeds and shrinks as the robot winds up.
+        avail_accel = constraints.accel_limit(current_vel, caps[i])
+        max_accel = ramp_limit(i, i + 1, deltas[i], avail_accel)
 
         velocities[i + 1] = min(
             velocities[i + 1],
-            abs(
-                constraints.max_vel
-                / (1 + (constraints.track_width * abs(curvature) / 2))
-            ),
+            math.sqrt(current_vel**2 + 2 * max_accel * deltas[i]),
         )
 
     # Backward pass
     velocities[-1] = end_vel
 
     for i in range(len(velocities) - 1, 0, -1):
-        if i in boundary_map and i > 0:
-            constraints.max_dec = max_decs[boundary_map[i] - 1]
-
         current_vel = velocities[i]
-        curvature = curvatures[i]
-        max_ang_acc_vel = constraints.max_vel
 
-        if abs(curvature) < 1e-6:
-            max_linear_vel = constraints.max_vel
-            max_decel = constraints.max_dec
-        else:
-            max_vel_ang = max_angular_vel / abs(curvature)
-            max_vel_kin = (
-                2 * constraints.max_vel / (constraints.track_width * abs(curvature) + 2)
-            )
-            max_curve_vel = constraints.max_speed_at_curvature(abs(curvature))
-            max_ang_acc_vel = constraints.limit_velocity_by_ang_accel(
-                curvature_derivs[i], max_angular_accel
-            )
-            max_linear_vel = min(
-                max_vel_ang, max_vel_kin, max_curve_vel, max_ang_acc_vel
-            )
-
-            max_decel_ang = max_angular_accel / abs(curvature)
-            max_decel_wheel = constraints.max_accel_at_curvature(
-                current_vel, curvature, curvature_derivs[i], constraints.max_dec
-            )
-
-            max_decel = min(max_decel_ang, max_decel_wheel, constraints.max_dec)
-
-        # Calculate maximum achievable velocity considering deceleration
-        prev_vel = math.sqrt(current_vel**2 + 2 * max_decel * deltas[i - 1])
-
-        prev_vel = min(prev_vel, velocities[i - 1], max_linear_vel)
-
-        velocities[i - 1] = prev_vel
+        avail_decel = constraints.decel_limit(current_vel, caps[i])
+        max_decel = ramp_limit(i, i - 1, deltas[i - 1], avail_decel)
 
         velocities[i - 1] = min(
             velocities[i - 1],
-            abs(
-                constraints.max_vel
-                / (1 + (constraints.track_width * abs(curvature) / 2))
-            ),
+            math.sqrt(current_vel**2 + 2 * max_decel * deltas[i - 1]),
         )
-
-    constraints.max_acc = original_max_acc
-    constraints.max_dec = original_max_dec
 
     return velocities, node_samples, dists
 
@@ -321,8 +360,7 @@ def motion_profile_angle(
 ) -> Tuple[
     List[float], List[float], List[float], List[float], List[float], List[float]
 ]:
-    # angle = math.radians(angle)
-
+    
     arc_length = abs(angle) * constraints.track_width / 2
 
     velocities = one_dim_mp_generator.generate_trapezoidal_profile(
@@ -417,10 +455,7 @@ def generate_motion_profile(
     )
     fb_end_time = time.time()
 
-    # Node transitions are driven off distance rather than off the spline parameter
-    # wrapping. Each node has a sample of its own, so this fires on exactly the sample
-    # whose velocity the pass floored to a stop - the one instant the robot is at rest
-    # and can reverse without stepping through a discontinuity.
+    # Exact distance of each node
     node_dists = {n: sample_dists[i] for n, i in node_samples.items()}
 
     logger.info(f"Forward-backward pass took {fb_end_time - fb_start_time} seconds")
@@ -495,10 +530,7 @@ def generate_motion_profile(
     action_idx = 0
     node_idx = 0
 
-    # Acceleration is constant between two distance samples, so crossing one takes
-    # 2 * ds / (v_i + v_i+1) - finite even when one end is stopped, as long as the other
-    # isn't. Accumulating gives the time at each distance sample. Sample spacing is not
-    # uniform: forward_backward_pass pins every node to a sample of its own.
+    # Sum path time using dist/velocity
     sample_times = [0.0]
     for i in range(len(velocities) - 1):
         ds = sample_dists[i + 1] - sample_dists[i]
@@ -608,13 +640,7 @@ def generate_motion_profile(
         elapsed += dt
         current_time += dt
 
-    # Acceleration is the derivative of the velocity that actually gets exported, so it
-    # has to be differenced from the signed linear_vels. Differencing the unsigned speed
-    # and then applying the direction sign - as this used to - hides the direction change
-    # at a reverse node entirely: it reports a bounded accel across a step in velocity
-    # that no drivetrain could follow, and the reported accel stops being d(v)/dt.
-    # times is uniformly spaced by dt, turn and wait blocks included, so a plain
-    # difference is valid across the whole profile.
+    # Calculate accel from velocities
     for i in range(len(linear_vels) - 1):
         accelerations[i] = (linear_vels[i + 1] - linear_vels[i]) / dt
     if accelerations:
