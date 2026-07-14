@@ -28,8 +28,29 @@ class Constraints:
     free_speed: float = None  # ft/s at which motor torque reaches zero
     traction_accel: float = None  # ft/s^2 the wheels can transmit (mu * g)
 
+    # ft of *effective* half-track that wheel scrub reduces the outer wheel's velo by
+    steering_speed_penalty: float = None
+
     def has_drivetrain_model(self) -> bool:
         return self.stall_accel is not None and bool(self.free_speed)
+
+    def outer_wheel_speed(self, velocity: float, curvature: float) -> float:
+        """How fast the OUTER wheel is actually spinning.
+
+        Affects back EMF + torque motor has based on AC motor torque-speed curve
+        """
+        return abs(velocity) * (1.0 + abs(curvature) * self.track_width / 2.0)
+
+    def wheel_speed_lever(self) -> float:
+        """Half-track the outer wheel's speed budget is charged against.
+
+        The outer wheel turns at v * (1 + |k| * tw/2). But it also has to
+        pay counteract wheel scrub so essentially widen track width to counteract this with tighter turning
+        """
+        lever = self.track_width / 2.0
+        if self.steering_speed_penalty:
+            lever += self.steering_speed_penalty
+        return lever
 
     def _apply_ceilings(self, accel: float, ceiling: float, cap: float) -> float:
         """Traction and the configured ceiling always bind; a per-node override replaces
@@ -73,16 +94,18 @@ class Constraints:
         return 2 * self.accel_limit(velocity, cap) / self.track_width
 
     def max_speed_at_curvature(self, curvature: float) -> float:
-        """Calculate maximum safe speed based on curvature"""
-        if abs(curvature) < 1e-6:
-            return self.max_vel
+        """Fastest the chassis may travel with the outer wheel inside its speed budget.
 
-        # Calculate maximum speed based on track width
-        max_turn_speed = ((2 * self.max_vel / self.track_width) * self.max_vel) / (
-            abs(curvature) * self.max_vel + (2 * self.max_vel / self.track_width)
-        )
+        The outer wheel runs at v * (1 + |k| * lever), so holding it at max_vel gives
 
-        return min(max_turn_speed, self.max_vel)
+            v <= max_vel / (1 + |k| * lever)
+
+        which is what the old three-line expression computed, algebraically identical but
+        for a straight line where it is exactly max_vel either way. The lever is where the
+        steering penalty enters (see wheel_speed_lever): with no penalty this reproduces
+        the previous profile bit-for-bit.
+        """
+        return self.max_vel / (1.0 + abs(curvature) * self.wheel_speed_lever())
 
     def set_max_vel(self, max_vel):
         self.max_vel = max_vel
@@ -329,8 +352,13 @@ def forward_backward_pass(
         current_vel = velocities[i]
 
         # What the drivetrain has to spend at this speed. Under the torque-speed model
-        # this is large at low speeds and shrinks as the robot winds up.
-        avail_accel = constraints.accel_limit(current_vel, caps[i])
+        # this is large at low speeds and shrinks as the robot speeds up.
+        #
+        # Evaluated at the OUTER WHEEL's speed account for individual speed of
+        # drivebase sides
+        avail_accel = constraints.accel_limit(
+            constraints.outer_wheel_speed(current_vel, curvatures[i]), caps[i]
+        )
         max_accel = ramp_limit(i, i + 1, deltas[i], avail_accel)
 
         velocities[i + 1] = min(
@@ -344,6 +372,8 @@ def forward_backward_pass(
     for i in range(len(velocities) - 1, 0, -1):
         current_vel = velocities[i]
 
+        # decel limit is just to prevent wheel slip since with back EMF robot can 
+        # decel very quickly
         avail_decel = constraints.decel_limit(current_vel, caps[i])
         max_decel = ramp_limit(i, i - 1, deltas[i - 1], avail_decel)
 

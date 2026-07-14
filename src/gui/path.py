@@ -329,6 +329,9 @@ class PathWidget(QGraphicsView):
             stall_accel=cfg.get_value("motion", "stall_accel"),
             free_speed=cfg.get_value("motion", "free_speed"),
             traction_accel=cfg.get_value("motion", "traction_accel"),
+            # ft of extra effective half-track charged to the outer wheel's speed budget,
+            # paying for the voltage that turning scrub costs. Absent -> None -> no penalty.
+            steering_speed_penalty=cfg.get_value("motion", "steering_speed_penalty"),
         )
 
         (
