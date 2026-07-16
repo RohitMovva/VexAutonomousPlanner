@@ -126,6 +126,21 @@ class PathViewWidget(QWidget):
         self.magnitude_incoming.valueChanged.connect(self.on_tangent_changed)
         self.magnitude_outgoing.valueChanged.connect(self.on_tangent_changed)
 
+        # Undo: valueChanged handlers snapshot on the first tick
+        # (begin_undo_state_once); editingFinished (Enter / focus-out) commits
+        # the whole spin/typing session as one undo entry.
+        for spin_box in (
+            self.position_x,
+            self.position_y,
+            self.tangent_dx,
+            self.tangent_dy,
+            self.tangent_ddx,
+            self.tangent_ddy,
+            self.magnitude_incoming,
+            self.magnitude_outgoing,
+        ):
+            spin_box.editingFinished.connect(self._commit_pending_edit)
+
         self.changing_node = False
 
         self.lock_pixmap = QIcon(utilities.file_management.resource_path("../assets/lock.png"))
@@ -210,9 +225,19 @@ class PathViewWidget(QWidget):
 
         self.node_layout.addStretch()
 
+    def _path_widget(self):
+        return self.gui_manager.central_widget
+
+    def _begin_pending_edit(self):
+        self._path_widget().begin_undo_state_once()
+
+    def _commit_pending_edit(self):
+        self._path_widget().commit_undo_state("Edit node properties")
+
     def reset_tangent(self):
         if not self.selected_node:
             return
+        self._path_widget().begin_undo_state()
         self.changing_node = True
         self.selected_node.set_tangent(None)
         self.selected_node.set_outgoing_magnitude(None)
@@ -223,6 +248,7 @@ class PathViewWidget(QWidget):
 
         self.update_selected_node()
         self.changing_node = False
+        self._path_widget().commit_undo_state("Reset tangent")
 
     # Placeholder callback methods
     def on_lock_clicked(self, node, button):
@@ -346,13 +372,16 @@ class PathViewWidget(QWidget):
         button.setIcon(QIcon(icon_path))
 
     def on_trash_clicked(self, node):
+        self._path_widget().begin_undo_state()
         node.delete_node()
+        self._path_widget().commit_undo_state("Delete node")
 
     def on_tangent_changed(self):
         """Handle changes to the tangent form values"""
         if not self.changing_node and (
             self.magnitude_outgoing.value() > 0 or self.magnitude_incoming.value() > 0
         ):
+            self._begin_pending_edit()
             tangent = np.array([self.tangent_dx.value(), self.tangent_dy.value()])
             self.selected_node.set_tangent(tangent)
 
@@ -373,5 +402,7 @@ class PathViewWidget(QWidget):
 
     def on_position_changed(self):
         if self.selected_node is not None:
+            if not self.changing_node:
+                self._begin_pending_edit()
             position = (self.position_x.value(), self.position_y.value())
             self.selected_node.set_position(position[0], position[1])

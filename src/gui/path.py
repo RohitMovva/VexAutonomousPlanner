@@ -370,6 +370,16 @@ class PathWidget(QGraphicsView):
             return
         self._pending_undo_state = self.parent.convert_nodes()
 
+    def begin_undo_state_once(self):
+        """begin_undo_state, but keep an already-pending snapshot.
+
+        Spin-box edits fire once per tick/keystroke and only commit on
+        editingFinished, so the first tick takes the snapshot and the rest of
+        the session accumulates into the same undo entry.
+        """
+        if self._pending_undo_state is None:
+            self.begin_undo_state()
+
     def commit_undo_state(self, text: str):
         """Push an undo command if the path actually changed since begin."""
         if self._restoring_state or self._pending_undo_state is None:
