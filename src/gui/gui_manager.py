@@ -11,6 +11,7 @@ from PyQt6.QtWidgets import (
     QFileDialog,
     QInputDialog,
     QMainWindow,
+    QMessageBox,
     QPushButton,
     QTextEdit,
     QVBoxLayout,
@@ -68,6 +69,9 @@ class AutonomousPlannerGUIManager(QMainWindow):
         self.routes_folder_path = None
 
         self.clearing_nodes = False
+
+        # Safeguard so file can't save warning doesn't get spammed when dragging nodes w/ autosave
+        self._reported_file_errors = set()
 
         config_file_path = os.path.join(
             os.path.dirname(os.path.abspath(__file__)), "..", "..", "config.yaml"
@@ -229,6 +233,12 @@ class AutonomousPlannerGUIManager(QMainWindow):
     def mirror_nodes(self):
         self.central_widget.mirror_nodes()
 
+    def _report_file_error(self, title, message):
+        logger.error(message)
+        if message not in self._reported_file_errors:
+            self._reported_file_errors.add(message)
+            QMessageBox.warning(self, title, message)
+
     def fill_txt_file(self, nodes_data):
         res = ""
         for data in nodes_data:
@@ -236,10 +246,19 @@ class AutonomousPlannerGUIManager(QMainWindow):
                 res += f"{v} "
             res += "\n"
 
-        with open(
-            self.routes_header_path + "/" + self.current_working_file + ".txt", "w"
-        ) as file:
-            file.write(res)
+        trajectory_path = (
+            self.routes_header_path + "/" + self.current_working_file + ".txt"
+        )
+        try:
+            with open(trajectory_path, "w") as file:
+                file.write(res)
+            self._reported_file_errors.clear()
+        except OSError as e:
+            self._report_file_error(
+                "Trajectory Save Failed",
+                f"Could not write the trajectory to {trajectory_path}\n\n{e}\n\n"
+                "Check that the header folder (usually the SD card) is available.",
+            )
 
     def save_nodes_to_file(self):
         nodes_string = ""
@@ -323,8 +342,14 @@ class AutonomousPlannerGUIManager(QMainWindow):
 
         # self.fill_template(nodes_data)
         self.fill_txt_file(nodes_data)
-        with open(full_path, "w") as file:
-            file.write(nodes_string)
+        try:
+            with open(full_path, "w") as file:
+                file.write(nodes_string)
+        except OSError as e:
+            self._report_file_error(
+                "Route Save Failed", f"Could not write the route to {full_path}\n\n{e}"
+            )
+            return
         logger.info(f"Route saved to {full_path}")
 
     def load_nodes_from_file(self, dialogue=True):
@@ -337,9 +362,16 @@ class AutonomousPlannerGUIManager(QMainWindow):
             file_name = (
                 self.routes_folder_path + "/" + self.current_working_file + ".txt"
             )
-        if file_name is not None:
-            with open(file_name, "r") as file:
-                nodes_string = file.read()
+        if file_name:
+            try:
+                with open(file_name, "r") as file:
+                    nodes_string = file.read()
+            except OSError as e:
+                self._report_file_error(
+                    "Route Load Failed",
+                    f"Could not read the route from {file_name}\n\n{e}",
+                )
+                return
             logger.info(f"Route loaded from {file_name}")
             self.central_widget.load_nodes(nodes_string)
 
@@ -353,8 +385,14 @@ class AutonomousPlannerGUIManager(QMainWindow):
             return
         self.current_working_file = file_path[:-4]  # cut off the .txt
         file_path = os.path.join(self.routes_folder_path, file_path)
-        with open(file_path, "r") as file:
-            nodes_string = file.read()
+        try:
+            with open(file_path, "r") as file:
+                nodes_string = file.read()
+        except OSError as e:
+            self._report_file_error(
+                "Route Load Failed", f"Could not read the route from {file_path}\n\n{e}"
+            )
+            return
 
         logger.info(f"Route loaded from {file_path}")
         self.central_widget.load_nodes(nodes_string)
@@ -563,7 +601,6 @@ class AutonomousPlannerGUIManager(QMainWindow):
 
     def set_track_width(self, new_track_width):
         self.track_width = new_track_width
-        utilities.file_management.set_config_value("track_width", self.track_width)
 
     def toggle_robot_visualization(self, state):
         self.central_widget.toggle_visualization(state)

@@ -121,8 +121,12 @@ class QuinticHermiteSplineManager:
                     prev_vector = (points[i] - points[i - 1]) * (
                         1.0 / prev_length if prev_length > 0 else 1.0
                     )
-                    next_vector = (points[i + 1] - points[i]) * (
-                        1.0 / next_length if next_length > 0 else 1.0
+
+                    next_vector = (
+                        (points[i + 1] - points[i])
+                        * (1.0 / next_length if next_length > 0 else 1.0)
+                        if i < len(points) - 1
+                        else prev_vector
                     )
 
                     min_length = min(prev_length, next_length)

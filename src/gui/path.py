@@ -23,6 +23,7 @@ from PyQt6.QtWidgets import (
     QGraphicsRectItem,
     QGraphicsScene,
     QGraphicsView,
+    QMessageBox,
 )
 
 import utilities.file_management
@@ -353,7 +354,9 @@ class PathWidget(QGraphicsView):
         logger.info(
             f"Error: {self.spline_manager.get_total_arc_length() - self.positions[-1]}"
         )
-        self.nodes_map.append(len(self.time_intervals))
+        # generate_motion_profile now emits the final node's nodes_map entry
+        # itself (placed before any final turn/wait samples), so no caller-side
+        # append is needed.
 
         return (
             self.time_intervals,
@@ -497,18 +500,17 @@ class PathWidget(QGraphicsView):
         return new_action_point
 
     def remove_node(self, remove_node):
-        node_idx = self.nodes.index(remove_node)
-        for action_point in self.action_points:
-            if action_point.t >= node_idx and node_idx != 0:
-                action_point.t -= 1
-
         if remove_node in self.nodes:
+            node_idx = self.nodes.index(remove_node)
+            for action_point in self.action_points:
+                if action_point.t >= node_idx and node_idx != 0:
+                    action_point.t -= 1
+
             self.nodes.remove(remove_node)
             if remove_node == self.start_node:
                 self.start_node = None
             if remove_node == self.end_node:
                 self.end_node = None
-
 
         self.parent.update_path_page()
         self.update_path()
@@ -604,13 +606,16 @@ class PathWidget(QGraphicsView):
 
     def clear_nodes(self):
         self.clearing_nodes = True
-        while self.nodes:
-            node = self.nodes.pop()
+        # delete_node -> remove_node handles the list removal itself; popping
+        # here first left remove_node looking up a node already gone from the
+        # list (ValueError on .index), crashing any second route load.
+        for node in list(self.nodes):
             node.delete_node()
+        self.nodes.clear()
 
-        while self.action_points:
-            action_point = self.action_points.pop()
+        for action_point in list(self.action_points):
             action_point.delete_action_point()
+        self.action_points.clear()
 
         self.start_node = None
         self.end_node = None
@@ -635,7 +640,16 @@ class PathWidget(QGraphicsView):
         self.update_path()
 
     def load_nodes(self, node_str: str) -> None:
-        data = json.loads(node_str)
+        try:
+            data = json.loads(node_str)
+        except json.JSONDecodeError as e:
+            logger.error(f"Could not parse route data: {e}")
+            QMessageBox.warning(
+                self,
+                "Invalid Route",
+                f"The route file is not valid JSON and cannot be loaded.\n\n{e}",
+            )
+            return
         if len(data) == 2:
             nodes_data = data[0]
             action_data = data[1]

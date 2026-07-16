@@ -517,7 +517,13 @@ def generate_motion_profile(
 
         ins_headings, ins_ang_vels = motion_profile_angle(angle, constraints, dt)
 
-        start_heading = headings[-1]
+        # No samples exist yet, so the starting pose comes from the path itself
+        start_heading = -1 * spline_manager.get_heading(0)
+        if is_reversed:
+            start_heading -= math.pi
+        start_heading = ((start_heading + math.pi) % (2 * math.pi)) - math.pi
+        start_coord = spline_manager.get_point_at_parameter(0)
+
         for i in range(len(ins_headings)):
             while ins_headings[i] + start_heading > math.pi:
                 ins_headings[i] -= 2 * math.pi
@@ -531,20 +537,24 @@ def generate_motion_profile(
             start_heading + ins_headings[i] for i in range(len(ins_headings))
         )
         angular_vels.extend(ins_ang_vels)
-        coords.extend(coords[-1] for _ in ins_headings)
+        coords.extend(start_coord for _ in ins_headings)
         times.extend(current_time + i * dt for i in range(len(ins_headings)))
 
         current_time += len(ins_headings) * dt
 
     if spline_manager.nodes[node_idx].wait_time > 0:
         steps = int(spline_manager.nodes[node_idx].wait_time / dt)
-        h = -1 * spline_manager.get_heading(0)
-        if is_reversed:
-            h -= math.pi if is_reversed else 0
-        if h > np.pi:
-            h -= 2 * np.pi
-        if h < -np.pi:
-            h += 2 * np.pi
+        if headings:
+            # A first-node turn already ran don't overwrite the heading
+            h = headings[-1]
+        else:
+            h = -1 * spline_manager.get_heading(0)
+            if is_reversed:
+                h -= math.pi
+            if h > np.pi:
+                h -= 2 * np.pi
+            if h < -np.pi:
+                h += 2 * np.pi
         positions.extend(0 for _ in range(steps))
         linear_vels.extend(0 for _ in range(steps))
         accelerations.extend(0 for _ in range(steps))
@@ -669,6 +679,23 @@ def generate_motion_profile(
 
         elapsed += dt
         current_time += dt
+
+    # Ensure that the last nodes/action points at very end of path get their actions executed
+    while node_idx + 1 < len(spline_manager.nodes):
+        nodes_map.append(len(times))
+        node_idx += 1
+        current_node = spline_manager.nodes[node_idx]
+
+        if current_node.turn != 0 and times:
+            current_time = handle_turn(
+                np.radians(current_node.turn), headings[-1], current_time, dt
+            )
+
+        if current_node.is_reverse_node:
+            is_reversed = not is_reversed
+
+        if current_node.wait_time > 0 and times:
+            current_time = handle_wait(current_node.wait_time, current_time, dt)
 
     # Calculate accel from velocities
     for i in range(len(linear_vels) - 1):
