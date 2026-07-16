@@ -4,14 +4,14 @@ files:
   header_folder: F:/routes
   routes_folder: C:/Users/tihor/Projects/VexAutonomousPlanner/routes
 motion:
-  free_speed: 5.2
-  max_acceleration: 11.0
-  max_deceleration: 11.0
+  free_speed: 4.8
+  max_acceleration: 13.0
+  max_deceleration: 13.0
   max_jerk: 16.0
-  max_velocity: 4.0
-  stall_accel: 11.0
+  max_velocity: 4.2
+  stall_accel: 13.0
   steering_speed_penalty: 0.167
-  traction_accel: 11.0
+  traction_accel: 13.0
 robot:
   actions:
   - intake
@@ -24,6 +24,7 @@ robot:
   - front_reset
   - color_sort_toggle
   length: 15.0
-  track_width: 15.0
+  track_width: 13.5
   visualization: false
   width: 16.0
+track_width: 1.125
