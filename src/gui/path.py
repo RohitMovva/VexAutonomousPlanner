@@ -391,11 +391,24 @@ class PathWidget(QGraphicsView):
             self.parent.undo_stack.push(PathStateCommand(self, before, after, text))
 
     def _restore_state(self, state: str):
+        # The restore rebuilds every node object, so remember the selection by
+        # index and re-select its replacement - otherwise the Path panel is
+        # left pointing at a destroyed node.
+        selected_idx = None
+        selected = getattr(self.parent, "selected_node", None)
+        if selected is not None and selected in self.nodes:
+            selected_idx = self.nodes.index(selected)
+
         self._restoring_state = True
         try:
             self.load_nodes(state)
         finally:
             self._restoring_state = False
+
+        if selected_idx is not None and selected_idx < len(self.nodes):
+            self.parent.set_selected_node(self.nodes[selected_idx])
+        else:
+            self.parent.set_selected_node(None)
 
     def _path_fingerprint(self):
         """Everything the motion profile depends on, as a hashable value.
@@ -715,6 +728,11 @@ class PathWidget(QGraphicsView):
                 self.start_node = None
             if remove_node == self.end_node:
                 self.end_node = None
+
+        # A deleted node cannot stay selected - the Path panel would keep
+        # editing a destroyed object.
+        if getattr(self.parent, "selected_node", None) is remove_node:
+            self.parent.set_selected_node(None)
 
         self.parent.update_path_page()
         self.update_path()

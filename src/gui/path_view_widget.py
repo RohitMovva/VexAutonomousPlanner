@@ -156,6 +156,7 @@ class PathViewWidget(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.addWidget(scroll_area)
         self.setLayout(layout)
+        self._set_editors_enabled(False)
         self.update_view()
 
     def update_view(self):
@@ -264,12 +265,38 @@ class PathViewWidget(QWidget):
         self.changing_node = True
         self.selected_node = node
 
-        self.update_selected_node()
+        if node is None:
+            self._set_editors_enabled(False)
+            self._clear_editor_values()
+        else:
+            self._set_editors_enabled(True)
+            self.update_selected_node()
 
         self.changing_node = False
         self.update_view()
 
+    def _set_editors_enabled(self, enabled: bool):
+        """The editors only mean something with a node selected; a disabled,
+        cleared panel can't silently edit a destroyed or deselected node."""
+        self.position_group.setEnabled(enabled)
+        self.tangent_group.setEnabled(enabled)
+
+    def _clear_editor_values(self):
+        for spin_box in (
+            self.position_x,
+            self.position_y,
+            self.tangent_dx,
+            self.tangent_dy,
+            self.tangent_ddx,
+            self.tangent_ddy,
+            self.magnitude_incoming,
+            self.magnitude_outgoing,
+        ):
+            spin_box.setValue(0.0)
+
     def update_selected_node(self):
+        if self.selected_node is None:
+            return
         if(self.selected_node.get_tangent() is not None):
             self.tangent_dx.setValue(self.selected_node.get_tangent()[0])
             self.tangent_dy.setValue(self.selected_node.get_tangent()[1])
@@ -378,6 +405,8 @@ class PathViewWidget(QWidget):
 
     def on_tangent_changed(self):
         """Handle changes to the tangent form values"""
+        if self.selected_node is None:
+            return
         if not self.changing_node and (
             self.magnitude_outgoing.value() > 0 or self.magnitude_incoming.value() > 0
         ):

@@ -275,7 +275,7 @@ class AutonomousPlannerGUIManager(QMainWindow):
     def _reset_edit_history(self):
         """A newly loaded route is a fresh document - drop the old history."""
         self.undo_stack.clear()
-        self.selected_node = None
+        self.set_selected_node(None)
 
     def mirror_nodes(self):
         self.central_widget.begin_undo_state()
@@ -487,7 +487,7 @@ class AutonomousPlannerGUIManager(QMainWindow):
         self.central_widget.begin_undo_state()
         self.central_widget.clear_nodes()
         self.central_widget.commit_undo_state("Clear all nodes")
-        self.selected_node = None
+        self.set_selected_node(None)
 
     def convert_nodes(self, as_list=False):
         nodes: list[node.Node] = self.central_widget.get_nodes()
@@ -630,7 +630,7 @@ class AutonomousPlannerGUIManager(QMainWindow):
         self.central_widget.begin_undo_state()
         node_to_delete.delete_node()
         self.central_widget.commit_undo_state("Delete node")
-        self.selected_node = None
+        self.set_selected_node(None)
 
     def switch_field(self, fieldType: str):
         print(fieldType)
