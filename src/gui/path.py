@@ -131,6 +131,18 @@ class PathWidget(QGraphicsView):
         self.path = QPainterPath()
         self.spline_manager = QuinticHermiteSplineManager()
 
+        # Last generated motion profile, reused while the path and constraints
+        # are unchanged (viewing two graphs, or a graph then a save, would
+        # otherwise regenerate the whole profile each time).
+        self._profile_cache_key = None
+        self._profile_cache = None
+
+        # Dense canvas-space samples of the drawn path (pixels) and their
+        # spline parameters, kept in sync by update_spline for fast
+        # closest-point queries.
+        self._canvas_samples = None
+        self._canvas_params = None
+
         # Add a timer for throttling update_path calls
         self.update_timer = QTimer()
         self.update_timer.setInterval(10)  # 10 milliseconds
@@ -299,6 +311,44 @@ class PathWidget(QGraphicsView):
         self.image_item.setPixmap(self.image)
         self.update()
 
+    def _path_fingerprint(self):
+        """Everything the motion profile depends on, as a hashable value.
+
+        Keying the profile cache on actual state (instead of a dirty flag set
+        from every edit path) means a missed invalidation can never serve a
+        stale profile.
+        """
+
+        def as_tuple(value):
+            if value is None:
+                return None
+            return tuple(np.asarray(value, dtype=float).ravel())
+
+        node_state = tuple(
+            (
+                n.x(),
+                n.y(),
+                n.is_start_node,
+                n.is_end_node,
+                n.is_reverse_node,
+                n.stop_mode,
+                n.turn,
+                n.wait_time,
+                n.max_velocity,
+                n.max_acceleration,
+                as_tuple(n.tangent),
+                as_tuple(n.curvature),
+                n.incoming_magnitude,
+                n.outgoing_magnitude,
+            )
+            for n in self.nodes
+        )
+        action_state = tuple(
+            (a.t, a.stop, a.wait_time, a.max_velocity, a.max_acceleration)
+            for a in self.action_points
+        )
+        return (node_state, action_state)
+
     def generate_motion_profile_lists(
         self,
         v_max: float,
@@ -307,6 +357,24 @@ class PathWidget(QGraphicsView):
         track_width: float,
         d_max: float = None,
     ):
+        cfg = self.config_manager
+
+        cache_key = (
+            v_max,
+            a_max,
+            j_max,
+            track_width,
+            d_max,
+            cfg.get_value("motion", "stall_accel"),
+            cfg.get_value("motion", "free_speed"),
+            cfg.get_value("motion", "traction_accel"),
+            cfg.get_value("motion", "steering_speed_penalty"),
+            self._path_fingerprint(),
+        )
+        if self._profile_cache is not None and self._profile_cache_key == cache_key:
+            logger.info("Path and constraints unchanged; reusing cached profile")
+            return self._profile_cache
+
         # Clear lists
         self.time_intervals: List[float] = []
         self.positions: List[float] = []
@@ -316,8 +384,6 @@ class PathWidget(QGraphicsView):
         self.angular_velocities: List[float] = []
         self.nodes_map: List[int] = []
         self.coords: List[float] = []
-
-        cfg = self.config_manager
         constraints = motion_profile_generator.Constraints(
             max_vel=v_max,  # Maximum velocity in ft/s
             max_acc=a_max,  # Maximum acceleration in ft/s^2
@@ -358,7 +424,7 @@ class PathWidget(QGraphicsView):
         # itself (placed before any final turn/wait samples), so no caller-side
         # append is needed.
 
-        return (
+        result = (
             self.time_intervals,
             self.positions,
             self.velocities,
@@ -369,6 +435,9 @@ class PathWidget(QGraphicsView):
             self.actions_map,
             self.coords,
         )
+        self._profile_cache_key = cache_key
+        self._profile_cache = result
+        return result
 
     def update_spline(
         self,
@@ -376,33 +445,24 @@ class PathWidget(QGraphicsView):
         nodes: List[node.Node],
         action_points: List[action_point.ActionPoint],
     ):
-        # convert points to numpy array of floats and from pixels to inches
+        # convert points to numpy array of floats and from pixels to feet
         points = np.array([[point.x(), point.y()] for point in points])
-
-        for i in range(len(points)):
-            points[i][0] = (points[i][0] / (2000) - 0.5) * 12.2038433932
-            points[i][1] = (points[i][1] / (2000) - 0.5) * 12.2038433932
+        points = (points / 2000 - 0.5) * 12.2038433932
 
         self.spline_manager.build_path(points, nodes, action_points)
         t_values = np.linspace(0, len(points) - 1, 100 * len(self.nodes))
-        spline_points = np.array(
-            [self.spline_manager.get_point_at_parameter(t) for t in t_values]
-        )
+        spline_points = self.spline_manager.get_points_at_parameters(t_values)
+        spline_points = (spline_points / 12.2038433932 + 0.5) * 2000
 
+        # Keep the sample table for fast closest-point queries.
+        self._canvas_params = t_values
+        self._canvas_samples = spline_points
+
+        self.path = QPainterPath()
         if len(spline_points) > 0:
-            self.path = QPainterPath()
-            for i in range(len(spline_points)):
-                spline_points[i][0] = (
-                    spline_points[i][0] / (12.2038433932) + 0.5
-                ) * 2000
-                spline_points[i][1] = (
-                    spline_points[i][1] / (12.2038433932) + 0.5
-                ) * 2000
             self.path.moveTo(spline_points[0][0], spline_points[0][1])
             for p in spline_points[1:]:
                 self.path.lineTo(p[0], p[1])
-        else:
-            self.path = QPainterPath()
 
         return spline_points
 
@@ -428,6 +488,8 @@ class PathWidget(QGraphicsView):
             self.update_spline(points, self.nodes, self.action_points)
         else:
             self.path = QPainterPath()
+            self._canvas_samples = None
+            self._canvas_params = None
 
         for action_node in self.action_points:
             t = action_node.t
@@ -606,9 +668,6 @@ class PathWidget(QGraphicsView):
 
     def clear_nodes(self):
         self.clearing_nodes = True
-        # delete_node -> remove_node handles the list removal itself; popping
-        # here first left remove_node looking up a node already gone from the
-        # list (ValueError on .index), crashing any second route load.
         for node in list(self.nodes):
             node.delete_node()
         self.nodes.clear()
@@ -742,65 +801,34 @@ class PathWidget(QGraphicsView):
         Returns:
             QPointF: The closest point on the path
         """
-        logger.info(f"Finding closest point on path to ({point.x()}, {point.y()})")
-        if path.isEmpty():
-            logger.info("Path is None")
+        if (
+            path is None
+            or path.isEmpty()
+            or self._canvas_samples is None
+            or len(self._canvas_samples) == 0
+        ):
             return QPointF(), None
 
-        # Get the length of the path
-        path_length = path.length()
-        if path_length == 0:
-            logger.info("Path length is 0")
-            return QPointF(), None
+        target = np.array([point.x(), point.y()])
 
-        # Binary search parameters
-        min_dist = float("inf")
-        closest_point = np.ndarray([0, 0])
-        closest_percent = 0.0
-        closest_parameter = 0.0
+        # Coarse pass: nearest of the already-drawn path samples (pixel space).
+        dists_sq = np.sum((self._canvas_samples - target) ** 2, axis=1)
+        idx = int(np.argmin(dists_sq))
 
-        # Convert point to numpy array w/ inches
-        point = np.array([point.x(), point.y()])
-        point = (point / (2000) - 0.5) * 12.2038433932
+        # Fine pass: re-sample the parameter window around that sample.
+        lo = self._canvas_params[max(idx - 1, 0)]
+        hi = self._canvas_params[min(idx + 1, len(self._canvas_params) - 1)]
+        fine_params = np.linspace(lo, hi, 64)
+        fine_points = self.spline_manager.get_points_at_parameters(fine_params)
+        fine_points = (fine_points / 12.2038433932 + 0.5) * 2000
 
-        # First pass: coarse search with larger steps
-        num_steps = 25 * len(self.nodes)
-        for i in range(num_steps + 1):
-            percent = i / num_steps
-            path_param = self.spline_manager.percent_to_parameter(percent)
-            path_point = self.spline_manager.get_point_at_parameter(path_param)
-            dist = math.hypot(path_point[0] - point[0], path_point[1] - point[1])
+        fine_idx = int(np.argmin(np.sum((fine_points - target) ** 2, axis=1)))
+        closest_point = fine_points[fine_idx]
 
-            if dist < min_dist:
-                min_dist = dist
-                closest_point = path_point
-                closest_percent = percent
-                closest_parameter = path_param
-
-        # Second pass: fine search around the closest point found
-        # Search within ±2% of the closest point found
-        search_range = 0.02
-        start_percent = max(0.0, closest_percent - search_range)
-        end_percent = min(1.0, closest_percent + search_range)
-
-        fine_steps = 500
-        percent_step = (end_percent - start_percent) / fine_steps
-
-        for i in range(fine_steps + 1):
-            percent = start_percent + (i * percent_step)
-            path_param = self.spline_manager.percent_to_parameter(percent)
-            path_point = self.spline_manager.get_point_at_parameter(path_param)
-            dist = math.hypot(path_point[0] - point[0], path_point[1] - point[1])
-
-            if dist < min_dist:
-                min_dist = dist
-                closest_point = path_point
-                closest_parameter = path_param
-
-        # Convert closest point to QPointF with pixels
-        closest_point = (closest_point / (12.2038433932) + 0.5) * 2000
-
-        return QPointF(closest_point[0], closest_point[1]), closest_parameter
+        return (
+            QPointF(closest_point[0], closest_point[1]),
+            float(fine_params[fine_idx]),
+        )
 
     def find_path_angle_at_point(
         self, path: QPainterPath, point: QPointF, delta: float = 0.01
@@ -816,26 +844,13 @@ class PathWidget(QGraphicsView):
         Returns:
             Angle in radians
         """
-        # Find the percentage along the path for the given point
-        min_dist = float("inf")
-        closest_percent = 0.0
-
-        for i in range(101):
-            percent = i / 100
-            path_point = path.pointAtPercent(percent)
-            dist = QVector2D(point - path_point).length()
-            if dist < min_dist:
-                min_dist = dist
-                closest_percent = percent
-
-        # Get points slightly before and after to calculate tangent
-        p1 = path.pointAtPercent(max(0, closest_percent - delta))
-        p2 = path.pointAtPercent(min(1, closest_percent + delta))
-
-        # Calculate angle from vector between points
-        dx = p2.x() - p1.x()
-        dy = p2.y() - p1.y()
-        return math.atan2(dy, dx)
+        # Canvas x/y scale to field x/y with the same positive factor, so the
+        # tangent's angle is identical in both spaces.
+        _, param = self.find_closest_point_on_path(path, point)
+        if param is None:
+            return 0.0
+        derivative = self.spline_manager.get_derivative_at_parameter(param)
+        return math.atan2(derivative[1], derivative[0])
 
     def draw_rect(self, pt):
         # Create the styled rect item if it doesn't exist
@@ -843,8 +858,8 @@ class PathWidget(QGraphicsView):
             self.rect_item = RobotVisualizer()
             self.scene().addItem(self.rect_item)
 
-        path_point, _ = self.find_closest_point_on_path(self.path, pt)
-        if path_point is None:
+        path_point, path_param = self.find_closest_point_on_path(self.path, pt)
+        if path_point is None or path_param is None:
             self.rect_item.hide()
             return
         if path_point == QPointF(0, 0):
@@ -856,8 +871,10 @@ class PathWidget(QGraphicsView):
             self.rect_item.hide()
             return
 
-        # Calculate angle at the path point
-        angle = self.find_path_angle_at_point(self.path, path_point)
+        # Angle at the path point, straight from the spline tangent (canvas and
+        # field axes scale identically, so the angle carries over).
+        derivative = self.spline_manager.get_derivative_at_parameter(path_param)
+        angle = math.atan2(derivative[1], derivative[0])
 
         # Create rectangle centered at path point
         rect_size = QSizeF(

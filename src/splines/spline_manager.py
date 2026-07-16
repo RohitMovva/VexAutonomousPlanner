@@ -311,6 +311,52 @@ class QuinticHermiteSplineManager:
         # This should never happen due to our handling
         raise ValueError("Failed to map parameter to spline segment")
 
+    def _spline_param_offsets(self) -> np.ndarray:
+        """Global parameter value at which each spline starts; last entry is the
+        end of the path. Spline i spans [offsets[i], offsets[i+1]]."""
+        counts = [len(spline.control_points) - 1 for spline in self.splines]
+        return np.concatenate(([0], np.cumsum(counts)))
+
+    def _map_parameters_to_splines(
+        self, ts: np.ndarray
+    ) -> Tuple[np.ndarray, np.ndarray]:
+        """Vectorized _map_parameter_to_spline. Matches the scalar version's
+        boundary convention: a parameter exactly on a split resolves to the
+        spline on its left."""
+        if not self.splines:
+            raise ValueError("No splines have been initialized")
+
+        offsets = self._spline_param_offsets()
+        ts = np.clip(np.asarray(ts, dtype=float), 0.0, offsets[-1])
+        spline_idxs = np.clip(
+            np.searchsorted(offsets, ts, side="left") - 1, 0, len(self.splines) - 1
+        )
+        local_ts = ts - offsets[spline_idxs]
+        return spline_idxs, local_ts
+
+    def _evaluate_batch(self, ts: np.ndarray, method_name: str) -> np.ndarray:
+        """Evaluate a per-spline batch method over the whole path, grouping the
+        parameters by the spline they fall in."""
+        ts = np.asarray(ts, dtype=float)
+        spline_idxs, local_ts = self._map_parameters_to_splines(ts)
+        out = np.empty((len(ts), 2))
+        for i in np.unique(spline_idxs):
+            mask = spline_idxs == i
+            out[mask] = getattr(self.splines[i], method_name)(local_ts[mask])
+        return out
+
+    def get_points_at_parameters(self, ts: np.ndarray) -> np.ndarray:
+        """Batch get_point_at_parameter. Returns (N, 2)."""
+        return self._evaluate_batch(ts, "get_points")
+
+    def get_derivatives_at_parameters(self, ts: np.ndarray) -> np.ndarray:
+        """Batch get_derivative_at_parameter. Returns (N, 2)."""
+        return self._evaluate_batch(ts, "get_derivatives")
+
+    def get_second_derivatives_at_parameters(self, ts: np.ndarray) -> np.ndarray:
+        """Batch get_second_derivative_at_parameter. Returns (N, 2)."""
+        return self._evaluate_batch(ts, "get_second_derivatives")
+
     def percent_to_parameter(self, percent: float) -> np.ndarray:
         """
         Convert a percentage to a parameter on the spline.
@@ -353,6 +399,57 @@ class QuinticHermiteSplineManager:
         # Interpolate
         t = t0 + (t1 - t0) * (distance - d0) / (d1 - d0)
         return t
+
+    def distances_to_times(self, distances: np.ndarray) -> np.ndarray:
+        """Batch distance_to_time. np.interp clamps to the table ends exactly
+        like the scalar version's edge cases."""
+        if self.lookup_table is None:
+            self.build_lookup_table()
+        return np.interp(
+            distances, self.lookup_table.distances, self.lookup_table.parameters
+        )
+
+    def get_curvatures(self, ts: np.ndarray) -> np.ndarray:
+        """Batch get_curvature."""
+        if self._precomputed_properties is None:
+            self.precompute_path_properties()
+        return self._interpolate_properties(np.asarray(ts, dtype=float), "curvatures")
+
+    def get_headings(self, ts: np.ndarray) -> np.ndarray:
+        """Batch get_heading."""
+        if self._precomputed_properties is None:
+            self.precompute_path_properties()
+        return self._interpolate_properties(np.asarray(ts, dtype=float), "headings")
+
+    def _interpolate_properties(self, ts: np.ndarray, property_name: str) -> np.ndarray:
+        """Vectorized _interpolate_property - same split-snapping and heading
+        wrap rules, applied to a whole array of parameters at once."""
+        params = self._precomputed_properties["parameters"]
+        vals = self._precomputed_properties[property_name]
+
+        idx = np.searchsorted(params, ts)
+        idx_in = np.clip(idx, 1, len(params) - 1)
+        t0, t1 = params[idx_in - 1], params[idx_in]
+        v0, v1 = vals[idx_in - 1], vals[idx_in]
+
+        # Split snapping (see _interpolate_property for the reasoning).
+        floor_t0 = np.floor(t0)
+        split = np.where(t0 == floor_t0, t0, floor_t0 + 1)
+        snap = (split > 0) & (split <= t1)
+        snapped = np.where(ts <= split, v0, v1)
+
+        span = t1 - t0
+        alpha = (ts - t0) / np.where(span > 0, span, 1.0)
+        if property_name == "headings":
+            delta = (v1 - v0 + np.pi) % (2 * np.pi) - np.pi
+            lerped = v0 + delta * alpha
+        else:
+            lerped = v0 + (v1 - v0) * alpha
+
+        out = np.where(snap, snapped, np.where(span == 0, v0, lerped))
+        out = np.where(idx == 0, vals[0], out)
+        out = np.where(idx >= len(params), vals[-1], out)
+        return out
 
     def get_total_arc_length(self) -> float:
         """
@@ -481,7 +578,7 @@ class QuinticHermiteSplineManager:
             dt = local_params[1] - local_params[0]
 
             # Calculate derivatives and accumulate distances using trapezoidal rule
-            derivatives = np.array([spline.get_derivative(t) for t in local_params])
+            derivatives = spline.get_derivatives(local_params)
             derivative_magnitudes = np.linalg.norm(derivatives, axis=1)
 
             # Calculate distances using trapezoidal rule
@@ -523,26 +620,12 @@ class QuinticHermiteSplineManager:
 
         parameters = np.linspace(0, len(self.nodes) - 1, num_samples)
 
-        # Precompute properties
         curvatures = np.zeros(num_samples)
 
-        headings = np.zeros(num_samples)
-
-        # Time measurement variables
         start_time_total = time.time()
 
-        # Vectorize the derivative calculations where possible
-        start_time_derivative = time.time()
-        first_derivs = np.array(
-            [self.get_derivative_at_parameter(t) for t in parameters]
-        )
-        second_derivs = np.array(
-            [self.get_second_derivative_at_parameter(t) for t in parameters]
-        )
-        end_time_derivative = time.time()
-        logger.info(
-            f"Derivative compute time: {end_time_derivative - start_time_derivative} seconds"
-        )
+        first_derivs = self.get_derivatives_at_parameters(parameters)
+        second_derivs = self.get_second_derivatives_at_parameters(parameters)
 
         # Extract components
         x_primes = first_derivs[:, 0]
@@ -553,9 +636,6 @@ class QuinticHermiteSplineManager:
         # Calculate speed squared (denominator for curvature)
         speed_squared = x_primes**2 + y_primes**2
 
-        # Start curvature calculation timing
-        start_time_curvature = time.time()
-
         # Vectorized curvature calculation
         numerator = x_primes * y_double_primes - y_primes * x_double_primes
 
@@ -563,19 +643,10 @@ class QuinticHermiteSplineManager:
         mask = speed_squared >= 1e-10
         curvatures[mask] = numerator[mask] / (speed_squared[mask] ** 1.5)
 
-        total_curvature_compute_time = time.time() - start_time_curvature
-
-        # Start heading calculation timing
-        start_time_heading = time.time()
-
         # Vectorized heading calculation
         headings = np.arctan2(y_primes, x_primes)
 
-        total_heading_compute_time = time.time() - start_time_heading
-
         logger.info(f"Total compute time: {time.time() - start_time_total} seconds")
-        logger.info(f"Curvature compute time: {total_curvature_compute_time} seconds")
-        logger.info(f"Heading compute time: {total_heading_compute_time} seconds")
 
         self._precomputed_properties = {
             "parameters": parameters,

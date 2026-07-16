@@ -270,32 +270,28 @@ class QuinticHermiteSpline(Spline):
             raise ValueError("Spline has not been fitted yet")
 
         local_t, segment_idx = self._normalize_parameter(t)
-        basis = self._get_basis_functions(local_t)
+        return self._get_basis_functions(local_t) @ self.segments[segment_idx]
 
-        # Debug logging for specific parameter values
-        if (
-            abs(local_t - 0.0) < 1e-6
-            or abs(local_t - 1.0) < 1e-6
-            or abs(local_t - 0.5) < 1e-6
-        ):
-            logger.debug(f"\n=== Computing point at t={t} (local_t={local_t}) ===")
-            logger.debug(f"Segment index: {segment_idx}")
-            logger.debug(f"Basis functions: {basis}")
+    def get_points(self, ts: np.ndarray) -> np.ndarray:
+        """Evaluate the spline at an array of parameters at once. Returns (N, 2)."""
+        local_ts, segment_idxs = self._normalize_parameters(ts)
+        basis = self._get_basis_functions(local_ts).T  # (N, 6)
+        segments = np.asarray(self.segments)[segment_idxs]  # (N, 6, 2)
+        return np.einsum("nb,nbc->nc", basis, segments)
 
-        segment = self.segments[segment_idx]
-        point = np.zeros(2)
-        for i in range(6):
-            contribution = basis[i] * segment[i]
-            if abs(local_t - 0.5) < 1e-6:  # Log details at midpoint
-                logger.debug(
-                    f"  Basis[{i}] * segment[{i}] = {basis[i]} * {segment[i]} = {contribution}"
-                )
-            point += contribution
+    def get_derivatives(self, ts: np.ndarray) -> np.ndarray:
+        """Evaluate the first derivative at an array of parameters. Returns (N, 2)."""
+        local_ts, segment_idxs = self._normalize_parameters(ts)
+        basis = self._get_basis_derivatives(local_ts).T
+        segments = np.asarray(self.segments)[segment_idxs]
+        return np.einsum("nb,nbc->nc", basis, segments)
 
-        if abs(local_t - 0.5) < 1e-6:
-            logger.debug(f"Final point: {point}")
-
-        return point
+    def get_second_derivatives(self, ts: np.ndarray) -> np.ndarray:
+        """Evaluate the second derivative at an array of parameters. Returns (N, 2)."""
+        local_ts, segment_idxs = self._normalize_parameters(ts)
+        basis = self._get_basis_second_derivatives(local_ts).T
+        segments = np.asarray(self.segments)[segment_idxs]
+        return np.einsum("nb,nbc->nc", basis, segments)
 
     def get_magnitude(self, idx):
         if not self.segments:
@@ -520,37 +516,18 @@ class QuinticHermiteSpline(Spline):
     # def get_tangent(self, t: float) -> np.ndarray:
 
     def get_derivative(self, t: float, debug: bool = False) -> np.ndarray:
-        """Enhanced get_derivative with optional logging"""
         if not self.segments:
             raise ValueError("Spline has not been fitted yet")
 
         local_t, segment_idx = self._normalize_parameter(t)
-
-        basis_derivatives = self._get_basis_derivatives(local_t)
-
-        derivative = np.zeros(2)
-        for i in range(6):
-            derivative += basis_derivatives[i] * self.segments[segment_idx][i]
-
-        return derivative
+        return self._get_basis_derivatives(local_t) @ self.segments[segment_idx]
 
     def get_second_derivative(self, t: float, debug: bool = False) -> np.ndarray:
-        """Enhanced get_second_derivative with optional logging"""
-
         if not self.segments:
             raise ValueError("Spline has not been fitted yet")
 
         local_t, segment_idx = self._normalize_parameter(t)
-
-        basis_second_derivatives = self._get_basis_second_derivatives(local_t)
-
-        second_derivative = np.zeros(2)
-        for i in range(6):
-            second_derivative += (
-                basis_second_derivatives[i] * self.segments[segment_idx][i]
-            )
-
-        return second_derivative
+        return self._get_basis_second_derivatives(local_t) @ self.segments[segment_idx]
 
     def _normalize_parameter(self, t: float) -> Tuple[float, int]:
         """
@@ -588,6 +565,25 @@ class QuinticHermiteSpline(Spline):
         local_t = (t - segment_start) / segment_length
 
         return local_t, segment_idx
+
+    def _normalize_parameters(self, ts: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+        """Vectorized _normalize_parameter: local parameters and segment indices
+        for a whole array of global parameters at once."""
+        if not self.parameters.size:
+            raise ValueError("Spline has not been fitted yet")
+
+        ts = np.asarray(ts, dtype=float)
+        t_min = self.parameters[0]
+        t_max = self.parameters[-1]
+        ts = np.clip(ts, t_min, t_max)
+
+        # Segments are unit-length in parameter space, so the index is the
+        # integer part (clipped so t == t_max lands in the last segment).
+        segment_idxs = np.minimum(
+            (ts - t_min).astype(np.intp), len(self.segments) - 1
+        )
+        local_ts = ts - t_min - segment_idxs
+        return local_ts, segment_idxs
 
     def set_starting_tangent(self, tangent: np.ndarray) -> bool:
         """

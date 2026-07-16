@@ -260,7 +260,9 @@ def forward_backward_pass(
         starts.setdefault(int(np.abs(dists - d).argmin()), []).append((kind, idx))
 
     velocities = []
-    curvatures = []
+    # Batched: one interp over the lookup table and one over the precomputed
+    # curvature table, instead of two scalar lookups per sample.
+    curvatures = spline_manager.get_curvatures(spline_manager.distances_to_times(dists))
 
     max_velocity = constraints.max_vel
     if spline_manager.nodes[0].max_velocity > 0:
@@ -276,9 +278,7 @@ def forward_backward_pass(
     boundary_map = {0: 0}
     node_samples = {}
 
-    for i, dist in enumerate(dists):
-        t = spline_manager.distance_to_time(dist)
-        curvatures.append(spline_manager.get_curvature(t))
+    for i in range(len(dists)):
         velocities.append(max_velocity)
 
         for kind, idx in starts.get(i, ()):
@@ -576,6 +576,8 @@ def generate_motion_profile(
         ds = sample_dists[i + 1] - sample_dists[i]
         v_sum = max(velocities[i] + velocities[i + 1], 2 * MIN_PROFILE_SPEED)
         sample_times.append(sample_times[-1] + 2 * ds / v_sum)
+
+    sample_times = np.asarray(sample_times)
 
     profile_duration = sample_times[-1]
     pos_cache, vel_cache = {}, {}
