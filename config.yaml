@@ -2,7 +2,7 @@ field:
   type: Push Back Match
 files:
   header_folder: F:/routes
-  routes_folder: C:/Users/tihor/Projects/VexAutonomousPlanner/routes
+  routes_folder: C:/Users/tihor/Projects/Robotics/VexAutonomousPlanner/routes
 motion:
   free_speed: 4.8
   max_acceleration: 13.0
@@ -27,4 +27,3 @@ robot:
   track_width: 13.5
   visualization: false
   width: 16.0
-track_width: 1.125
