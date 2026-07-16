@@ -71,6 +71,7 @@ class AutonomousPlannerGUIManager(QMainWindow):
         self.clearing_nodes = False
 
         self.undo_stack = QUndoStack(self)
+        self.selected_node = None
 
         # Safeguard so file can't save warning doesn't get spammed when dragging nodes w/ autosave
         self._reported_file_errors = set()
@@ -161,22 +162,27 @@ class AutonomousPlannerGUIManager(QMainWindow):
         tools_menu = menu_bar.addMenu("Tools")
 
         save_nodes_file_action = QAction("Save Nodes to File", self)
+        save_nodes_file_action.setShortcut(QKeySequence.StandardKey.Save)
         save_nodes_file_action.triggered.connect(self.save_nodes_to_file)
         file_menu.addAction(save_nodes_file_action)
 
         load_nodes_file_action = QAction("Load Nodes from File", self)
+        load_nodes_file_action.setShortcut(QKeySequence.StandardKey.Open)
         load_nodes_file_action.triggered.connect(self.load_nodes_from_file)
         file_menu.addAction(load_nodes_file_action)
 
         save_nodes_string_action = QAction("Convert to String", self)
+        save_nodes_string_action.setShortcut(QKeySequence("Ctrl+Shift+C"))
         save_nodes_string_action.triggered.connect(self.save_nodes_to_string)
         file_menu.addAction(save_nodes_string_action)
 
         load_nodes_string_action = QAction("Load Nodes from String", self)
+        load_nodes_string_action.setShortcut(QKeySequence("Ctrl+Shift+V"))
         load_nodes_string_action.triggered.connect(self.load_nodes_from_string)
         file_menu.addAction(load_nodes_string_action)
 
         set_current_file_action = QAction("Set Current Working File", self)
+        set_current_file_action.setShortcut(QKeySequence("Ctrl+T"))
         set_current_file_action.triggered.connect(self.set_working_file)
         file_menu.addAction(set_current_file_action)
 
@@ -192,6 +198,18 @@ class AutonomousPlannerGUIManager(QMainWindow):
             ]
         )
         edit_menu.addAction(redo_action)
+
+        edit_menu.addSeparator()
+
+        delete_node_action = QAction("Delete Selected Node", self)
+        delete_node_action.setShortcuts(
+            [
+                QKeySequence(QKeySequence.StandardKey.Delete),
+                QKeySequence(Qt.Key.Key_Backspace),
+            ]
+        )
+        delete_node_action.triggered.connect(self.delete_selected_node)
+        edit_menu.addAction(delete_node_action)
 
         clear_nodes_action = QAction("Clear All Nodes", self)
         clear_nodes_action.triggered.connect(self.clear_nodes)
@@ -250,6 +268,7 @@ class AutonomousPlannerGUIManager(QMainWindow):
     def _reset_edit_history(self):
         """A newly loaded route is a fresh document - drop the old history."""
         self.undo_stack.clear()
+        self.selected_node = None
 
     def mirror_nodes(self):
         self.central_widget.begin_undo_state()
@@ -461,6 +480,7 @@ class AutonomousPlannerGUIManager(QMainWindow):
         self.central_widget.begin_undo_state()
         self.central_widget.clear_nodes()
         self.central_widget.commit_undo_state("Clear all nodes")
+        self.selected_node = None
 
     def convert_nodes(self, as_list=False):
         nodes: list[node.Node] = self.central_widget.get_nodes()
@@ -590,7 +610,20 @@ class AutonomousPlannerGUIManager(QMainWindow):
 
     def set_selected_node(self, node: node.Node):
         """Set the currently selected node in the central widget"""
+        self.selected_node = node
         self.settings_dock_widget.set_selected_node(node)
+
+    def delete_selected_node(self):
+        node_to_delete = self.selected_node
+        if (
+            node_to_delete is None
+            or node_to_delete not in self.central_widget.get_nodes()
+        ):
+            return
+        self.central_widget.begin_undo_state()
+        node_to_delete.delete_node()
+        self.central_widget.commit_undo_state("Delete node")
+        self.selected_node = None
 
     def switch_field(self, fieldType: str):
         print(fieldType)
