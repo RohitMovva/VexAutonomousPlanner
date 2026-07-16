@@ -141,6 +141,17 @@ class PathWidget(QGraphicsView):
         self.path_item = QGraphicsPathItem()
         self.scene.addItem(self.path_item)
 
+        # Overlays drawn on top of the path where curvature forces the robot
+        # below a fraction of max velocity (added after path_item so they
+        # render above it).
+        self.feasibility_coloring = True
+        self.slow_overlay_item = QGraphicsPathItem()
+        self.slow_overlay_item.setPen(QPen(QColor("#e6a23c"), 4))
+        self.scene.addItem(self.slow_overlay_item)
+        self.crawl_overlay_item = QGraphicsPathItem()
+        self.crawl_overlay_item.setPen(QPen(QColor("#e64c3c"), 4))
+        self.scene.addItem(self.crawl_overlay_item)
+
         # Undo support: snapshot taken at the start of a user edit, committed
         # (pushed to the undo stack) when the edit finishes.
         self._pending_undo_state = None
@@ -529,7 +540,61 @@ class PathWidget(QGraphicsView):
             for p in spline_points[1:]:
                 self.path.lineTo(p[0], p[1])
 
+        self._update_feasibility_overlay(t_values, spline_points)
+
         return spline_points
+
+    def _update_feasibility_overlay(self, t_values, spline_points_px):
+        """Color path stretches where curvature caps the chassis well below
+        max velocity: orange under 60%, red under 35%. Uses the same
+        v <= max_vel / (1 + |k| * lever) bound as the profiler."""
+        if not self.feasibility_coloring or len(t_values) < 2:
+            self.slow_overlay_item.setPath(QPainterPath())
+            self.crawl_overlay_item.setPath(QPainterPath())
+            return
+
+        d1 = self.spline_manager.get_derivatives_at_parameters(t_values)
+        d2 = self.spline_manager.get_second_derivatives_at_parameters(t_values)
+        speed_sq = d1[:, 0] ** 2 + d1[:, 1] ** 2
+        curvature = np.zeros(len(t_values))
+        mask = speed_sq >= 1e-10
+        curvature[mask] = (
+            d1[mask, 0] * d2[mask, 1] - d1[mask, 1] * d2[mask, 0]
+        ) / speed_sq[mask] ** 1.5
+
+        track_width = self.config_manager.get_value("robot", "track_width") / 12
+        penalty = (
+            self.config_manager.get_value("motion", "steering_speed_penalty") or 0
+        )
+        lever = track_width / 2 + penalty
+        speed_ratio = 1.0 / (1.0 + np.abs(curvature) * lever)
+
+        self.slow_overlay_item.setPath(
+            self._path_from_mask(spline_points_px, speed_ratio < 0.6)
+        )
+        self.crawl_overlay_item.setPath(
+            self._path_from_mask(spline_points_px, speed_ratio < 0.35)
+        )
+
+    @staticmethod
+    def _path_from_mask(points, mask) -> QPainterPath:
+        """One QPainterPath covering every consecutive run of masked samples,
+        widened by one sample each side so runs connect to the base path."""
+        path = QPainterPath()
+        idx = np.flatnonzero(mask)
+        if idx.size == 0:
+            return path
+
+        breaks = np.flatnonzero(np.diff(idx) > 1)
+        run_starts = np.concatenate(([0], breaks + 1))
+        run_ends = np.concatenate((breaks, [idx.size - 1]))
+        for s, e in zip(run_starts, run_ends):
+            i0 = max(idx[s] - 1, 0)
+            i1 = min(idx[e] + 1, len(points) - 1)
+            path.moveTo(points[i0][0], points[i0][1])
+            for p in points[i0 + 1 : i1 + 1]:
+                path.lineTo(p[0], p[1])
+        return path
 
     def update_path(self):
         # Schedule the update if not already pending
@@ -555,6 +620,8 @@ class PathWidget(QGraphicsView):
             self.path = QPainterPath()
             self._canvas_samples = None
             self._canvas_params = None
+            self.slow_overlay_item.setPath(QPainterPath())
+            self.crawl_overlay_item.setPath(QPainterPath())
 
         for action_node in self.action_points:
             t = action_node.t
@@ -854,6 +921,11 @@ class PathWidget(QGraphicsView):
         logger.info(f"Visualizing toggled to : {state}")
         self.visualize = state
         self.update()
+
+    def set_feasibility_coloring(self, enabled: bool) -> None:
+        logger.info(f"Feasibility coloring toggled to: {enabled}")
+        self.feasibility_coloring = enabled
+        self.update_path()
 
     def find_closest_point_on_path(self, path: QPainterPath, point: QPointF) -> QPointF:
         """

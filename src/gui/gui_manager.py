@@ -215,6 +215,13 @@ class AutonomousPlannerGUIManager(QMainWindow):
         clear_nodes_action.triggered.connect(self.clear_nodes)
         tools_menu.addAction(clear_nodes_action)
 
+        feasibility_action = QAction("Show Speed-Limit Coloring", self, checkable=True)
+        feasibility_action.setChecked(True)
+        feasibility_action.triggered.connect(
+            lambda checked: self.central_widget.set_feasibility_coloring(checked)
+        )
+        tools_menu.addAction(feasibility_action)
+
         show_position_graph = QAction("Show Position Graph", self)
         show_position_graph.triggered.connect(self.position_graph)
         tools_menu.addAction(show_position_graph)
