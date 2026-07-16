@@ -114,9 +114,13 @@ class Node(QGraphicsItem):
         painter.drawEllipse(self.boundingRect())
 
     def mousePressEvent(self, event):
+        # Select first: the dock write-back nudges the position by rounding,
+        # and the undo snapshot must be taken after that so a plain click
+        # doesn't register as a move.
+        self.parent.set_selected_node(self)
         if event.button() == Qt.MouseButton.LeftButton and not self.locked:
             self.drag_start_position = event.pos()
-        self.parent.set_selected_node(self)
+            self.parent.begin_undo_state()
         super().mousePressEvent(event)
 
     def mouseMoveEvent(self, event):
@@ -167,6 +171,7 @@ class Node(QGraphicsItem):
             self.abs_x = ((self.x() / (self.image_size)) - 0.5) * 146.446120719
             self.abs_y = ((self.y() / (self.image_size)) - 0.5) * 146.446120719
             self.parent.update_path()
+            self.parent.commit_undo_state("Move node")
             # self.parent.save()
         super().mouseReleaseEvent(event)
 
@@ -265,7 +270,11 @@ class Node(QGraphicsItem):
         context_menu.addMenu(attributes_menu)
         context_menu.addMenu(node_menu)
 
+        # exec blocks until the chosen action (and its dialog) finishes, so
+        # one snapshot pair covers every edit the menu can make.
+        self.parent.begin_undo_state()
         context_menu.exec(event.screenPos())
+        self.parent.commit_undo_state("Edit node")
 
     def toggle_start_node(self):
         self.is_start_node = not self.is_start_node

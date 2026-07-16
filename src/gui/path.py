@@ -14,6 +14,7 @@ from PyQt6.QtGui import (
     QPen,
     QPixmap,
     QTransform,
+    QUndoCommand,
     QVector2D,
 )
 from PyQt6.QtWidgets import (
@@ -53,6 +54,33 @@ class RobotVisualizer(QGraphicsRectItem):
         fill_color = QColor(self._color)
         fill_color.setAlpha(40)
         self.setBrush(QBrush(fill_color))
+
+
+class PathStateCommand(QUndoCommand):
+    """Snapshot-based undo command.
+
+    The whole path already round-trips through convert_nodes/load_nodes, so a
+    command is just the serialized state before and after an edit. One
+    mechanism covers node adds, deletes, drags, and every context-menu
+    property edit - nothing can be forgotten.
+    """
+
+    def __init__(self, widget, before: str, after: str, text: str):
+        super().__init__(text)
+        self._widget = widget
+        self._before = before
+        self._after = after
+        # push() calls redo() immediately, but the edit has already happened.
+        self._first_redo = True
+
+    def redo(self):
+        if self._first_redo:
+            self._first_redo = False
+            return
+        self._widget._restore_state(self._after)
+
+    def undo(self):
+        self._widget._restore_state(self._before)
 
 
 class PathWidget(QGraphicsView):
@@ -112,6 +140,11 @@ class PathWidget(QGraphicsView):
 
         self.path_item = QGraphicsPathItem()
         self.scene.addItem(self.path_item)
+
+        # Undo support: snapshot taken at the start of a user edit, committed
+        # (pushed to the undo stack) when the edit finishes.
+        self._pending_undo_state = None
+        self._restoring_state = False
 
         self.rect_item = RobotVisualizer()
         self.scene.addItem(self.rect_item)
@@ -223,7 +256,9 @@ class PathWidget(QGraphicsView):
             and not event.modifiers() & Qt.KeyboardModifier.ControlModifier
         ):
             scene_pos = self.mapToScene(event.position().toPoint())
+            self.begin_undo_state()
             self.add_node(scene_pos)
+            self.commit_undo_state("Add node")
 
             logger.info(f"Added node at ({scene_pos.x()}, {scene_pos.y()})")
 
@@ -236,9 +271,14 @@ class PathWidget(QGraphicsView):
             path_point, path_param = self.find_closest_point_on_path(
                 self.path, scene_pos
             )
-            self.add_action_point(path_point, path_param)
+            if path_param is not None:
+                self.begin_undo_state()
+                self.add_action_point(path_point, path_param)
+                self.commit_undo_state("Add action point")
 
-            logger.info(f"Added action point at ({path_point.x()}, {path_point.y()})")
+                logger.info(
+                    f"Added action point at ({path_point.x()}, {path_point.y()})"
+                )
 
         # Call the parent class mousePressEvent to maintain drag functionality
         else:
@@ -310,6 +350,31 @@ class PathWidget(QGraphicsView):
         self.image = QPixmap(new_path)
         self.image_item.setPixmap(self.image)
         self.update()
+
+    # UNDO SUPPORT
+    def begin_undo_state(self):
+        """Snapshot the path before a user edit. Safe to call and then never
+        commit (a click that moved nothing pushes no command)."""
+        if self._restoring_state or self.parent is None:
+            return
+        self._pending_undo_state = self.parent.convert_nodes()
+
+    def commit_undo_state(self, text: str):
+        """Push an undo command if the path actually changed since begin."""
+        if self._restoring_state or self._pending_undo_state is None:
+            return
+        before = self._pending_undo_state
+        self._pending_undo_state = None
+        after = self.parent.convert_nodes()
+        if after != before:
+            self.parent.undo_stack.push(PathStateCommand(self, before, after, text))
+
+    def _restore_state(self, state: str):
+        self._restoring_state = True
+        try:
+            self.load_nodes(state)
+        finally:
+            self._restoring_state = False
 
     def _path_fingerprint(self):
         """Everything the motion profile depends on, as a hashable value.

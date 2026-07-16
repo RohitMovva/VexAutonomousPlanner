@@ -71,6 +71,7 @@ class ActionPoint(QGraphicsItem):
     def mousePressEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
             self.drag_start_position = event.pos()
+            self.parent.begin_undo_state()
         super().mousePressEvent(event)
 
     def mouseMoveEvent(self, event):
@@ -105,7 +106,7 @@ class ActionPoint(QGraphicsItem):
             self.abs_x = ((self.x() / (self.image_size)) - 0.5) * 146.446120719
             self.abs_y = ((self.y() / (self.image_size)) - 0.5) * 146.446120719
             self.parent.update_path()
-            # self.parent.save()
+            self.parent.commit_undo_state("Move action point")
         super().mouseReleaseEvent(event)
 
     def itemChange(self, change, value: QPointF):
@@ -177,7 +178,11 @@ class ActionPoint(QGraphicsItem):
         context_menu.addMenu(attributes_menu)
         context_menu.addMenu(node_menu)
 
+        # exec blocks until the chosen action (and its dialog) finishes, so
+        # one snapshot pair covers every edit the menu can make.
+        self.parent.begin_undo_state()
         context_menu.exec(event.screenPos())
+        self.parent.commit_undo_state("Edit action point")
 
     def has_action(self):
         for action_value in self.action_values:

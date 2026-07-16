@@ -4,7 +4,7 @@ import os
 from pathlib import Path
 
 from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QAction, QIcon
+from PyQt6.QtGui import QAction, QIcon, QKeySequence, QUndoStack
 from PyQt6.QtWidgets import (
     QApplication,
     QDialog,
@@ -69,6 +69,8 @@ class AutonomousPlannerGUIManager(QMainWindow):
         self.routes_folder_path = None
 
         self.clearing_nodes = False
+
+        self.undo_stack = QUndoStack(self)
 
         # Safeguard so file can't save warning doesn't get spammed when dragging nodes w/ autosave
         self._reported_file_errors = set()
@@ -155,6 +157,7 @@ class AutonomousPlannerGUIManager(QMainWindow):
         menu_bar = self.menuBar()
 
         file_menu = menu_bar.addMenu("File")
+        edit_menu = menu_bar.addMenu("Edit")
         tools_menu = menu_bar.addMenu("Tools")
 
         save_nodes_file_action = QAction("Save Nodes to File", self)
@@ -176,6 +179,19 @@ class AutonomousPlannerGUIManager(QMainWindow):
         set_current_file_action = QAction("Set Current Working File", self)
         set_current_file_action.triggered.connect(self.set_working_file)
         file_menu.addAction(set_current_file_action)
+
+        undo_action = self.undo_stack.createUndoAction(self, "Undo")
+        undo_action.setShortcut(QKeySequence.StandardKey.Undo)
+        edit_menu.addAction(undo_action)
+
+        redo_action = self.undo_stack.createRedoAction(self, "Redo")
+        redo_action.setShortcuts(
+            [
+                QKeySequence(QKeySequence.StandardKey.Redo),
+                QKeySequence("Ctrl+Shift+Z"),
+            ]
+        )
+        edit_menu.addAction(redo_action)
 
         clear_nodes_action = QAction("Clear All Nodes", self)
         clear_nodes_action.triggered.connect(self.clear_nodes)
@@ -229,9 +245,16 @@ class AutonomousPlannerGUIManager(QMainWindow):
         )
         if ok and nodes_string:
             self.central_widget.load_nodes(nodes_string)
+            self._reset_edit_history()
+
+    def _reset_edit_history(self):
+        """A newly loaded route is a fresh document - drop the old history."""
+        self.undo_stack.clear()
 
     def mirror_nodes(self):
+        self.central_widget.begin_undo_state()
         self.central_widget.mirror_nodes()
+        self.central_widget.commit_undo_state("Mirror path")
 
     def _report_file_error(self, title, message):
         logger.error(message)
@@ -374,6 +397,7 @@ class AutonomousPlannerGUIManager(QMainWindow):
                 return
             logger.info(f"Route loaded from {file_name}")
             self.central_widget.load_nodes(nodes_string)
+            self._reset_edit_history()
 
     def load_route_file(self, file_path):
         """Load a route file"""
@@ -396,6 +420,7 @@ class AutonomousPlannerGUIManager(QMainWindow):
 
         logger.info(f"Route loaded from {file_path}")
         self.central_widget.load_nodes(nodes_string)
+        self._reset_edit_history()
 
     def set_working_file(self):
         file_name, ok = QInputDialog.getText(
@@ -433,7 +458,9 @@ class AutonomousPlannerGUIManager(QMainWindow):
 
     def clear_nodes(self):
         logger.info("Clearing all nodes...")
+        self.central_widget.begin_undo_state()
         self.central_widget.clear_nodes()
+        self.central_widget.commit_undo_state("Clear all nodes")
 
     def convert_nodes(self, as_list=False):
         nodes: list[node.Node] = self.central_widget.get_nodes()
