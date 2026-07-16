@@ -248,6 +248,13 @@ class PathViewWidget(QWidget):
             self.tangent_dx.setValue(self.selected_node.get_tangent()[0])
             self.tangent_dy.setValue(self.selected_node.get_tangent()[1])
 
+            # Show the node's own second derivative, or zero where it has none. Leaving
+            # these boxes on the previous node's values means the next edit to any tangent
+            # field writes that stale curvature onto this node.
+            derivative = self.selected_node.get_tangent_derivative()
+            self.tangent_ddx.setValue(derivative[0] if derivative is not None else 0.0)
+            self.tangent_ddy.setValue(derivative[1] if derivative is not None else 0.0)
+
             self.magnitude_incoming.setValue(
                 self.selected_node.get_incoming_magnitude()
             )
@@ -348,7 +355,18 @@ class PathViewWidget(QWidget):
         ):
             tangent = np.array([self.tangent_dx.value(), self.tangent_dy.value()])
             self.selected_node.set_tangent(tangent)
-            self.selected_node.set_tangent_derivative(np.array([self.tangent_ddx.value(), self.tangent_ddy.value()]))
+
+            # A zero second derivative is a real constraint - it pins the path dead
+            # straight at this node - and is not what "I have not touched these boxes"
+            # should mean. Leave it unset instead, so the spline picks a curvature that
+            # matches the tangents either side of the node.
+            derivative = np.array(
+                [self.tangent_ddx.value(), self.tangent_ddy.value()]
+            )
+            self.selected_node.set_tangent_derivative(
+                derivative if np.any(derivative) else None
+            )
+
             self.selected_node.set_incoming_magnitude(self.magnitude_incoming.value())
             self.selected_node.set_outgoing_magnitude(self.magnitude_outgoing.value())
             self.gui_manager.update_path()

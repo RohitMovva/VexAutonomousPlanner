@@ -12,6 +12,23 @@ from splines.quintic_hermite_spline import QuinticHermiteSpline
 logger = logging.getLogger(__name__)
 
 
+def _unit(tangent) -> np.ndarray:
+    """A node's tangent direction, normalised.
+
+    A node stores a direction and a magnitude separately, but the direction it stores is
+    whatever the user left in the dX/dY boxes and is not necessarily unit length - zeroing
+    dY to point a node straight down the x axis leaves (0.857, 0), not (1, 0). Multiplying
+    that by the magnitude hands the spline a tangent ~15% shorter than the magnitude says,
+    and a short tangent is a tight curve. Normalise first so the magnitude means what the
+    GUI claims it means.
+    """
+    tangent = np.asarray(tangent, dtype=float)
+    norm = np.linalg.norm(tangent)
+    if norm < 1e-9:
+        return tangent
+    return tangent / norm
+
+
 @dataclass
 class PathLookupTable:
     """Cache for quick parameter lookups based on distance"""
@@ -67,10 +84,11 @@ class QuinticHermiteSplineManager:
                 curvatures = []
                 for node in self.nodes[current_start_idx : i + 1]:
                     if node.tangent is not None:
+                        direction = _unit(node.tangent)
                         tangents.append(
                             [
-                                node.tangent * node.incoming_magnitude,
-                                node.tangent * node.outgoing_magnitude,
+                                direction * node.incoming_magnitude,
+                                direction * node.outgoing_magnitude,
                             ]
                         )
                     else:
@@ -133,9 +151,10 @@ class QuinticHermiteSplineManager:
                             # Rotate the custom tangent by the same angle, so the
                             # outgoing direction is still incoming + turn. The pi for
                             # a reverse node is already folded into target_angle_rad.
-                            prev_vector = nodes[i].tangent * nodes[i].incoming_magnitude
+                            direction = _unit(nodes[i].tangent)
+                            prev_vector = direction * nodes[i].incoming_magnitude
 
-                            next_tangent = rotation_matrix @ nodes[i].tangent
+                            next_tangent = rotation_matrix @ direction
                             next_tangent = next_tangent * nodes[i].outgoing_magnitude
 
                         # Set end tangent for current spline and start tangent for next spline
@@ -161,17 +180,14 @@ class QuinticHermiteSplineManager:
                         
                         if nodes[i].tangent is not None:
                             # If tangent is set, scale it by the outgoing magnitude
-                            tangents[-1][0] = (nodes[i].tangent * nodes[i].incoming_magnitude
-                            )
+                            direction = _unit(nodes[i].tangent)
+                            tangents[-1][0] = direction * nodes[i].incoming_magnitude
 
-                            start_tangent = (
-                                -1 * nodes[i].tangent * nodes[i].outgoing_magnitude
-                            )
+                            start_tangent = -1 * direction * nodes[i].outgoing_magnitude
 
 
                 spline.set_all_tangents(tangents)
                 spline.set_all_curvatures(curvatures)
-                print("Curvatures:", curvatures)
 
                 if not spline.fit(current_points[:, 0], current_points[:, 1]):
                     logger.error(f"Failed to fit spline for points {current_points}")

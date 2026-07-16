@@ -662,11 +662,8 @@ class PathWidget(QGraphicsView):
                 node.max_velocity = node_data[8]
                 node.max_acceleration = node_data[9]
                 node.tangent = node_data[10]
-                
-                # node.incoming_magnitude = node_data[9]
-                # node.outgoing_magnitude = node_data[10]
-                # node.set_action_values(node_data[11:])
-                node.curvature = node_data[11]
+
+                # node.curvature is set below, where the legacy zero is filtered out.
                 node.incoming_magnitude = node_data[12]
                 node.outgoing_magnitude = node_data[13]
                 node.set_action_values(node_data[14:])
@@ -685,8 +682,12 @@ class PathWidget(QGraphicsView):
                 if node_data[10] is not None:
                     node.set_tangent(np.array(node_data[10]))
 
-                if node_data[11] is not None:
-                    node.set_tangent_derivative(np.array(node_data[11]))
+                # Fix for [0,0] fake write that was happening earlier - will just count as not set
+                derivative = node_data[11]
+                if derivative is not None and np.any(np.asarray(derivative, dtype=float)):
+                    node.set_tangent_derivative(np.array(derivative))
+                else:
+                    node.set_tangent_derivative(None)
                 node.show()
 
         for action_data in action_data:

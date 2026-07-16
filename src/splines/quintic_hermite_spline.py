@@ -91,52 +91,24 @@ class QuinticHermiteSpline(Spline):
                 logger.debug(f"  Original second derivatives: dd0={dd0}, dd1={dd1}")
 
                 if segment_length > 0:
-                    # Scale derivatives by segment length
-                    d0_scaled = d0 * segment_length
-                    d1_scaled = d1 * segment_length
-                    dd0_scaled = dd0 * (segment_length**2)
-                    dd1_scaled = dd1 * (segment_length**2)
+                    # Scale by chord length unless node overrides with magnitude in which case switch 
+                    # to scale both derivatives by that
+                    d0_scaled = self._tangent_for(i, 1, d0 * segment_length)
+                    d1_scaled = self._tangent_for(i + 1, 0, d1 * segment_length)
 
-                    logger.info(f"Set tanents: {self.set_tangents}, i={i}, i+1={i + 1}")
-                    logger.info(f"Tangents i: {self.set_tangents[i]}")
-                    logger.info(f"Tangents i 1: {self.set_tangents[i][1]}")
-                    logger.info(f"Set Curvatures: {self.set_curvatures}, i={i}, i+1={i + 1}")
-                    logger.info(f"Curvatures i: {self.set_curvatures[i]}")
-                    logger.info(f"Curvatures i 1: {self.set_curvatures[i][1]}")
-                    if (
-                        self.set_tangents is not None
-                        and self.set_tangents[i] is not None
-                        and self.set_tangents[i][1] is not None
-                    ):
-                        logger.info(f"Setting tangent: {self.set_tangents[i][1]}")
-                        d0_scaled = self.set_tangents[i][1]
-                    if (
-                        self.set_tangents is not None
-                        and self.set_tangents[i + 1] is not None
-                        and self.set_tangents[i + 1][0] is not None
-                    ):
-                        logger.info(f"Setting tangent: {self.set_tangents[i + 1][0]}")
-                        d1_scaled = self.set_tangents[i + 1][0]
+                    dd0_geom = self._curvature_for(i, 1, dd0)
+                    dd1_geom = self._curvature_for(i + 1, 0, dd1)
 
-                    if (
-                        self.set_curvatures is not None
-                        and self.set_curvatures[i] is not None
-                        and self.set_curvatures[i][1] is not None
-                    ):
-                        logger.info(f"Setting curvature: {self.set_curvatures[i][1]}")
-                        dd0_scaled = self.set_curvatures[i][1]
+                    m0 = np.linalg.norm(d0_scaled) or segment_length
+                    m1 = np.linalg.norm(d1_scaled) or segment_length
 
-                    if (
-                        self.set_curvatures is not None
-                        and self.set_curvatures[i + 1] is not None
-                        and self.set_curvatures[i + 1][0] is not None
-                    ):
-                        logger.info(f"Setting curvature: {self.set_curvatures[i + 1][0]}")
-                        dd1_scaled = self.set_curvatures[i + 1][0]
+                    dd0_scaled = dd0_geom * (m0**2)
+                    dd1_scaled = dd1_geom * (m1**2)
 
-
-                    logger.debug(f"  Scaled derivatives: d0={d0}, d1={d1}")
-                    logger.debug(f"  Scaled second derivatives: dd0={dd0}, dd1={dd1}")
+                    logger.debug(f"  Scaled derivatives: d0={d0_scaled}, d1={d1_scaled}")
+                    logger.debug(
+                        f"  Scaled second derivatives: dd0={dd0_scaled}, dd1={dd1_scaled}"
+                    )
 
                     segment = np.vstack(
                         [p0, p1, d0_scaled, d1_scaled, dd0_scaled, dd1_scaled]
@@ -157,6 +129,60 @@ class QuinticHermiteSpline(Spline):
         except Exception as e:
             logger.error(f"Error during fitting: {str(e)}")
             return False
+
+    def _unit_tangent(self, index: int) -> np.ndarray:
+        """Unit direction the path actually leaves/enters knot `index` along.
+
+        A node's incoming and outgoing tangents are parallel (they differ only in
+        magnitude), so either slot gives the same direction.
+        """
+        overrides = self.set_tangents
+        if overrides is not None and overrides[index] is not None:
+            for slot in (1, 0):
+                tangent = overrides[index][slot]
+                if tangent is None:
+                    continue
+                tangent = np.asarray(tangent, dtype=float)
+                norm = np.linalg.norm(tangent)
+                if norm > 1e-9:
+                    return tangent / norm
+
+        # first_derivatives holds unit chord directions at this point in the fit.
+        return self.first_derivatives[index]
+
+    def _tangent_for(self, index: int, slot: int, default: np.ndarray) -> np.ndarray:
+        """The tangent in force at one side of a knot. slot 0 = incoming, 1 = outgoing.
+
+        Already carries its magnitude: a node override is direction * magnitude, and the
+        fallback is the unit chord direction * chord length. A zero-length override is a
+        node with no magnitude on this side - the outer edge of a start or end node - and
+        is not a tangent the spline can be fitted through, so it falls back too.
+        """
+        overrides = self.set_tangents
+        if (
+            overrides is not None
+            and overrides[index] is not None
+            and overrides[index][slot] is not None
+        ):
+            tangent = np.asarray(overrides[index][slot], dtype=float)
+            if np.linalg.norm(tangent) > 1e-9:
+                return tangent
+        return default
+
+    def _curvature_for(self, index: int, slot: int, default: np.ndarray) -> np.ndarray:
+        """The geometric second derivative (dT/ds) in force at one side of a knot.
+
+        Geometric, not parameter-space: the caller scales it by the tangent magnitude
+        actually used on that side.
+        """
+        overrides = self.set_curvatures
+        if (
+            overrides is not None
+            and overrides[index] is not None
+            and overrides[index][slot] is not None
+        ):
+            return np.asarray(overrides[index][slot], dtype=float)
+        return default
 
     def set_tangent(self, tangent: np.ndarray, index: int):
         if self.set_tangents is None:
@@ -225,14 +251,17 @@ class QuinticHermiteSpline(Spline):
                 logger.debug(f"Last point: {self.second_derivatives[i]}")
 
             else:
-                # For interior points
-                prev_dist = distances[i - 1]
-                next_dist = distances[i]
-
-                avg_dist = (prev_dist + next_dist) / 2
+                # dT/ds by central difference. The two neighbours are (prev_dist +
+                # next_dist) apart along the path, so that - not a quarter of it - is
+                # the denominator.
+                #
+                # Taken over the tangents actually in force: a node override replaces the
+                # chord direction, and differencing the chord directions instead would
+                # describe the bend of a path the spline is not going to take.
+                span = distances[i - 1] + distances[i]
                 self.second_derivatives[i] = (
-                    self.first_derivatives[i + 1] - self.first_derivatives[i - 1]
-                ) / (avg_dist * 0.5)
+                    self._unit_tangent(i + 1) - self._unit_tangent(i - 1)
+                ) / span
 
                 logger.debug(f"Interior point {i}: {self.second_derivatives[i]}")
 
