@@ -560,6 +560,7 @@ class AutonomousPlannerGUIManager(QMainWindow):
                 cur_node.get_outgoing_magnitude(),
             ]
             + cur_node.get_action_values()
+            + [int(cur_node.is_locked()), int(cur_node.is_visible())]
             for cur_node in nodes
         ]
         logger.info(f"Nodes data: {nodes_data}")

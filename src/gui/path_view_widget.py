@@ -156,7 +156,7 @@ class PathViewWidget(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.addWidget(scroll_area)
         self.setLayout(layout)
-        self._set_editors_enabled(False)
+        self._refresh_editor_enabled()
         self.update_view()
 
     def update_view(self):
@@ -213,7 +213,10 @@ class PathViewWidget(QWidget):
             trash_button.setIconSize(QSize(24, 24))
             trash_button.setFixedSize(24, 24)
             trash_button.setFlat(True)
-            trash_button.setToolTip("Delete Node")
+            trash_button.setEnabled(not node.is_locked())
+            trash_button.setToolTip(
+                "Unlock the node to delete it" if node.is_locked() else "Delete Node"
+            )
             trash_button.clicked.connect(
                 lambda checked, n=node: self.on_trash_clicked(n)
             )
@@ -253,33 +256,40 @@ class PathViewWidget(QWidget):
 
     # Placeholder callback methods
     def on_lock_clicked(self, node, button):
+        self._path_widget().begin_undo_state()
         node.set_locked(not node.is_locked())
-        # Update icon
-        if node.is_locked():
-            icon_path = utilities.file_management.resource_path("../assets/lock.png")
-        else:
-            icon_path = utilities.file_management.resource_path("../assets/unlock.png")
-        button.setIcon(QIcon(icon_path))
+        button.setIcon(self.lock_pixmap if node.is_locked() else self.unlock_pixmap)
+        if node is self.selected_node:
+            self._refresh_editor_enabled()
+        self.update_view()
+        self._path_widget().commit_undo_state(
+            "Lock node" if node.is_locked() else "Unlock node"
+        )
 
     def set_selected_node(self, node):
         self.changing_node = True
         self.selected_node = node
 
         if node is None:
-            self._set_editors_enabled(False)
             self._clear_editor_values()
         else:
-            self._set_editors_enabled(True)
             self.update_selected_node()
+        self._refresh_editor_enabled()
 
         self.changing_node = False
         self.update_view()
 
-    def _set_editors_enabled(self, enabled: bool):
+    def _refresh_editor_enabled(self):
         """The editors only mean something with a node selected; a disabled,
-        cleared panel can't silently edit a destroyed or deselected node."""
-        self.position_group.setEnabled(enabled)
-        self.tangent_group.setEnabled(enabled)
+        cleared panel can't silently edit a destroyed or deselected node.
+
+        Locking freezes position, so the Position boxes go with it - leaving them
+        live would show edits that set_position refuses to apply. Tangent shaping
+        is not a position change and stays available.
+        """
+        selected = self.selected_node
+        self.position_group.setEnabled(selected is not None and not selected.is_locked())
+        self.tangent_group.setEnabled(selected is not None)
 
     def _clear_editor_values(self):
         for spin_box in (
@@ -390,13 +400,12 @@ class PathViewWidget(QWidget):
         self.update_view()
 
     def on_eye_clicked(self, node, button):
+        self._path_widget().begin_undo_state()
         node.set_visible(not node.is_visible())
-        # Update icon
-        if node.is_visible():
-            icon_path = utilities.file_management.resource_path("../assets/eye.png")
-        else:
-            icon_path = utilities.file_management.resource_path("../assets/noeye.png")
-        button.setIcon(QIcon(icon_path))
+        button.setIcon(self.eye_pixmap if node.is_visible() else self.noeye_pixmap)
+        self._path_widget().commit_undo_state(
+            "Show node" if node.is_visible() else "Hide node"
+        )
 
     def on_trash_clicked(self, node):
         self._path_widget().begin_undo_state()

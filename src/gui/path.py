@@ -946,7 +946,7 @@ class PathWidget(QGraphicsView):
     def clear_nodes(self):
         self.clearing_nodes = True
         for node in list(self.nodes):
-            node.delete_node()
+            node.delete_node(force=True)
         self.nodes.clear()
 
         for action_point in list(self.action_points):
@@ -1016,7 +1016,12 @@ class PathWidget(QGraphicsView):
                 # node.curvature is set below, where the legacy zero is filtered out.
                 node.incoming_magnitude = node_data[12]
                 node.outgoing_magnitude = node_data[13]
-                node.set_action_values(node_data[14:])
+                # Slice the actions to their configured count rather than to the
+                # end of the record, so the lock/visible fields that follow them
+                # are not mistaken for action values.
+                action_count = len(node.get_action_values())
+                node.set_action_values(node_data[14 : 14 + action_count])
+                trailing = node_data[14 + action_count :]
 
 
                 # node.wait_time = node_data[7]
@@ -1038,7 +1043,11 @@ class PathWidget(QGraphicsView):
                     node.set_tangent_derivative(np.array(derivative))
                 else:
                     node.set_tangent_derivative(None)
-                node.show()
+
+                node.set_locked(bool(trailing[0]) if len(trailing) > 0 else False)
+                # set_visible show()s or hide()s to match; a node hidden when the
+                # route was saved must come back hidden, not unconditionally shown.
+                node.set_visible(bool(trailing[1]) if len(trailing) > 1 else True)
 
         for action_data in action_data:
             action_point = self.add_action_point(

@@ -166,6 +166,9 @@ class Node(QGraphicsItem):
             self.parent.update_path()
 
     def set_position(self, x, y):
+        # Don't update coords when locked
+        if self.locked:
+            return
         self.abs_x = x
         self.abs_y = y
 
@@ -600,15 +603,18 @@ class Node(QGraphicsItem):
             self.max_acceleration = value
             logger.info(f"Turn max acceleration to: {self.max_acceleration}")
 
-    def delete_node(self):
+    def delete_node(self, force: bool = False):
+        # force allows clear path to remove locked nodes
+        if self.locked and not force:
+            logger.info(f"Ignoring delete of locked node at ({self.abs_x}, {self.abs_y})")
+            return
         self.parent.remove_node(self)
         self.scene().removeItem(self)
         logger.info(f"Node at ({self.abs_x}, {self.abs_y}) deleted")
 
     def toggle_stop(self):
         desired = not self.stop
-        # Fall back to AUTO whenever the user lands back on the geometric
-        # default, so the flag keeps tracking reverse/turn if those change.
+
         if desired == self.auto_stop():
             self.stop_mode = STOP_AUTO
         else:
