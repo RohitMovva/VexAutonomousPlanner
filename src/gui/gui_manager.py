@@ -3,9 +3,10 @@ import logging
 import os
 from pathlib import Path
 
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import QEvent, Qt
 from PyQt6.QtGui import QAction, QIcon, QKeySequence, QUndoStack
 from PyQt6.QtWidgets import (
+    QAbstractSpinBox,
     QApplication,
     QDialog,
     QFileDialog,
@@ -130,6 +131,54 @@ class AutonomousPlannerGUIManager(QMainWindow):
         self.update()
         self.create_menu_bar()
 
+        # Undo/redo must work no matter which panel was last clicked. Spin
+        # boxes (and any text editor) claim Ctrl+Z/Ctrl+Y for their internal
+        # line-edit undo via ShortcutOverride, which suppresses the menu
+        # shortcuts while one has focus - so catch the keys at application
+        # level, before any widget can eat them.
+        QApplication.instance().installEventFilter(self)
+
+    def eventFilter(self, watched, event):
+        if (
+            event.type() == QEvent.Type.KeyPress
+            # Don't mess with dialog boxes (can cause issues if node that the dialog was attached to got deleted)
+            and QApplication.activeModalWidget() is None
+            and QApplication.activePopupWidget() is None
+        ):
+            if event.matches(QKeySequence.StandardKey.Undo):
+                self._global_undo()
+                return True
+            if event.matches(QKeySequence.StandardKey.Redo) or (
+                event.key() == Qt.Key.Key_Z
+                and event.modifiers()
+                == (
+                    Qt.KeyboardModifier.ControlModifier
+                    | Qt.KeyboardModifier.ShiftModifier
+                )
+            ):
+                self._global_redo()
+                return True
+        return super().eventFilter(watched, event)
+
+    def _finish_pending_editor(self):
+        """Close any in-progress spin-box edit before undo/redo runs.
+
+        clearFocus fires editingFinished, so a half-typed value is committed
+        as its own undo entry first - Ctrl+Z then reverts exactly that edit
+        instead of leaving it dangling and silently mis-snapshotted.
+        """
+        focus_widget = QApplication.focusWidget()
+        if isinstance(focus_widget, QAbstractSpinBox):
+            focus_widget.clearFocus()
+
+    def _global_undo(self):
+        self._finish_pending_editor()
+        self.undo_stack.undo()
+
+    def _global_redo(self):
+        self._finish_pending_editor()
+        self.undo_stack.redo()
+
     def update_coords(self, p):
         x = round(((p.x() / (2000)) - 0.5) * 146.446120719, 3)
         y = round(((p.y() / (2000)) - 0.5) * 146.446120719, 3)
@@ -201,7 +250,7 @@ class AutonomousPlannerGUIManager(QMainWindow):
 
         edit_menu.addSeparator()
 
-        delete_node_action = QAction("Delete Selected Node", self)
+        delete_node_action = QAction("Delete Selected Node(s)", self)
         delete_node_action.setShortcuts(
             [
                 QKeySequence(QKeySequence.StandardKey.Delete),
@@ -617,10 +666,35 @@ class AutonomousPlannerGUIManager(QMainWindow):
 
     def set_selected_node(self, node: node.Node):
         """Set the currently selected node in the central widget"""
+        previous = self.selected_node
         self.selected_node = node
         self.settings_dock_widget.set_selected_node(node)
+        # Repaint both so the selection ring follows the panel selection.
+        if previous is not node:
+            for n in (previous, node):
+                if n is None:
+                    continue
+                try:
+                    n.update()
+                except RuntimeError:
+                    pass  # the previous node may already be deleted
 
     def delete_selected_node(self):
+        # Iterate a copy: remove_node discards from the live selection set.
+        multi = [
+            n
+            for n in self.central_widget.selected_nodes
+            if n in self.central_widget.get_nodes()
+        ]
+        if len(multi) > 1:
+            self.central_widget.begin_undo_state()
+            for n in multi:
+                n.delete_node()
+            self.central_widget.commit_undo_state(f"Delete {len(multi)} nodes")
+            self.central_widget.clear_multi_selection()
+            self.set_selected_node(None)
+            return
+
         node_to_delete = self.selected_node
         if (
             node_to_delete is None

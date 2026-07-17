@@ -4,7 +4,7 @@ import math
 from typing import List
 
 import numpy as np
-from PyQt6.QtCore import QPointF, QRectF, QSize, QSizeF, Qt, QTimer
+from PyQt6.QtCore import QPointF, QRect, QRectF, QSize, QSizeF, Qt, QTimer
 from PyQt6.QtGui import (
     QBrush,
     QColor,
@@ -25,6 +25,7 @@ from PyQt6.QtWidgets import (
     QGraphicsScene,
     QGraphicsView,
     QMessageBox,
+    QRubberBand,
 )
 
 import utilities.file_management
@@ -134,6 +135,12 @@ class PathWidget(QGraphicsView):
         self.action_points: List[action_point.ActionPoint] = []
         self.start_node = None
         self.end_node = None
+
+        # Multi-selection (rubber band / ctrl+click); the single selected_node
+        # panel model on the GUI manager is unchanged and coexists with this.
+        self.selected_nodes: set = set()
+        self._rubber_band = None
+        self._rubber_band_origin = None  # viewport QPoint while a band drag is active
 
         self.path = None
         self.line_data: List[List[float]] = []
@@ -291,13 +298,60 @@ class PathWidget(QGraphicsView):
                     f"Added action point at ({path_point.x()}, {path_point.y()})"
                 )
 
+        elif (
+            event.button() == Qt.MouseButton.LeftButton
+            and event.modifiers() & Qt.KeyboardModifier.ControlModifier
+            and not event.modifiers() & Qt.KeyboardModifier.ShiftModifier
+        ):
+            # Ctrl+click on a node toggles it in the multi-selection;
+            # ctrl+drag on empty canvas draws a rubber-band selection box.
+            # Swallowed (no super()) so neither gesture pans the view.
+            hit = self._resolve_node_at(event.position().toPoint())
+            if hit is not None:
+                self.toggle_node_selection(hit)
+            else:
+                self._rubber_band_origin = event.position().toPoint()
+                if self._rubber_band is None:
+                    self._rubber_band = QRubberBand(
+                        QRubberBand.Shape.Rectangle, self.viewport()
+                    )
+                self._rubber_band.setGeometry(
+                    QRect(self._rubber_band_origin, QSize())
+                )
+                self._rubber_band.show()
+                QApplication.setOverrideCursor(Qt.CursorShape.CrossCursor)
+
         # Call the parent class mousePressEvent to maintain drag functionality
         else:
             # Call the parent class mousePressEvent for other cases (like panning)
+            if (
+                event.button() == Qt.MouseButton.LeftButton
+                and self._resolve_node_at(event.position().toPoint()) is None
+            ):
+                self.clear_multi_selection()
+                self.set_selected_node(None)
             QApplication.setOverrideCursor(Qt.CursorShape.ClosedHandCursor)
             super().mousePressEvent(event)
 
     def mouseReleaseEvent(self, event: QMouseEvent):
+        if self._rubber_band_origin is not None:
+            band = QRect(
+                self._rubber_band_origin, event.position().toPoint()
+            ).normalized()
+            scene_rect = self.mapToScene(band).boundingRect()
+            self.set_multi_selection(
+                {n for n in self.nodes if scene_rect.contains(n.scenePos())}
+            )
+            # A panel selection outside the fresh box selection would keep a
+            # stray ring (and stale panel) around - drop it.
+            if getattr(self.parent, "selected_node", None) not in self.selected_nodes:
+                self.set_selected_node(None)
+            self._rubber_band.hide()
+            self._rubber_band_origin = None
+            self.mouseDown = False
+            QApplication.setOverrideCursor(Qt.CursorShape.OpenHandCursor)
+            return
+
         self.mouseDown = False
 
         if self.shift_pressed:
@@ -307,6 +361,17 @@ class PathWidget(QGraphicsView):
         super().mouseReleaseEvent(event)
 
     def mouseMoveEvent(self, event):
+        if (
+            self._rubber_band_origin is not None
+            and event.buttons() & Qt.MouseButton.LeftButton
+        ):
+            self._rubber_band.setGeometry(
+                QRect(
+                    self._rubber_band_origin, event.position().toPoint()
+                ).normalized()
+            )
+            return
+
         item = self.itemAt(event.position().toPoint())
         scene_pos = self.mapToScene(event.position().toPoint())
         if isinstance(item, node.Node) or (
@@ -349,6 +414,9 @@ class PathWidget(QGraphicsView):
         if event.key() == Qt.Key.Key_Shift:
             self.shift_pressed = True
             QApplication.setOverrideCursor(Qt.CursorShape.ArrowCursor)
+        elif event.key() == Qt.Key.Key_Escape:
+            self.clear_multi_selection()
+            self.set_selected_node(None)
         super().keyPressEvent(event)
 
     def keyReleaseEvent(self, event):
@@ -398,6 +466,10 @@ class PathWidget(QGraphicsView):
         selected = getattr(self.parent, "selected_node", None)
         if selected is not None and selected in self.nodes:
             selected_idx = self.nodes.index(selected)
+
+        # The multi-selection is not preserved across undo/redo; only the
+        # single panel selection survives (by index, below).
+        self.selected_nodes.clear()
 
         self._restoring_state = True
         try:
@@ -672,6 +744,7 @@ class PathWidget(QGraphicsView):
         return self.nodes
 
     def add_node(self, point: QPointF, pos=-1):
+        self.clear_multi_selection()
         new_node = node.Node(point.x(), point.y(), self)
         if pos == -1 and self.end_node is not None:
             pos = len(self.nodes) - 1
@@ -731,6 +804,7 @@ class PathWidget(QGraphicsView):
 
         # A deleted node cannot stay selected - the Path panel would keep
         # editing a destroyed object.
+        self.selected_nodes.discard(remove_node)
         if getattr(self.parent, "selected_node", None) is remove_node:
             self.parent.set_selected_node(None)
 
@@ -766,6 +840,49 @@ class PathWidget(QGraphicsView):
 
     def set_selected_node(self, node):
         self.parent.set_selected_node(node)
+
+    # MULTI-SELECTION
+    def is_node_selected(self, n):
+        return n in self.selected_nodes
+
+    def is_node_highlighted(self, n):
+        """Whether n should paint the selection ring: part of the
+        multi-selection or the single panel-selected node."""
+        return (
+            n in self.selected_nodes
+            or getattr(self.parent, "selected_node", None) is n
+        )
+
+    def set_multi_selection(self, nodes):
+        new_selection = set(nodes)
+        changed = self.selected_nodes ^ new_selection
+        self.selected_nodes = new_selection
+        for n in changed:
+            n.update()
+
+    def toggle_node_selection(self, n):
+        if n in self.selected_nodes:
+            self.selected_nodes.discard(n)
+            if getattr(self.parent, "selected_node", None) is n:
+                self.set_selected_node(None)
+        else:
+            self.selected_nodes.add(n)
+            self.set_selected_node(n)
+        n.update()
+
+    def clear_multi_selection(self):
+        self.set_multi_selection(set())
+
+    def _resolve_node_at(self, viewport_pos):
+        item = self.itemAt(viewport_pos)
+        if isinstance(item, node.Node):
+            return item
+        if item is not None and isinstance(item.parentItem(), node.Node):
+            return item.parentItem()
+        return None
+
+    def delete_selected_nodes(self):
+        self.parent.delete_selected_node()
 
     def get_tangent_at_node(self, node):
         if self.spline_manager.splines:

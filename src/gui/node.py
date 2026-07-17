@@ -1,7 +1,7 @@
 import logging
 
 from PyQt6.QtCore import QPoint, QPointF, QRectF, Qt
-from PyQt6.QtGui import QAction, QColor, QPainter
+from PyQt6.QtGui import QAction, QColor, QPainter, QPen
 from PyQt6.QtWidgets import QGraphicsItem, QInputDialog, QMenu, QWidget
 
 logger = logging.getLogger(__name__)
@@ -47,6 +47,7 @@ class Node(QGraphicsItem):
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsMovable)
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemSendsGeometryChanges)
         self.drag_start_position = None
+        self._group_drag = False
 
         self.tangent = None
         self.incoming_magnitude = None
@@ -113,10 +114,25 @@ class Node(QGraphicsItem):
         # painter.setOpacity(.5)
         painter.drawEllipse(self.boundingRect())
 
+        if self.parent.is_node_highlighted(self):
+            # Inset by half the pen width so the ring stays inside
+            # boundingRect (no geometry change needed).
+            painter.setPen(QPen(QColor("#7FDBFF"), 3))
+            painter.setBrush(Qt.BrushStyle.NoBrush)
+            painter.drawEllipse(self.boundingRect().adjusted(1.5, 1.5, -1.5, -1.5))
+
     def mousePressEvent(self, event):
-        # Select first: the dock write-back nudges the position by rounding,
-        # and the undo snapshot must be taken after that so a plain click
-        # doesn't register as a move.
+        self._group_drag = (
+            event.button() == Qt.MouseButton.LeftButton
+            and self.parent.is_node_selected(self)
+            and len(self.parent.selected_nodes) > 1
+        )
+        if (
+            event.button() == Qt.MouseButton.LeftButton
+            and not self.parent.is_node_selected(self)
+        ): # Node isn't part of group so clear the selection
+            self.parent.clear_multi_selection()
+
         self.parent.set_selected_node(self)
         if event.button() == Qt.MouseButton.LeftButton and not self.locked:
             self.drag_start_position = event.pos()
@@ -124,16 +140,30 @@ class Node(QGraphicsItem):
         super().mousePressEvent(event)
 
     def mouseMoveEvent(self, event):
-        if (
+        dragging = (
             event.buttons() & Qt.MouseButton.LeftButton
-            and self.drag_start_position
+            # "is not None", not truthiness: a press exactly on the node
+            # center stores QPointF(0, 0), which is falsy.
+            and self.drag_start_position is not None
             and not self.locked
-        ):
+        )
+        old_pos = self.pos()
+        if dragging:
             drag_distance = event.pos() - self.drag_start_position
             self.setPos(self.pos() + drag_distance)
             self.drag_start_position = event.pos()
-            self.parent.update_path()
+        # The ItemIsMovable default handler also repositions the node
+        # (anchored under the cursor), so the grabbed node's total delta is
+        # only known after super() runs - followers replicate that total,
+        # keeping the group rigid; each still clamps itself in itemChange.
         super().mouseMoveEvent(event)
+        if dragging:
+            if self._group_drag:
+                actual_delta = self.pos() - old_pos
+                for n in self.parent.selected_nodes:
+                    if n is not self and not n.locked:
+                        n.setPos(n.pos() + actual_delta)
+            self.parent.update_path()
 
     def set_position(self, x, y):
         self.abs_x = x
@@ -170,8 +200,15 @@ class Node(QGraphicsItem):
             self.drag_start_position = None
             self.abs_x = ((self.x() / (self.image_size)) - 0.5) * 146.446120719
             self.abs_y = ((self.y() / (self.image_size)) - 0.5) * 146.446120719
+            if self._group_drag:
+                for n in self.parent.selected_nodes:
+                    n.abs_x = ((n.x() / (n.image_size)) - 0.5) * 146.446120719
+                    n.abs_y = ((n.y() / (n.image_size)) - 0.5) * 146.446120719
             self.parent.update_path()
-            self.parent.commit_undo_state("Move node")
+            self.parent.commit_undo_state(
+                "Move nodes" if self._group_drag else "Move node"
+            )
+            self._group_drag = False
             # self.parent.save()
         super().mouseReleaseEvent(event)
 
@@ -203,6 +240,11 @@ class Node(QGraphicsItem):
         return super().itemChange(change, value)
 
     def contextMenuEvent(self, event):
+        selection = self.parent.selected_nodes
+        if len(selection) > 1 and self in selection:
+            self._batch_context_menu(event, list(selection))
+            return
+
         context_menu = QMenu()
 
         attributes_menu = QMenu("Attributes")
@@ -275,6 +317,138 @@ class Node(QGraphicsItem):
         self.parent.begin_undo_state()
         context_menu.exec(event.screenPos())
         self.parent.commit_undo_state("Edit node")
+
+    def _batch_context_menu(self, event, nodes):
+        # Applies shared attributes to every selected node. Start/End and
+        # insert before/after stay single-node only.
+        context_menu = QMenu()
+
+        header = QAction(f"{len(nodes)} nodes selected")
+        header.setEnabled(False)
+        context_menu.addAction(header)
+        context_menu.addSeparator()
+
+        stop_action = QAction("Stop at Node", checkable=True)
+        stop_action.setChecked(all(n.stop for n in nodes))
+        stop_action.triggered.connect(lambda: self._batch_toggle_stop(nodes))
+        context_menu.addAction(stop_action)
+
+        reverse_action = QAction("Reverse", checkable=True)
+        reverse_action.setChecked(all(n.is_reverse_node for n in nodes))
+        reverse_action.triggered.connect(lambda: self._batch_toggle_reverse(nodes))
+        context_menu.addAction(reverse_action)
+
+        turn_action = QAction("Turn Value...")
+        turn_action.triggered.connect(lambda: self._batch_set_turn(nodes))
+        context_menu.addAction(turn_action)
+
+        wait_action = QAction("Wait time...")
+        wait_action.triggered.connect(lambda: self._batch_set_wait(nodes))
+        context_menu.addAction(wait_action)
+
+        velocity_action = QAction("Max Velocity...")
+        velocity_action.triggered.connect(lambda: self._batch_set_velocity(nodes))
+        context_menu.addAction(velocity_action)
+
+        acceleration_action = QAction("Max Acceleration...")
+        acceleration_action.triggered.connect(
+            lambda: self._batch_set_acceleration(nodes)
+        )
+        context_menu.addAction(acceleration_action)
+
+        config_actions = []
+        for i, action in enumerate(self.actions):
+            config_actions.append(QAction(f"{action}..."))
+            config_actions[i].triggered.connect(
+                lambda checked, p=i: self._batch_action_handler(nodes, p)
+            )
+            context_menu.addAction(config_actions[i])
+
+        context_menu.addSeparator()
+        delete_action = QAction("Delete Selected Nodes")
+        delete_action.triggered.connect(self.parent.delete_selected_nodes)
+        context_menu.addAction(delete_action)
+
+        self.parent.begin_undo_state()
+        context_menu.exec(event.screenPos())
+        self.parent.commit_undo_state(f"Edit {len(nodes)} nodes")
+
+    def _batch_apply(self, nodes, apply):
+        for n in nodes:
+            apply(n)
+            n.update()
+        self.parent.update_path()
+
+    def _batch_toggle_stop(self, nodes):
+        desired = not all(n.stop for n in nodes)
+
+        def apply(n):
+            # Same tri-state logic as toggle_stop, toward the shared state.
+            if desired == n.auto_stop():
+                n.stop_mode = STOP_AUTO
+            else:
+                n.stop_mode = STOP_FORCED if desired else STOP_DISABLED
+
+        self._batch_apply(nodes, apply)
+        logger.info(f"Stop at Node set to {desired} on {len(nodes)} nodes")
+
+    def _batch_toggle_reverse(self, nodes):
+        desired = not all(n.is_reverse_node for n in nodes)
+        self._batch_apply(nodes, lambda n: setattr(n, "is_reverse_node", desired))
+        logger.info(f"Reverse set to {desired} on {len(nodes)} nodes")
+
+    def _batch_set_turn(self, nodes):
+        value = self._ask_int(
+            "Set Turn", "Enter turn (-180-180):", -180, 180, self.turn
+        )
+        if value is not None:
+            self._batch_apply(nodes, lambda n: setattr(n, "turn", value))
+            logger.info(f"Turn set to {value} on {len(nodes)} nodes")
+
+    def _batch_set_wait(self, nodes):
+        value = self._ask_double(
+            "Set Wait Time", "Enter time (seconds):", self.wait_time, low=0
+        )
+        if value is not None:
+            self._batch_apply(nodes, lambda n: setattr(n, "wait_time", value))
+            logger.info(f"Wait time set to {value} on {len(nodes)} nodes")
+
+    def _batch_set_velocity(self, nodes):
+        value = self._ask_double(
+            "Set Max Velocity", "Enter Velocity (0-128):", self.max_velocity, 0, 128
+        )
+        if value is not None:
+            self._batch_apply(nodes, lambda n: setattr(n, "max_velocity", value))
+            logger.info(f"Max velocity set to {value} on {len(nodes)} nodes")
+
+    def _batch_set_acceleration(self, nodes):
+        value = self._ask_double(
+            "Set Max Acceleration",
+            "Enter Acceleration (0-128):",
+            self.max_acceleration,
+            0,
+            128,
+        )
+        if value is not None:
+            self._batch_apply(nodes, lambda n: setattr(n, "max_acceleration", value))
+            logger.info(f"Max acceleration set to {value} on {len(nodes)} nodes")
+
+    def _batch_action_handler(self, nodes, action_index):
+        action_name = self.actions[action_index]
+        value = self._ask_double(
+            f"Set {action_name}",
+            f"Enter {action_name} value:",
+            self.action_values[action_index],
+            -1000,
+            1000,
+        )
+        if value is not None:
+
+            def apply(n):
+                n.action_values[action_index] = value
+
+            self._batch_apply(nodes, apply)
+            logger.info(f"{action_name} set to {value} on {len(nodes)} nodes")
 
     def toggle_start_node(self):
         self.is_start_node = not self.is_start_node
@@ -350,97 +524,80 @@ class Node(QGraphicsItem):
         self.parent.update_path()
         logger.info(f"Reverse Node: {self.is_reverse_node}")
 
-    def set_turn(self):
+    def _dialog_screen_pos(self):
         # Get the position of the node in screen coordinates
         scene_pos = self.scenePos()
-        view_pos = self.scene().views()[0].mapFromScene(scene_pos)
-        screen_pos = self.scene().views()[0].viewport().mapToGlobal(view_pos)
+        view = self.scene().views()[0]
+        view_pos = view.mapFromScene(scene_pos)
+        return view.viewport().mapToGlobal(view_pos)
 
-        # Create the dialog
+    def _make_dialog(self, title, label):
+        screen_pos = self._dialog_screen_pos()
         dialog = QInputDialog(self.scene().views()[0])
-        dialog.setWindowTitle("Set Turn")
-        dialog.setLabelText("Enter turn (-180-180):")
-        dialog.setIntRange(-180, 180)
-        dialog.setIntValue(self.turn)
-
-        # Set the position of the dialog
+        dialog.setWindowTitle(title)
+        dialog.setLabelText(label)
         dialog.move(
             int(screen_pos.x() + self.radius), int(screen_pos.y() + self.radius)
         )
+        return dialog
 
-        # Show the dialog and get the result
+    def _ask_int(self, title, label, low, high, initial):
+        """Show an int input dialog next to the node; None if cancelled."""
+        dialog = self._make_dialog(title, label)
+        dialog.setIntRange(low, high)
+        dialog.setIntValue(initial)
         if dialog.exec() == QInputDialog.DialogCode.Accepted:
-            self.turn = dialog.intValue()
+            return dialog.intValue()
+        return None
+
+    def _ask_double(self, title, label, initial, low=None, high=None):
+        """Show a double input dialog next to the node; None if cancelled."""
+        dialog = self._make_dialog(title, label)
+        dialog.setInputMode(QInputDialog.InputMode.DoubleInput)
+        if low is not None and high is not None:
+            dialog.setDoubleRange(low, high)
+        elif low is not None:
+            dialog.setDoubleMinimum(low)
+        dialog.setDoubleValue(initial)
+        if dialog.exec() == QInputDialog.DialogCode.Accepted:
+            return dialog.doubleValue()
+        return None
+
+    def set_turn(self):
+        value = self._ask_int(
+            "Set Turn", "Enter turn (-180-180):", -180, 180, self.turn
+        )
+        if value is not None:
+            self.turn = value
             self.parent.update_path()
             logger.info(f"Turn set to: {self.turn}")
 
     def set_wait(self):
-        # Get the position of the node in screen coordinates
-        scene_pos = self.scenePos()
-        view_pos = self.scene().views()[0].mapFromScene(scene_pos)
-        screen_pos = self.scene().views()[0].viewport().mapToGlobal(view_pos)
-
-        # Create the dialog
-        dialog = QInputDialog(self.scene().views()[0])
-        dialog.setWindowTitle("Set Wait Time")
-        dialog.setLabelText("Enter time (seconds):")
-        dialog.setInputMode(QInputDialog.InputMode.DoubleInput)
-        dialog.setDoubleValue(self.wait_time)
-        dialog.setDoubleMinimum(0)
-
-        # Set the position of the dialog
-        dialog.move(
-            int(screen_pos.x() + self.radius), int(screen_pos.y() + self.radius)
+        value = self._ask_double(
+            "Set Wait Time", "Enter time (seconds):", self.wait_time, low=0
         )
-
-        # Show the dialog and get the result
-        if dialog.exec() == QInputDialog.DialogCode.Accepted:
-            self.wait_time = dialog.doubleValue()
+        if value is not None:
+            self.wait_time = value
             logger.info(f"Wait time set to: {self.wait_time}")
 
     def set_velocity(self):
-        # Get the position of the node in screen coordinates
-        scene_pos = self.scenePos()
-        view_pos = self.scene().views()[0].mapFromScene(scene_pos)
-        screen_pos = self.scene().views()[0].viewport().mapToGlobal(view_pos)
-
-        # Create the dialog
-        dialog = QInputDialog(self.scene().views()[0])
-        dialog.setWindowTitle("Set Max Velocity")
-        dialog.setLabelText("Enter Velocity (0-128):")
-        dialog.setDoubleRange(0, 128)
-        dialog.setDoubleValue(self.max_velocity)
-
-        # Set the position of the dialog
-        dialog.move(
-            int(screen_pos.x() + self.radius), int(screen_pos.y() + self.radius)
+        value = self._ask_double(
+            "Set Max Velocity", "Enter Velocity (0-128):", self.max_velocity, 0, 128
         )
-
-        # Show the dialog and get the result
-        if dialog.exec() == QInputDialog.DialogCode.Accepted:
-            self.max_velocity = dialog.doubleValue()
+        if value is not None:
+            self.max_velocity = value
             logger.info(f"Turn max velocity to: {self.max_velocity}")
 
     def set_acceleration(self):
-        # Get the position of the node in screen coordinates
-        scene_pos = self.scenePos()
-        view_pos = self.scene().views()[0].mapFromScene(scene_pos)
-        screen_pos = self.scene().views()[0].viewport().mapToGlobal(view_pos)
-
-        # Create the dialog
-        dialog = QInputDialog(self.scene().views()[0])
-        dialog.setWindowTitle("Set Max Acceleration")
-        dialog.setLabelText("Enter Acceleration (0-128):")
-        dialog.setDoubleRange(0, 128)
-        dialog.setDoubleValue(self.max_acceleration)
-        # Set the position of the dialog
-        dialog.move(
-            int(screen_pos.x() + self.radius), int(screen_pos.y() + self.radius)
+        value = self._ask_double(
+            "Set Max Acceleration",
+            "Enter Acceleration (0-128):",
+            self.max_acceleration,
+            0,
+            128,
         )
-
-        # Show the dialog and get the result
-        if dialog.exec() == QInputDialog.DialogCode.Accepted:
-            self.max_acceleration = dialog.doubleValue()
+        if value is not None:
+            self.max_acceleration = value
             logger.info(f"Turn max acceleration to: {self.max_acceleration}")
 
     def delete_node(self):
@@ -471,27 +628,15 @@ class Node(QGraphicsItem):
 
     def action_handler(self, action_index):
         action_name = self.actions[action_index]
-
-        # Get the position of the node in screen coordinates
-        scene_pos = self.scenePos()
-        view_pos = self.scene().views()[0].mapFromScene(scene_pos)
-        screen_pos = self.scene().views()[0].viewport().mapToGlobal(view_pos)
-
-        # Create the dialog
-        dialog = QInputDialog(self.scene().views()[0])
-        dialog.setWindowTitle(f"Set {action_name}")
-        dialog.setLabelText(f"Enter {action_name} value:")
-        dialog.setDoubleRange(-1000, 1000)
-        dialog.setDoubleValue(self.action_values[action_index])
-
-        # Set the position of the dialog
-        dialog.move(
-            int(screen_pos.x() + self.radius), int(screen_pos.y() + self.radius)
+        value = self._ask_double(
+            f"Set {action_name}",
+            f"Enter {action_name} value:",
+            self.action_values[action_index],
+            -1000,
+            1000,
         )
-
-        # Show the dialog and get the result
-        if dialog.exec() == QInputDialog.DialogCode.Accepted:
-            self.action_values[action_index] = dialog.doubleValue()
+        if value is not None:
+            self.action_values[action_index] = value
             self.parent.update_path()
             logger.info(
                 f"{action_name} value set to: {self.action_values[action_index]}"
