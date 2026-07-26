@@ -31,6 +31,9 @@ class Node(QGraphicsItem):
 
         self.actions = self.parent.config_manager.get_value("robot", "actions")
         self.action_values = [0 for _ in self.actions]
+        # Values loaded for actions that are no longer in config.yaml. Not
+        # editable or exported, but kept so they survive a load/save cycle.
+        self.extra_actions = {}
 
         self.offset = QPoint(0, 0)
         self.radius = radius
@@ -264,10 +267,12 @@ class Node(QGraphicsItem):
         attributes_menu.addAction(end_action)
 
         stop_label = "Stop at Node"
-        if self.auto_stop():
-            stop_label += (
-                " (auto)" if self.stop_mode == STOP_AUTO else " (override: no stop)"
-            )
+        if self.stop_mode == STOP_FORCED:
+            stop_label += " (override: stop)"
+        elif self.stop_mode == STOP_DISABLED:
+            stop_label += " (override: no stop)"
+        elif self.auto_stop():
+            stop_label += " (auto)"
         stop_action = QAction(stop_label, checkable=True)
         stop_action.setChecked(self.stop)
         stop_action.triggered.connect(self.toggle_stop)
@@ -488,9 +493,8 @@ class Node(QGraphicsItem):
             return "Node"
 
     def has_action(self):
-        for action_value in self.action_values:
-            if action_value != 0:
-                return True
+        if any(self.action_values) or any(self.extra_actions.values()):
+            return True
 
         return (
             self.is_reverse_node or self.stop or self.turn != 0 or self.wait_time != 0
@@ -507,9 +511,36 @@ class Node(QGraphicsItem):
         else:
             logger.error("Invalid action values length")
 
+    def get_action_map(self):
+        """Non-zero action values keyed by action name, including values kept
+        for actions that are no longer configured."""
+        mapping = {
+            name: value
+            for name, value in zip(self.actions, self.action_values)
+            if value
+        }
+        mapping.update({k: v for k, v in self.extra_actions.items() if v})
+        return mapping
+
+    def apply_action_map(self, mapping):
+        """Set action values from a name->value dict; unknown names are kept
+        aside in extra_actions so they round-trip through save."""
+        self.action_values = [0 for _ in self.actions]
+        self.extra_actions = {}
+        for name, value in mapping.items():
+            if name in self.actions:
+                self.action_values[self.actions.index(name)] = value
+            else:
+                self.extra_actions[name] = value
+
     def auto_stop(self):
-        """Whether the path geometry at this node requires a full stop."""
-        return self.is_reverse_node or self.turn != 0
+        """Whether the path geometry at this node requires a full stop.
+
+        The end node counts: the trajectory simply runs out there, so the
+        profile brakes into it unless the stop is explicitly overridden off
+        (STOP_DISABLED), which lets the route end while still moving.
+        """
+        return self.is_reverse_node or self.turn != 0 or self.is_end_node
 
     @property
     def stop(self):

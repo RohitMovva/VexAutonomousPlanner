@@ -1,4 +1,3 @@
-import json
 import logging
 import os
 from pathlib import Path
@@ -20,7 +19,7 @@ from PyQt6.QtWidgets import (
 
 import utilities.file_management
 from gui import dock_widget, node, path
-from utilities import config_manager
+from utilities import config_manager, route_serializer
 
 logger = logging.getLogger(__name__)
 
@@ -308,7 +307,9 @@ class AutonomousPlannerGUIManager(QMainWindow):
         self.max_jerk = new_jerk
 
     def save_nodes_to_string(self):
-        nodes_string = self.convert_nodes()
+        # Compact single-line form: the paste target (QInputDialog's line
+        # edit) would mangle the multi-line file layout.
+        nodes_string = self.convert_nodes(compact=True)
         logger.info(f"Nodes saved as string: {nodes_string}")
         dialog = SaveNodesDialog(nodes_string, self)
         dialog.exec()
@@ -538,52 +539,54 @@ class AutonomousPlannerGUIManager(QMainWindow):
         self.central_widget.commit_undo_state("Clear all nodes")
         self.set_selected_node(None)
 
-    def convert_nodes(self, as_list=False):
+    def convert_nodes(self, compact=False):
+        """Serialize the current path as route text (the vap-route format).
+
+        compact=True yields a single line for clipboard sharing; the default
+        multi-line layout is what route files and undo snapshots use.
+        """
         nodes: list[node.Node] = self.central_widget.get_nodes()
         logger.info("Converting nodes...")
         logger.debug(f"Nodes: {nodes}")
-        nodes_data = [
-            [
-                cur_node.get_abs_x(),
-                cur_node.get_abs_y(),
-                int(cur_node.is_start_node),
-                int(cur_node.is_end_node),
-                int(cur_node.is_reverse_node),
-                int(cur_node.stop_mode),
-                cur_node.turn,
-                cur_node.wait_time,
-                cur_node.max_velocity,
-                cur_node.max_acceleration,
-                cur_node.get_tangent(True),
-                cur_node.get_tangent_derivative(True),
-                cur_node.get_incoming_magnitude(),
-                cur_node.get_outgoing_magnitude(),
-            ]
-            + cur_node.get_action_values()
-            + [int(cur_node.is_locked()), int(cur_node.is_visible())]
-            for cur_node in nodes
-        ]
-        logger.info(f"Nodes data: {nodes_data}")
-        action_data = [
-            [
-                cur_action.get_abs_x(),
-                cur_action.get_abs_y(),
-                cur_action.t,
-                int(cur_action.stop),
-                cur_action.wait_time,
-                cur_action.max_velocity,
-                cur_action.max_acceleration,
-            ]
-            + cur_action.get_action_values()
-            for cur_action in self.central_widget.action_points
-        ]
-
-        logger.info(f"nodes data {nodes_data}")
-
-        if as_list:
-            return [nodes_data, action_data]
-        nodes_string = json.dumps([nodes_data, action_data], separators=(",", ":"))
-        return nodes_string
+        route = route_serializer.Route(
+            nodes=[
+                route_serializer.NodeRecord(
+                    x=cur_node.get_abs_x(),
+                    y=cur_node.get_abs_y(),
+                    is_start=cur_node.is_start_node,
+                    is_end=cur_node.is_end_node,
+                    is_reverse=cur_node.is_reverse_node,
+                    stop_mode=int(cur_node.stop_mode),
+                    turn=cur_node.turn,
+                    wait_time=cur_node.wait_time,
+                    max_velocity=cur_node.max_velocity,
+                    max_acceleration=cur_node.max_acceleration,
+                    tangent=cur_node.get_tangent(True),
+                    tangent_derivative=cur_node.get_tangent_derivative(True),
+                    incoming_magnitude=cur_node.get_incoming_magnitude(),
+                    outgoing_magnitude=cur_node.get_outgoing_magnitude(),
+                    locked=cur_node.is_locked(),
+                    visible=cur_node.is_visible(),
+                    actions=cur_node.get_action_map(),
+                )
+                for cur_node in nodes
+            ],
+            action_points=[
+                route_serializer.ActionPointRecord(
+                    x=cur_action.get_abs_x(),
+                    y=cur_action.get_abs_y(),
+                    t=cur_action.t,
+                    stop=bool(cur_action.stop),
+                    wait_time=cur_action.wait_time,
+                    max_velocity=cur_action.max_velocity,
+                    max_acceleration=cur_action.max_acceleration,
+                    actions=cur_action.get_action_map(),
+                )
+                for cur_action in self.central_widget.action_points
+            ],
+        )
+        action_names = self.config_manager.get_value("robot", "actions") or []
+        return route_serializer.dumps_route(route, action_names, compact=compact)
 
     def auto_save(self):
         if (

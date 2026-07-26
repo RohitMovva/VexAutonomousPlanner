@@ -2,7 +2,7 @@ import logging
 import math
 import time
 from dataclasses import dataclass
-from typing import List, Tuple
+from typing import List, Optional, Tuple
 
 import numpy as np
 
@@ -222,10 +222,16 @@ def forward_backward_pass(
     constraints: Constraints,
     delta_dist: float,
     start_vel: float = 0.01,
-    end_vel: float = 0.01,
+    end_vel: Optional[float] = 0.01,
 ) -> Tuple[List[float], dict, np.ndarray]:
     """
     Performs forward-backward smoothing with proper consideration of all constraints
+
+    end_vel is the speed forced at the final sample; the default brings the path to
+    rest. Passing None means the path does not end at a stop - the endpoint is left
+    at whatever the constraints allow it to reach, capped by the last node's
+    max_velocity override if it has one. Nothing brakes into the end of the path in
+    that case, so the caller owns whatever happens after the trajectory runs out.
 
     Returns the velocity profile, node_samples (node index -> the sample that node sits
     at) and the distance of every sample.
@@ -325,6 +331,13 @@ def forward_backward_pass(
             constraints.limit_velocity_by_ang_accel(curvature_derivs[i], caps[i]),
         )
 
+    # The last node never gets a boundary entry - nothing follows it, so its
+    # max_velocity would have no samples to govern. When the path does not end at a
+    # stop it governs exactly one: the exit speed. Applied before the sweeps so the
+    # forward pass cannot overshoot it and the backward pass brakes into it.
+    if end_vel is None and spline_manager.nodes[-1].max_velocity > 0:
+        velocities[-1] = min(velocities[-1], spline_manager.nodes[-1].max_velocity)
+
     def ramp_limit(near, far, ds, avail):
         """Acceleration allowed over the interval between samples `near` and `far`.
 
@@ -366,8 +379,10 @@ def forward_backward_pass(
             math.sqrt(current_vel**2 + 2 * max_accel * deltas[i]),
         )
 
-    # Backward pass
-    velocities[-1] = end_vel
+    # Backward pass. With end_vel None the endpoint keeps whatever the forward pass
+    # reached, so the sweep has nothing to brake into and the profile ends at speed.
+    if end_vel is not None:
+        velocities[-1] = end_vel
 
     for i in range(len(velocities) - 1, 0, -1):
         current_vel = velocities[i]
@@ -466,9 +481,11 @@ def generate_motion_profile(
     start_time = time.time()
 
     for i, node in enumerate(spline_manager.nodes):
-        if (node.is_reverse_node or node.turn != 0) and not node.stop:
+        if (
+            node.is_reverse_node or node.turn != 0 or node.wait_time > 0
+        ) and not node.stop:
             logger.warning(
-                f"Node {i} reverses/turns but has its stop overridden off; the "
+                f"Node {i} reverses/turns/waits but has its stop overridden off; the "
                 f"profile will step discontinuously through it."
             )
 
@@ -478,10 +495,16 @@ def generate_motion_profile(
     sm_end_time = time.time()
     logger.info(f"Spline table rebuild took {sm_end_time - sm_start_time} seconds")
 
-    # Generate velocity profile
+    # Generate velocity profile. The path ends at rest unless the final node's stop
+    # was overridden off - Node.auto_stop() counts the end node, so this is opt-in
+    # per route and the default is unchanged.
+    stops_at_end = spline_manager.nodes[-1].stop
+    if not stops_at_end:
+        logger.info("End node stop overridden off; profile will end at speed")
+
     fb_start_time = time.time()
     velocities, node_samples, sample_dists = forward_backward_pass(
-        spline_manager, constraints, dd
+        spline_manager, constraints, dd, end_vel=0.01 if stops_at_end else None
     )
     fb_end_time = time.time()
 

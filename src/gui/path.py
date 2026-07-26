@@ -1,4 +1,3 @@
-import json
 import logging
 import math
 from typing import List
@@ -32,7 +31,7 @@ import utilities.file_management
 from gui import action_point, node
 from motion_profiling_v2 import motion_profile_generator
 from splines.spline_manager import QuinticHermiteSplineManager
-from utilities import config_manager
+from utilities import config_manager, route_serializer
 
 logger = logging.getLogger(__name__)
 
@@ -60,10 +59,8 @@ class RobotVisualizer(QGraphicsRectItem):
 class PathStateCommand(QUndoCommand):
     """Snapshot-based undo command.
 
-    The whole path already round-trips through convert_nodes/load_nodes, so a
-    command is just the serialized state before and after an edit. One
-    mechanism covers node adds, deletes, drags, and every context-menu
-    property edit - nothing can be forgotten.
+    Any change to the path will result in a difference in the path state, so a
+    command is really just the serialized state before and after an edit.
     """
 
     def __init__(self, widget, before: str, after: str, text: str):
@@ -250,8 +247,7 @@ class PathWidget(QGraphicsView):
             new_scale = current_scale / zoom_factor
 
         # Check if zooming out would make the image smaller than the view
-        if new_scale < self.get_fit_in_view_scale():
-            new_scale = self.get_fit_in_view_scale()
+        new_scale = max(new_scale, self.get_fit_in_view_scale())
 
         # Calculate the scale factor
         factor = new_scale / current_scale
@@ -379,15 +375,9 @@ class PathWidget(QGraphicsView):
         scene_pos = self.mapToScene(event.position().toPoint())
         if isinstance(item, node.Node) or (
             item and isinstance(item.parentItem(), node.Node)
-        ):
-            QApplication.setOverrideCursor(Qt.CursorShape.ArrowCursor)
-            self.parent.update_coords(scene_pos)
-        elif isinstance(item, action_point.ActionPoint) or (
+        ) or isinstance(item, action_point.ActionPoint) or (
             item and isinstance(item.parentItem(), action_point.ActionPoint)
-        ):
-            QApplication.setOverrideCursor(Qt.CursorShape.ArrowCursor)
-            self.parent.update_coords(scene_pos)
-        elif self.shift_pressed:
+        ) or self.shift_pressed:
             QApplication.setOverrideCursor(Qt.CursorShape.ArrowCursor)
             self.parent.update_coords(scene_pos)
         elif (
@@ -435,7 +425,7 @@ class PathWidget(QGraphicsView):
 
     # UNDO SUPPORT
     def begin_undo_state(self):
-        """Snapshot the path before a user edit. Safe to call and then never
+        """Snapshot the path before an edit. Safe to call and then never
         commit (a click that moved nothing pushes no command)."""
         if self._restoring_state or self.parent is None:
             return
@@ -979,93 +969,71 @@ class PathWidget(QGraphicsView):
         self.update_path()
 
     def load_nodes(self, node_str: str) -> None:
+        action_names = self.config_manager.get_value("robot", "actions") or []
         try:
-            data = json.loads(node_str)
-        except json.JSONDecodeError as e:
+            route = route_serializer.parse_route(node_str, action_names)
+        except route_serializer.RouteParseError as e:
             logger.error(f"Could not parse route data: {e}")
             QMessageBox.warning(
                 self,
                 "Invalid Route",
-                f"The route file is not valid JSON and cannot be loaded.\n\n{e}",
+                f"The route cannot be loaded.\n\n{e}",
             )
             return
-        if len(data) == 2:
-            nodes_data = data[0]
-            action_data = data[1]
-        else:
-            nodes_data = data
-            action_data = []
+
         self.clear_nodes()
-        for node_data in nodes_data:
-            if len(node_data) > 4:
-                logger.info(f"Loading node data: {node_data}")
-                print(node_data)
-                node = self.add_node(
-                    self.convert_point(QPointF(node_data[0], node_data[1]))
-                )
-                self.start_node = node if bool(node_data[2]) else self.start_node
-                node.is_start_node = bool(node_data[2])
-                self.end_node = node if bool(node_data[3]) else self.end_node
-                node.is_end_node = bool(node_data[3])
-                node.is_reverse_node = bool(node_data[4])
-                node.stop_mode = int(node_data[5])
-                node.turn = node_data[6]
+        for rec in route.nodes:
+            logger.info(f"Loading node record: {rec}")
+            node = self.add_node(self.convert_point(QPointF(rec.x, rec.y)))
+            node.is_start_node = rec.is_start
+            if rec.is_start:
+                self.start_node = node
+            node.is_end_node = rec.is_end
+            if rec.is_end:
+                self.end_node = node
+            node.is_reverse_node = rec.is_reverse
+            node.stop_mode = rec.stop_mode
+            node.turn = rec.turn
+            node.wait_time = rec.wait_time
+            node.max_velocity = rec.max_velocity
+            node.max_acceleration = rec.max_acceleration
+            node.incoming_magnitude = rec.incoming_magnitude
+            node.outgoing_magnitude = rec.outgoing_magnitude
 
-                node.wait_time = node_data[7]
-                node.max_velocity = node_data[8]
-                node.max_acceleration = node_data[9]
-                node.tangent = node_data[10]
-
-                # node.curvature is set below, where the legacy zero is filtered out.
-                node.incoming_magnitude = node_data[12]
-                node.outgoing_magnitude = node_data[13]
-                # Slice the actions to their configured count rather than to the
-                # end of the record, so the lock/visible fields that follow them
-                # are not mistaken for action values.
-                action_count = len(node.get_action_values())
-                node.set_action_values(node_data[14 : 14 + action_count])
-                trailing = node_data[14 + action_count :]
-
-
-                # node.wait_time = node_data[7]
-                # node.tangent = node_data[8]
-                # # node.incoming_magnitude = node_data[9]
-                # # node.outgoing_magnitude = node_data[10]
-                # # node.set_action_values(node_data[11:])
-                # node.curvature = node_data[9]
-                # node.incoming_magnitude = node_data[10]
-                # node.outgoing_magnitude = node_data[11]
-                # node.set_action_values(node_data[12:])
-
-                if node_data[10] is not None:
-                    node.set_tangent(np.array(node_data[10]))
-
-                # Fix for [0,0] fake write that was happening earlier - will just count as not set
-                derivative = node_data[11]
-                if derivative is not None and np.any(np.asarray(derivative, dtype=float)):
-                    node.set_tangent_derivative(np.array(derivative))
-                else:
-                    node.set_tangent_derivative(None)
-
-                node.set_locked(bool(trailing[0]) if len(trailing) > 0 else False)
-                # set_visible show()s or hide()s to match; a node hidden when the
-                # route was saved must come back hidden, not unconditionally shown.
-                node.set_visible(bool(trailing[1]) if len(trailing) > 1 else True)
-
-        for action_data in action_data:
-            action_point = self.add_action_point(
-                self.convert_point(QPointF(action_data[0], action_data[1])),
-                action_data[2],
+            if rec.tangent is not None:
+                node.set_tangent(np.array(rec.tangent))
+            node.set_tangent_derivative(
+                np.array(rec.tangent_derivative)
+                if rec.tangent_derivative is not None
+                else None
             )
-            action_point.stop = action_data[3]
-            action_point.wait_time = action_data[4]
-            action_point.max_velocity = action_data[5]
-            action_point.max_acceleration = action_data[6]
-            action_point.set_action_values(action_data[7:])
+
+            node.apply_action_map(rec.actions)
+            node.set_locked(rec.locked)
+            # set_visible show()s or hide()s to match; a node hidden when the
+            # route was saved must come back hidden, not unconditionally shown.
+            node.set_visible(rec.visible)
+
+        for rec in route.action_points:
+            action_point = self.add_action_point(
+                self.convert_point(QPointF(rec.x, rec.y)), rec.t
+            )
+            action_point.stop = rec.stop
+            action_point.wait_time = rec.wait_time
+            action_point.max_velocity = rec.max_velocity
+            action_point.max_acceleration = rec.max_acceleration
+            action_point.apply_action_map(rec.actions)
 
             action_point.show()
 
         self.update_path()
+
+        # Migration/compatibility notes. Suppressed during undo/redo, where
+        # the state string always came from convert_nodes and is current.
+        if route.warnings and not self._restoring_state:
+            message = "\n".join(f"- {w}" for w in route.warnings)
+            logger.warning(f"Route loaded with notes:\n{message}")
+            QMessageBox.information(self, "Route Loaded with Notes", message)
 
     def index_of(self, node: node.Node) -> int:
         return self.nodes.index(node)

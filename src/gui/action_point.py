@@ -18,6 +18,9 @@ class ActionPoint(QGraphicsItem):
         self.wait_time = 0
         self.actions = self.parent.config_manager.get_value("robot", "actions")
         self.action_values = [0 for _ in self.actions]
+        # Values loaded for actions that are no longer in config.yaml. Not
+        # editable or exported, but kept so they survive a load/save cycle.
+        self.extra_actions = {}
         self.dragging = False
         self.offset = QPoint(0, 0)
         self.radius = radius
@@ -185,9 +188,8 @@ class ActionPoint(QGraphicsItem):
         self.parent.commit_undo_state("Edit action point")
 
     def has_action(self):
-        for action_value in self.action_values:
-            if action_value != 0:
-                return True
+        if any(self.action_values) or any(self.extra_actions.values()):
+            return True
 
         return self.stop or self.wait_time != 0
 
@@ -330,6 +332,28 @@ class ActionPoint(QGraphicsItem):
             logger.info(f"Action values set to: {self.action_values}")
         else:
             logger.error("Invalid action values length")
+
+    def get_action_map(self):
+        """Non-zero action values keyed by action name, including values kept
+        for actions that are no longer configured."""
+        mapping = {
+            name: value
+            for name, value in zip(self.actions, self.action_values)
+            if value
+        }
+        mapping.update({k: v for k, v in self.extra_actions.items() if v})
+        return mapping
+
+    def apply_action_map(self, mapping):
+        """Set action values from a name->value dict; unknown names are kept
+        aside in extra_actions so they round-trip through save."""
+        self.action_values = [0 for _ in self.actions]
+        self.extra_actions = {}
+        for name, value in mapping.items():
+            if name in self.actions:
+                self.action_values[self.actions.index(name)] = value
+            else:
+                self.extra_actions[name] = value
 
     def __str__(self):
         return (
