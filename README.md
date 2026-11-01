@@ -1,12 +1,6 @@
-<p align="center">
-	<img src="https://github.com/RohitMovva/VexAutonomousPlanner/blob/main/assets/flip_logo.png?raw=true" alt="IntroIcon" width="125">
-</p>
-
 # VexAutonomousPlanner
 
 An application for easy, action oriented, generation of paths for VEX robotics.
-
-Created by team 77717F Flip
 
 ## Project Description
 This application acts a path planner through which you can draw out paths for the robot to take. The path creation process is broken down below:
