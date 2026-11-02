@@ -4,6 +4,10 @@ from PyQt6.QtCore import QPoint, QPointF, QRectF, Qt
 from PyQt6.QtGui import QAction, QColor, QPainter, QPen
 from PyQt6.QtWidgets import QGraphicsItem, QInputDialog, QMenu, QWidget
 
+from gui import action_editor
+from utilities import action_spec
+from utilities.field_scale import FIELD_IMAGE_IN
+
 logger = logging.getLogger(__name__)
 
 # Stop flags
@@ -23,11 +27,17 @@ class Node(QGraphicsItem):
         self.is_end_node = False
         self.is_reverse_node = False
         self.turn = 0
+        # Spin the turn while braking in and launching out instead of stopping for
+        # it (motion_profile_generator.blend_spin_through).
+        self.spin_through = False
         self.wait_time = 0
         self.dragging = False
 
         self.locked = False
         self.visible = True
+        # Path-optimizer limits (route_serializer NodeRecord.optimize), edited on
+        # the Optimize page (gui.optimize_widget).
+        self.optimize = {}
 
         self.actions = self.parent.config_manager.get_value("robot", "actions")
         self.action_values = [0 for _ in self.actions]
@@ -44,8 +54,8 @@ class Node(QGraphicsItem):
 
         # Scale pixel value down to account for the extra padding that isn't part of the field on either side, scale to between 0-1, subtract 0.5 to center and turn into inches
         self.image_size = 2000
-        self.abs_x = ((self.x() / (self.image_size)) - 0.5) * 146.446120719
-        self.abs_y = ((self.y() / (self.image_size)) - 0.5) * 146.446120719
+        self.abs_x = ((self.x() / (self.image_size)) - 0.5) * FIELD_IMAGE_IN
+        self.abs_y = ((self.y() / (self.image_size)) - 0.5) * FIELD_IMAGE_IN
 
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsMovable)
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemSendsGeometryChanges)
@@ -61,11 +71,11 @@ class Node(QGraphicsItem):
         self.max_acceleration = 0
 
     def get_abs_x(self):
-        self.abs_x = ((self.x() / (self.image_size)) - 0.5) * 146.446120719
+        self.abs_x = ((self.x() / (self.image_size)) - 0.5) * FIELD_IMAGE_IN
         return self.abs_x
 
     def get_abs_y(self):
-        self.abs_y = ((self.y() / (self.image_size)) - 0.5) * 146.446120719
+        self.abs_y = ((self.y() / (self.image_size)) - 0.5) * FIELD_IMAGE_IN
         return self.abs_y
 
     def set_tangent(self, tangent):
@@ -176,8 +186,8 @@ class Node(QGraphicsItem):
         self.abs_y = y
 
         new_pos = QPointF(
-            ((x / (12.2038433932 * 12)) + 0.5) * self.image_size,
-            ((y / (12.2038433932 * 12)) + 0.5) * self.image_size,
+            ((x / FIELD_IMAGE_IN) + 0.5) * self.image_size,
+            ((y / FIELD_IMAGE_IN) + 0.5) * self.image_size,
         )
         self.setPos(new_pos)
         self.parent.update_path()
@@ -204,12 +214,12 @@ class Node(QGraphicsItem):
     def mouseReleaseEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton and not self.locked:
             self.drag_start_position = None
-            self.abs_x = ((self.x() / (self.image_size)) - 0.5) * 146.446120719
-            self.abs_y = ((self.y() / (self.image_size)) - 0.5) * 146.446120719
+            self.abs_x = ((self.x() / (self.image_size)) - 0.5) * FIELD_IMAGE_IN
+            self.abs_y = ((self.y() / (self.image_size)) - 0.5) * FIELD_IMAGE_IN
             if self._group_drag:
                 for n in self.parent.selected_nodes:
-                    n.abs_x = ((n.x() / (n.image_size)) - 0.5) * 146.446120719
-                    n.abs_y = ((n.y() / (n.image_size)) - 0.5) * 146.446120719
+                    n.abs_x = ((n.x() / (n.image_size)) - 0.5) * FIELD_IMAGE_IN
+                    n.abs_y = ((n.y() / (n.image_size)) - 0.5) * FIELD_IMAGE_IN
             self.parent.update_path()
             self.parent.commit_undo_state(
                 "Move nodes" if self._group_drag else "Move node"
@@ -246,6 +256,10 @@ class Node(QGraphicsItem):
         return super().itemChange(change, value)
 
     def contextMenuEvent(self, event):
+        # Faded out by the focus range: let the item underneath have the click
+        if not self.parent.is_node_in_focus(self):
+            event.ignore()
+            return
         selection = self.parent.selected_nodes
         if len(selection) > 1 and self in selection:
             self._batch_context_menu(event, list(selection))
@@ -287,6 +301,12 @@ class Node(QGraphicsItem):
         turn_action.triggered.connect(self.set_turn)
         attributes_menu.addAction(turn_action)
 
+        spin_through_action = QAction("Spin Through Turn", checkable=True)
+        spin_through_action.setChecked(self.spin_through)
+        spin_through_action.setEnabled(self.turn != 0 or self.spin_through)
+        spin_through_action.triggered.connect(self.toggle_spin_through)
+        attributes_menu.addAction(spin_through_action)
+
         wait_action = QAction("Wait time: " + str(self.wait_time))
         wait_action.triggered.connect(self.set_wait)
         attributes_menu.addAction(wait_action)
@@ -313,12 +333,26 @@ class Node(QGraphicsItem):
 
         new_actions = []
         for i, action in enumerate(self.actions):
-            new_actions.append(QAction(f"{action}: {self.action_values[i]}"))
+            value = action_spec.format_value(action, self.action_values[i])
+            new_actions.append(QAction(f"{action}: {value}"))
             new_actions[i].triggered.connect(lambda checked, p=i: self.action_handler(p))
             attributes_menu.addAction(new_actions[i])
 
         context_menu.addMenu(attributes_menu)
         context_menu.addMenu(node_menu)
+
+        # Focus range (view only; not an edit, so it sits outside the undo snapshot)
+        context_menu.addSeparator()
+        focus_from_action = QAction("Focus From Here")
+        focus_from_action.triggered.connect(lambda: self.parent.set_focus_from(self))
+        context_menu.addAction(focus_from_action)
+        focus_to_action = QAction("Focus To Here")
+        focus_to_action.triggered.connect(lambda: self.parent.set_focus_to(self))
+        context_menu.addAction(focus_to_action)
+        if self.parent.focus_from is not None:
+            clear_focus_action = QAction("Clear Focus Range")
+            clear_focus_action.triggered.connect(self.parent.clear_focus)
+            context_menu.addAction(clear_focus_action)
 
         # exec blocks until the chosen action (and its dialog) finishes, so
         # one snapshot pair covers every edit the menu can make.
@@ -349,6 +383,13 @@ class Node(QGraphicsItem):
         turn_action = QAction("Turn Value...")
         turn_action.triggered.connect(lambda: self._batch_set_turn(nodes))
         context_menu.addAction(turn_action)
+
+        spin_through_action = QAction("Spin Through Turn", checkable=True)
+        spin_through_action.setChecked(all(n.spin_through for n in nodes))
+        spin_through_action.triggered.connect(
+            lambda: self._batch_toggle_spin_through(nodes)
+        )
+        context_menu.addAction(spin_through_action)
 
         wait_action = QAction("Wait time...")
         wait_action.triggered.connect(lambda: self._batch_set_wait(nodes))
@@ -405,9 +446,16 @@ class Node(QGraphicsItem):
         self._batch_apply(nodes, lambda n: setattr(n, "is_reverse_node", desired))
         logger.info(f"Reverse set to {desired} on {len(nodes)} nodes")
 
+    def _batch_toggle_spin_through(self, nodes):
+        desired = not all(n.spin_through for n in nodes)
+        self._batch_apply(nodes, lambda n: setattr(n, "spin_through", desired))
+        logger.info(f"Spin through set to {desired} on {len(nodes)} nodes")
+
     def _batch_set_turn(self, nodes):
-        value = self._ask_int(
-            "Set Turn", "Enter turn (-180-180):", -180, 180, self.turn
+        # turn is a float (route files store fractional degrees): an int dialog
+        # raises on a fractional turn, which kills the app from inside the menu.
+        value = self._ask_double(
+            "Set Turn", "Enter turn (-180-180):", self.turn, -180, 180, decimals=2
         )
         if value is not None:
             self._batch_apply(nodes, lambda n: setattr(n, "turn", value))
@@ -443,13 +491,7 @@ class Node(QGraphicsItem):
 
     def _batch_action_handler(self, nodes, action_index):
         action_name = self.actions[action_index]
-        value = self._ask_double(
-            f"Set {action_name}",
-            f"Enter {action_name} value:",
-            self.action_values[action_index],
-            -1000,
-            1000,
-        )
+        value = self._ask_action(action_name, self.action_values[action_index])
         if value is not None:
 
             def apply(n):
@@ -538,9 +580,16 @@ class Node(QGraphicsItem):
 
         The end node counts: the trajectory simply runs out there, so the
         profile brakes into it unless the stop is explicitly overridden off
-        (STOP_DISABLED), which lets the route end while still moving.
+        (STOP_DISABLED), which lets the route end while still moving. So does a
+        wait for the lift.
         """
-        return self.is_reverse_node or self.turn != 0 or self.is_end_node
+        return (
+            self.is_reverse_node
+            or self.turn != 0
+            or self.is_end_node
+            # Holding for the lift is only possible at rest.
+            or action_spec.waits_for_lift(self.get_action_map())
+        )
 
     @property
     def stop(self):
@@ -557,6 +606,11 @@ class Node(QGraphicsItem):
         self.is_reverse_node = not self.is_reverse_node
         self.parent.update_path()
         logger.info(f"Reverse Node: {self.is_reverse_node}")
+
+    def toggle_spin_through(self):
+        self.spin_through = not self.spin_through
+        self.parent.update_path()
+        logger.info(f"Spin through: {self.spin_through}")
 
     def _dialog_screen_pos(self):
         # Get the position of the node in screen coordinates
@@ -575,19 +629,21 @@ class Node(QGraphicsItem):
         )
         return dialog
 
-    def _ask_int(self, title, label, low, high, initial):
-        """Show an int input dialog next to the node; None if cancelled."""
-        dialog = self._make_dialog(title, label)
-        dialog.setIntRange(low, high)
-        dialog.setIntValue(initial)
-        if dialog.exec() == QInputDialog.DialogCode.Accepted:
-            return dialog.intValue()
-        return None
+    def _ask_action(self, action_name, initial):
+        """Show the typed editor for one action next to the node."""
+        screen_pos = self._dialog_screen_pos()
+        screen_pos.setX(int(screen_pos.x() + self.radius))
+        screen_pos.setY(int(screen_pos.y() + self.radius))
+        return action_editor.ask_action_value(
+            self.scene().views()[0], screen_pos, action_name, initial
+        )
 
-    def _ask_double(self, title, label, initial, low=None, high=None):
+    def _ask_double(self, title, label, initial, low=None, high=None, decimals=None):
         """Show a double input dialog next to the node; None if cancelled."""
         dialog = self._make_dialog(title, label)
         dialog.setInputMode(QInputDialog.InputMode.DoubleInput)
+        if decimals is not None:
+            dialog.setDoubleDecimals(decimals)
         if low is not None and high is not None:
             dialog.setDoubleRange(low, high)
         elif low is not None:
@@ -598,8 +654,10 @@ class Node(QGraphicsItem):
         return None
 
     def set_turn(self):
-        value = self._ask_int(
-            "Set Turn", "Enter turn (-180-180):", -180, 180, self.turn
+        # turn is a float (route files store fractional degrees): an int dialog
+        # raises on a fractional turn, which kills the app from inside the menu.
+        value = self._ask_double(
+            "Set Turn", "Enter turn (-180-180):", self.turn, -180, 180, decimals=2
         )
         if value is not None:
             self.turn = value
@@ -665,13 +723,7 @@ class Node(QGraphicsItem):
 
     def action_handler(self, action_index):
         action_name = self.actions[action_index]
-        value = self._ask_double(
-            f"Set {action_name}",
-            f"Enter {action_name} value:",
-            self.action_values[action_index],
-            -1000,
-            1000,
-        )
+        value = self._ask_action(action_name, self.action_values[action_index])
         if value is not None:
             self.action_values[action_index] = value
             self.parent.update_path()

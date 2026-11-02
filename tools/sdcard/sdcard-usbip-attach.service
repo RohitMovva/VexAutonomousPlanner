@@ -1,0 +1,14 @@
+[Unit]
+Description=Keep the SD card reader attached from Windows (usbipd-win)
+Documentation=file:/home/tihor/Projects/Robotics/VexAutonomousPlanner/tools/sdcard/README.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/sbin/sdcard-helper auto-attach
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

@@ -6,6 +6,11 @@ Route source files (`routes/<name>.txt`, and the strings produced by
 Nothing else in the codebase reads or writes the format. The module is pure
 Python (no Qt/numpy), so tools and tests can use it standalone.
 
+Route files may sit one folder deep under the routes folder (`suite/corner_R6.txt`,
+`archive/sawp.txt`); the route's name is then `suite/corner_R6`, and the exported
+trajectory mirrors the folder on the card (`utilities/sd_card.py` keeps the
+`folders.txt` index the brain's selector reads).
+
 This file describes the **route source** format only. The trajectory export
 written to the header folder / SD card (space-delimited 10 ms samples read by
 the firmware's `Trajectory::loadFromFile`) is a separate format and is
@@ -43,7 +48,8 @@ A JSON object, one record per line:
   has no firmware slot. Unknown fields from a newer format version are
   ignored with a warning.
 - The top-level `"actions"` list is informational: the config order at save
-  time (which is also the firmware's action-slot order at export time).
+  time (which is also the firmware's action-slot order at export time). What
+  each slot means is [`action-slots.md`](action-slots.md).
 
 ### Units
 
@@ -61,14 +67,27 @@ feet-based space. `stop_mode` is `0` auto / `1` forced / `2` disabled
 | `start`, `end`, `reverse` | bool | `false` | node roles |
 | `stop_mode` | int | `0` | stop behavior (see above) |
 | `turn` | number | `0` | in-place turn, degrees |
+| `spin_through` | bool | `false` | with a `turn`: spin while braking in and launching out instead of stopping to spin ([motion-profiling.md](motion-profiling.md#spin-through-turns)); ignored without a turn, on the start/end node, and on a node that waits |
 | `wait_time` | number | `0` | seconds |
-| `max_velocity`, `max_acceleration` | number | `0` | per-node constraint override (0 = none) |
+| `max_velocity`, `max_acceleration` | number | `0` | per-node constraint override (0 = none). On a node with a `turn`, they also replace the spin's caps (`motion.max_turn_velocity` / `max_turn_acceleration`) as the turn's wheel speed and acceleration (ft/s, ft/s²; spin rate = wheel speed ÷ half the track width) |
 | `tangent` | `[x,y]` | `null` | user-pinned tangent |
-| `tangent_derivative` | `[x,y]` | `null` | user-pinned second derivative |
+| `tangent_derivative` | `[x,y]` | `null` | user-pinned geometric second derivative (dT/ds, 1/ft; the spline scales it by each side's handle squared) |
 | `incoming_magnitude`, `outgoing_magnitude` | number | `null` | spline handle magnitudes |
 | `locked` | bool | `false` | node not draggable |
 | `visible` | bool | `true` | node drawn on canvas |
 | `actions` | object | `{}` | non-zero action values by name |
+| `optimize` | object | `{}` | path-optimizer limits: `"heading"`, `"handles"`, `"curvature"`, `"position"` → `true` (free) / `false` (locked) / a number ≥ 0 (free by at most that much: degrees, handle scale factor, 1/ft, inches); `"corridor"` → inches; keys left out follow the defaults in [path-optimizer.md](path-optimizer.md) |
+
+### Keep-out zones
+
+An optional top-level `"keep_out"` list (omitted when empty): areas the path
+optimizer keeps the robot's footprint out of. Nothing else reads them. Each entry
+has exactly one key:
+
+| entry | values |
+|---|---|
+| `{"circle": [x, y, r]}` | centre and radius, inches; r > 0 |
+| `{"rect": [x0, y0, x1, y1]}` | opposite corners, inches; stored min-corner first, must have area |
 
 ### Action-point record fields
 

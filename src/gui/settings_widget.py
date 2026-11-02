@@ -1,6 +1,7 @@
 import logging
+import os
 
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, QUrl
 from PyQt6.QtWidgets import (
     QComboBox,
     QDoubleSpinBox,
@@ -10,6 +11,7 @@ from PyQt6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLineEdit,
+    QMessageBox,
     QPushButton,
     QScrollArea,
     QSizePolicy,
@@ -179,6 +181,35 @@ class SettingsWidget(QWidget):
 
         file_layout.addRow("Routes Folder:", routes_path_layout)
 
+        # SD card routes folder: exported trajectories are mirrored here so the
+        # V5 brain can read them (/usd/routes). The card is mounted by
+        # tools/sdcard; see tools/sdcard/README.md.
+        self.sd_card_file_path = QLineEdit()
+        self.sd_card_file_path.setText(
+            self.config_manager.get_value("sd_card", "routes_folder", "")
+        )
+        self.sd_card_file_path.setPlaceholderText("/mnt/sdcard/routes")
+        self.sd_card_file_path.editingFinished.connect(self.on_sd_card_folder_edited)
+
+        sd_card_browse_button = QPushButton("Browse...")
+        sd_card_browse_button.clicked.connect(self.browse_sd_card_folder)
+
+        sd_card_path_layout = QHBoxLayout()
+        sd_card_path_layout.addWidget(self.sd_card_file_path)
+        sd_card_path_layout.addWidget(sd_card_browse_button)
+
+        file_layout.addRow("SD Card Routes Folder:", sd_card_path_layout)
+
+        sd_card_sync_button = QPushButton("Sync to SD Card")
+        sd_card_sync_button.clicked.connect(self.on_sd_card_sync_clicked)
+        sd_card_eject_button = QPushButton("Eject SD Card")
+        sd_card_eject_button.clicked.connect(self.on_sd_card_eject_clicked)
+
+        sd_card_buttons_layout = QHBoxLayout()
+        sd_card_buttons_layout.addWidget(sd_card_sync_button)
+        sd_card_buttons_layout.addWidget(sd_card_eject_button)
+        file_layout.addRow(sd_card_buttons_layout)
+
         file_group.setLayout(file_layout)
         main_layout.addWidget(file_group)
 
@@ -273,13 +304,54 @@ class SettingsWidget(QWidget):
         if hasattr(self.parent, "set_track_width"):
             self.parent.set_track_width(track_width / 12.0)
 
-    def browse_header_folder(self):
-        folder_path = QFileDialog.getExistingDirectory(
-            self,
-            "Select Header File Folder",
-            "",
-            QFileDialog.Option.ShowDirsOnly | QFileDialog.Option.DontResolveSymlinks,
+    def _pick_folder(self, title, start_dir=""):
+        """Folder picker whose sidebar lists the SD card (when mounted), the
+        project, and home. Qt's own dialog is used so the sidebar is honoured
+        (the native one on WSL has no entry for mounted cards at all)."""
+        if not start_dir or not os.path.isdir(start_dir):
+            start_dir = ""
+        dialog = QFileDialog(self, title, start_dir)
+        dialog.setFileMode(QFileDialog.FileMode.Directory)
+        dialog.setOption(QFileDialog.Option.ShowDirsOnly, True)
+        dialog.setOption(QFileDialog.Option.DontResolveSymlinks, True)
+        dialog.setOption(QFileDialog.Option.DontUseNativeDialog, True)
+
+        urls = []
+        card = getattr(self.parent, "sd_card", None)
+        if card is not None and card.is_mounted():
+            urls.append(QUrl.fromLocalFile(card.mount_point))
+            if os.path.isdir(card.routes_folder):
+                urls.append(QUrl.fromLocalFile(card.routes_folder))
+        project_root = os.path.abspath(
+            os.path.join(os.path.dirname(__file__), "..", "..")
         )
+        urls.append(QUrl.fromLocalFile(project_root))
+        urls.append(QUrl.fromLocalFile(os.path.expanduser("~")))
+        dialog.setSidebarUrls(urls)
+
+        if dialog.exec():
+            selected = dialog.selectedFiles()
+            return selected[0] if selected else ""
+        return ""
+
+    def _warn_sd_card_not_mounted(self):
+        card = getattr(self.parent, "sd_card", None)
+        mount_point = card.mount_point if card is not None else "/mnt/sdcard"
+        QMessageBox.information(
+            self,
+            "SD Card Not Inserted",
+            f"No SD card is mounted at {mount_point}, so there is nothing to "
+            "browse yet.\n\nInsert the card (or run 'sdcard attach' in a "
+            "terminal), wait for the status bar to show it, and try again.",
+        )
+
+    def browse_header_folder(self):
+        start = self.header_file_path.text()
+        card = getattr(self.parent, "sd_card", None)
+        if card is not None and card.is_on_card_path(start) and not card.is_mounted():
+            self._warn_sd_card_not_mounted()
+            return
+        folder_path = self._pick_folder("Select Header File Folder", start)
 
         if folder_path:
             self.header_file_path.setText(folder_path)
@@ -290,11 +362,8 @@ class SettingsWidget(QWidget):
                 self.parent.set_header_folder(folder_path)
 
     def browse_routes_folder(self):
-        folder_path = QFileDialog.getExistingDirectory(
-            self,
-            "Select Routes Folder",
-            "",
-            QFileDialog.Option.ShowDirsOnly | QFileDialog.Option.DontResolveSymlinks,
+        folder_path = self._pick_folder(
+            "Select Routes Folder", self.routes_file_path.text()
         )
 
         if folder_path:
@@ -304,3 +373,34 @@ class SettingsWidget(QWidget):
             # Implement in parent class if needed
             if hasattr(self.parent, "set_routes_folder"):
                 self.parent.set_routes_folder(folder_path)
+
+    def browse_sd_card_folder(self):
+        card = getattr(self.parent, "sd_card", None)
+        if card is not None and not card.is_mounted():
+            self._warn_sd_card_not_mounted()
+            return
+        start = self.sd_card_file_path.text() or (
+            card.mount_point if card is not None else "/mnt/sdcard"
+        )
+        folder_path = self._pick_folder("Select SD Card Routes Folder", start)
+
+        if folder_path:
+            self.sd_card_file_path.setText(folder_path)
+            self.on_sd_card_folder_edited()
+
+    def on_sd_card_folder_edited(self):
+        folder_path = self.sd_card_file_path.text().strip()
+        if folder_path == self.config_manager.get_value("sd_card", "routes_folder", ""):
+            return
+        logger.info(f"SD card routes folder set: {folder_path}")
+        self.config_manager.set_value("sd_card", "routes_folder", folder_path)
+        if hasattr(self.parent, "set_sd_card_folder"):
+            self.parent.set_sd_card_folder(folder_path)
+
+    def on_sd_card_sync_clicked(self):
+        if hasattr(self.parent, "sync_trajectories_to_sd_card"):
+            self.parent.sync_trajectories_to_sd_card()
+
+    def on_sd_card_eject_clicked(self):
+        if hasattr(self.parent, "eject_sd_card"):
+            self.parent.eject_sd_card()

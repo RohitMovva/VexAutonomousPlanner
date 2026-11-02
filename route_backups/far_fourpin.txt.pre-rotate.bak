@@ -1,0 +1,31 @@
+{
+  "format": "vap-route",
+  "version": 2,
+  "actions": ["intake","lift_state","right_reset","left_reset","front_reset","lift_height","intake_lift","roller","wait_lift"],
+  "nodes": [
+    {"x":0,"y":60.923,"start":true,"tangent":[0,1],"tangent_derivative":[0,0],"incoming_magnitude":0.233,"outgoing_magnitude":0.233,"actions":{"lift_state":3}},
+    {"x":0,"y":62.307,"reverse":true,"wait_time":0.3,"tangent":[0,1],"tangent_derivative":[0,0],"incoming_magnitude":0.233,"outgoing_magnitude":1.833922,"actions":{"roller":1}},
+    {"x":-16.512,"y":47.676,"reverse":true,"tangent":[-1,0],"tangent_derivative":[0,-0.125],"incoming_magnitude":2.17104,"outgoing_magnitude":2.732,"actions":{"lift_state":1,"wait_lift":1}},
+    {"x":11.242,"y":26.938,"reverse":true,"tangent":[0.804863,-0.593461],"tangent_derivative":[0.389459,0.528191],"incoming_magnitude":1.37597,"outgoing_magnitude":1.058295,"actions":{"intake":1}},
+    {"x":6.948981,"y":35.621389,"reverse":true,"tangent":[-0.074248,0.99724],"tangent_derivative":[-0.186981,-0.013922],"incoming_magnitude":0.523378,"outgoing_magnitude":0.884749,"actions":{"intake":1}},
+    {"x":-2.589,"y":25.254,"reverse":true,"wait_time":0.7,"tangent":[-0.978326,-0.207069],"tangent_derivative":[0,0],"incoming_magnitude":1.901,"outgoing_magnitude":2.503965,"actions":{"intake":1},"optimize":{"curvature":false}},
+    {"x":19.049,"y":42.756,"reverse":true,"tangent":[0.707107,0.707107],"tangent_derivative":[0,0],"incoming_magnitude":1.56,"outgoing_magnitude":2,"actions":{"lift_state":1,"wait_lift":1},"optimize":{"heading":false,"curvature":false,"handles":false}},
+    {"x":20.546,"y":30.665,"reverse":true,"tangent":[0.707107,-0.707107],"tangent_derivative":[0.008835,0.458835],"incoming_magnitude":0.570042,"outgoing_magnitude":0.383561,"actions":{"intake":1}},
+    {"x":17.55,"y":33.977,"reverse":true,"tangent":[-0.6564,0.754413],"tangent_derivative":[0,0],"incoming_magnitude":0.345097,"outgoing_magnitude":0.483632,"actions":{"intake":1,"intake_lift":-1}},
+    {"x":20.532,"y":30.656,"reverse":true,"wait_time":0.5,"tangent":[0.681998,-0.731354],"tangent_derivative":[0.319967,0.298374],"incoming_magnitude":0.19572,"outgoing_magnitude":0.495827,"actions":{"intake":1},"optimize":{"curvature":false,"handles":false}},
+    {"x":19.07759,"y":42.797877,"end":true,"reverse":true,"tangent":[0.707,0.707],"incoming_magnitude":2,"outgoing_magnitude":4.111,"actions":{"lift_state":1,"wait_lift":1},"optimize":{"curvature":false,"handles":false}}
+  ],
+  "action_points": [
+    {"x":-0.099881,"y":59.569126,"t":1.123388,"actions":{"lift_height":150}},
+    {"x":-12.653755,"y":47.786359,"t":1.852333,"actions":{"lift_height":50}},
+    {"x":-13.33752,"y":47.51266,"t":2.096134,"actions":{"lift_state":-1}},
+    {"x":4.16775,"y":34.772152,"t":2.620997,"actions":{"intake":1}},
+    {"x":9.442284,"y":28.529505,"t":2.870209,"max_velocity":0.7,"actions":{"intake":1}},
+    {"x":11.046039,"y":33.234959,"t":5.513382,"max_velocity":1.1,"actions":{"lift_height":400}},
+    {"x":15.917164,"y":39.278913,"t":5.777258,"stop":true,"wait_time":0.3},
+    {"x":16.462056,"y":39.75212,"t":6.177911,"stop":true,"actions":{"wait_lift":1}},
+    {"x":15.658454,"y":37.419185,"t":6.321764,"actions":{"intake":1}},
+    {"x":17.164057,"y":33.81102,"t":6.583907,"actions":{"intake":1,"intake_lift":1}},
+    {"x":19.569007,"y":31.584835,"t":9.180929,"wait_time":0.5,"actions":{"lift_height":600}}
+  ]
+}

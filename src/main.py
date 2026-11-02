@@ -1,6 +1,7 @@
 import ctypes
 import io
 import logging
+import multiprocessing
 import sys
 
 import matplotlib.pyplot as plt
@@ -16,6 +17,9 @@ sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8")
 sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8")
 
 if __name__ == "__main__":
+    # The path optimizer runs in a spawned child process; in the PyInstaller build
+    # that child is this executable, and this hands it straight to multiprocessing.
+    multiprocessing.freeze_support()
     setup_global_logger(level=logging.DEBUG, mode=LogMode.FILE_ONLY)
 
 

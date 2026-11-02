@@ -1,0 +1,13 @@
+[Unit]
+Description=Mount SD card /dev/%I at the configured mount point
+Documentation=file:/home/tihor/Projects/Robotics/VexAutonomousPlanner/tools/sdcard/README.md
+# Follow the block device: started by udev when it appears, stopped (and
+# unmounted) by systemd when it goes away.
+BindsTo=dev-%i.device
+After=dev-%i.device
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/sbin/sdcard-helper mount-dev /dev/%I
+ExecStop=/usr/local/sbin/sdcard-helper umount-dev /dev/%I

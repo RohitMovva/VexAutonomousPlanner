@@ -1,0 +1,23 @@
+{
+  "format": "vap-route",
+  "version": 2,
+  "actions": ["intake","lift_state","right_reset","left_reset","front_reset","lift_height","intake_lift","roller","wait_lift"],
+  "nodes": [
+    {"x":-60.923,"y":0,"start":true,"wait_time":0.6,"tangent":[-0.995,0],"incoming_magnitude":0,"outgoing_magnitude":0.05,"actions":{"lift_state":3,"roller":1}},
+    {"x":-62.498,"y":0,"reverse":true,"tangent":[-0.066,0],"incoming_magnitude":0.132,"outgoing_magnitude":1.877,"actions":{"roller":1}},
+    {"x":-46.821,"y":16.336,"reverse":true,"tangent":[0,1],"tangent_derivative":[-0.34375,0],"incoming_magnitude":2.629525,"outgoing_magnitude":1.405258,"actions":{"lift_state":1,"wait_lift":1}},
+    {"x":-52.67,"y":6.066,"reverse":true,"tangent":[-0.881538,-0.472113],"tangent_derivative":[-0.014754,0.027548],"incoming_magnitude":0.595192,"outgoing_magnitude":2.253206,"actions":{"lift_state":4}},
+    {"x":-28.221694,"y":24.053303,"tangent":[-0.156434,0.987688],"tangent_derivative":[-1.861601,-0.31206],"incoming_magnitude":2.32,"outgoing_magnitude":1.567367,"actions":{"lift_height":400},"optimize":{"handles":true,"heading":true,"curvature":true}},
+    {"x":-43.484,"y":27.093,"reverse":true,"tangent":[-0.707107,-0.707107],"tangent_derivative":[0.464,-0.464],"incoming_magnitude":1.82116,"outgoing_magnitude":1.855487,"actions":{"lift_state":1,"wait_lift":1}},
+    {"x":-31.599,"y":27.238,"reverse":true,"tangent":[0.624695,-0.780869],"tangent_derivative":[0.052,0.035],"incoming_magnitude":0.649646,"outgoing_magnitude":1.885813,"actions":{"lift_state":4},"optimize":{"corridor":1}},
+    {"x":-47.693003,"y":42.277955,"tangent":[-0.652856,-0.757482],"tangent_derivative":[0.810675,-3.641406],"incoming_magnitude":1.788272,"outgoing_magnitude":0.687296,"actions":{"lift_height":600},"optimize":{"heading":true,"handles":true,"curvature":true,"corridor":0.5}},
+    {"x":-48.3,"y":29.671,"reverse":true,"tangent":[0,-1],"tangent_derivative":[0,0],"incoming_magnitude":1.169453,"outgoing_magnitude":3,"actions":{"lift_state":1,"wait_lift":1}},
+    {"x":-40,"y":60,"reverse":true,"tangent":[0.965926,0.258819],"tangent_derivative":[0,0],"incoming_magnitude":2.222735,"outgoing_magnitude":1.266476},
+    {"x":-60.937,"y":58.665,"end":true,"tangent":[-1,0],"tangent_derivative":[0,0],"incoming_magnitude":1,"outgoing_magnitude":1}
+  ],
+  "action_points": [
+    {"x":-62.482156,"y":0,"t":0.99,"stop":true,"wait_time":0.1,"actions":{"lift_height":6}},
+    {"x":-58.065764,"y":0.244598,"t":1.195892,"actions":{"lift_height":200}},
+    {"x":-29.823535,"y":18.322676,"t":3.78979,"max_velocity":1}
+  ]
+}

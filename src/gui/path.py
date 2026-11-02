@@ -29,11 +29,16 @@ from PyQt6.QtWidgets import (
 
 import utilities.file_management
 from gui import action_point, node
+from gui.optimizer_overlay import OptimizerOverlay
 from motion_profiling_v2 import motion_profile_generator
 from splines.spline_manager import QuinticHermiteSplineManager
+from utilities.field_scale import FIELD_IMAGE_FT, FIELD_IMAGE_IN
 from utilities import config_manager, route_serializer
 
 logger = logging.getLogger(__name__)
+
+# Opacity of everything outside the focus range (PathWidget.set_focus_from/_to)
+FOCUS_DIM_OPACITY = 0.15
 
 
 class RobotVisualizer(QGraphicsRectItem):
@@ -63,11 +68,24 @@ class PathStateCommand(QUndoCommand):
     command is really just the serialized state before and after an edit.
     """
 
-    def __init__(self, widget, before: str, after: str, text: str):
+    def __init__(
+        self,
+        widget,
+        before: str,
+        after: str,
+        text: str,
+        point_before=None,
+        point_after=None,
+    ):
         super().__init__(text)
         self._widget = widget
         self._before = before
         self._after = after
+        # Index of the selected action point in each state. An edit can
+        # reorder action_points (sorted by t), so the index has to be taken
+        # from the state being restored, not from the current list.
+        self._point_before = point_before
+        self._point_after = point_after
         # push() calls redo() immediately, but the edit has already happened.
         self._first_redo = True
 
@@ -75,10 +93,10 @@ class PathStateCommand(QUndoCommand):
         if self._first_redo:
             self._first_redo = False
             return
-        self._widget._restore_state(self._after)
+        self._widget._restore_state(self._after, self._point_after)
 
     def undo(self):
-        self._widget._restore_state(self._before)
+        self._widget._restore_state(self._before, self._point_before)
 
 
 class PathWidget(QGraphicsView):
@@ -95,8 +113,7 @@ class PathWidget(QGraphicsView):
         self.parent = parent
         self.config_manager = config_manager
         self.image = QPixmap(image_path) if image_path else None
-        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
-
+        
         # Create a QGraphicsScene
         self.scene = QGraphicsScene()
         self.setScene(self.scene)
@@ -147,21 +164,48 @@ class PathWidget(QGraphicsView):
 
         self.path_item = QGraphicsPathItem()
         self.scene.addItem(self.path_item)
+        # Focus range: the nodes from focus_from to focus_to (None = the last node)
+        # draw and edit as normal; the rest of the path, its nodes and action points
+        # fade to FOCUS_DIM_OPACITY and stop taking clicks. View-only: not saved with
+        # the route or pushed to the undo stack. While it is set, path_item is drawn
+        # faded and focus_path_item redraws the focused stretch over it.
+        self.focus_from = None
+        self.focus_to = None
+        self.focus_path_item = QGraphicsPathItem()
+        self.scene.addItem(self.focus_path_item)
 
         # Overlays drawn on top of the path where curvature forces the robot
         # below a fraction of max velocity (added after path_item so they
         # render above it).
         self.feasibility_coloring = True
+        # What the last generated profile asks of the chassis (FeasibilityReport);
+        # None until a profile has been generated.
+        self.feasibility_report = None
         self.slow_overlay_item = QGraphicsPathItem()
         self.slow_overlay_item.setPen(QPen(QColor("#e6a23c"), 4))
         self.scene.addItem(self.slow_overlay_item)
         self.crawl_overlay_item = QGraphicsPathItem()
         self.crawl_overlay_item.setPen(QPen(QColor("#e64c3c"), 4))
         self.scene.addItem(self.crawl_overlay_item)
+        # Where the robot is actually sent when a spin-through turn swings it off the
+        # spline: the profile's own poses, dashed over the path.
+        self.drive_overlay_item = QGraphicsPathItem()
+        drive_pen = QPen(QColor("#f0f0f0"), 2)
+        drive_pen.setStyle(Qt.PenStyle.DashLine)
+        self.drive_overlay_item.setPen(drive_pen)
+        self.scene.addItem(self.drive_overlay_item)
+        # Path-optimizer limits, keep-out zones and result preview (the Optimize page
+        # drives it).
+        self.optimizer_overlay = OptimizerOverlay(self.scene)
+        # The route's keep-out zones (route_serializer.KeepOutRecord, field inches).
+        # Saved with the route and part of every undo snapshot; only the optimizer
+        # reads them.
+        self.keep_out: list = []
 
         # Undo support: snapshot taken at the start of a user edit, committed
         # (pushed to the undo stack) when the edit finishes.
         self._pending_undo_state = None
+        self._pending_undo_point = None
         self._restoring_state = False
 
         self.rect_item = RobotVisualizer()
@@ -288,7 +332,7 @@ class PathWidget(QGraphicsView):
             path_point, path_param = self.find_closest_point_on_path(
                 self.path, scene_pos
             )
-            if path_param is not None:
+            if path_param is not None and self.is_param_in_focus(path_param):
                 self.begin_undo_state()
                 self.add_action_point(path_point, path_param)
                 self.commit_undo_state("Add action point")
@@ -339,7 +383,11 @@ class PathWidget(QGraphicsView):
             ).normalized()
             scene_rect = self.mapToScene(band).boundingRect()
             self.set_multi_selection(
-                {n for n in self.nodes if scene_rect.contains(n.scenePos())}
+                {
+                    n
+                    for n in self.nodes
+                    if scene_rect.contains(n.scenePos()) and self.is_node_in_focus(n)
+                }
             )
             # A panel selection outside the fresh box selection would keep a
             # stray ring (and stale panel) around - drop it.
@@ -408,6 +456,13 @@ class PathWidget(QGraphicsView):
             self.shift_pressed = True
             QApplication.setOverrideCursor(Qt.CursorShape.ArrowCursor)
         elif event.key() == Qt.Key.Key_Escape:
+            # First Esc drops the selection; with nothing selected, it clears the
+            # focus range
+            nothing_selected = not self.selected_nodes and (
+                getattr(self.parent, "selected_node", None) is None
+            )
+            if nothing_selected and self.focus_from is not None:
+                self.clear_focus()
             self.clear_multi_selection()
             self.set_selected_node(None)
         super().keyPressEvent(event)
@@ -430,6 +485,7 @@ class PathWidget(QGraphicsView):
         if self._restoring_state or self.parent is None:
             return
         self._pending_undo_state = self.parent.convert_nodes()
+        self._pending_undo_point = self._selected_point_index()
 
     def begin_undo_state_once(self):
         """begin_undo_state, but keep an already-pending snapshot.
@@ -449,9 +505,26 @@ class PathWidget(QGraphicsView):
         self._pending_undo_state = None
         after = self.parent.convert_nodes()
         if after != before:
-            self.parent.undo_stack.push(PathStateCommand(self, before, after, text))
+            self.parent.undo_stack.push(
+                PathStateCommand(
+                    self,
+                    before,
+                    after,
+                    text,
+                    self._pending_undo_point,
+                    self._selected_point_index(),
+                )
+            )
+            # Wait, speed and accel edits change the timing without a path rebuild.
+            self.parent.schedule_path_time_update()
 
-    def _restore_state(self, state: str):
+    def _selected_point_index(self):
+        selected = getattr(self.parent, "selected_action_point", None)
+        if selected is not None and selected in self.action_points:
+            return self.action_points.index(selected)
+        return None
+
+    def _restore_state(self, state: str, point_idx=None):
         # The restore rebuilds every node object, so remember the selection by
         # index and re-select its replacement - otherwise the Path panel is
         # left pointing at a destroyed node.
@@ -459,6 +532,11 @@ class PathWidget(QGraphicsView):
         selected = getattr(self.parent, "selected_node", None)
         if selected is not None and selected in self.nodes:
             selected_idx = self.nodes.index(selected)
+        # The focus range too, by index
+        focus_idx = None
+        bounds = self._focus_bounds()
+        if bounds is not None:
+            focus_idx = (bounds[0], None if self.focus_to is None else bounds[1])
 
         # The multi-selection is not preserved across undo/redo; only the
         # single panel selection survives (by index, below).
@@ -470,8 +548,19 @@ class PathWidget(QGraphicsView):
         finally:
             self._restoring_state = False
 
+        if focus_idx is not None and focus_idx[0] < len(self.nodes):
+            self.focus_from = self.nodes[focus_idx[0]]
+            self.focus_to = (
+                self.nodes[focus_idx[1]]
+                if focus_idx[1] is not None and focus_idx[1] < len(self.nodes)
+                else None
+            )
+            self._apply_focus()
+
         if selected_idx is not None and selected_idx < len(self.nodes):
             self.parent.set_selected_node(self.nodes[selected_idx])
+        elif point_idx is not None and point_idx < len(self.action_points):
+            self.parent.set_selected_action_point(self.action_points[point_idx])
         else:
             self.parent.set_selected_node(None)
 
@@ -496,7 +585,9 @@ class PathWidget(QGraphicsView):
                 n.is_end_node,
                 n.is_reverse_node,
                 n.stop_mode,
+                n.stop,  # auto_stop also follows the wait_lift action
                 n.turn,
+                n.spin_through,
                 n.wait_time,
                 n.max_velocity,
                 n.max_acceleration,
@@ -512,6 +603,56 @@ class PathWidget(QGraphicsView):
             for a in self.action_points
         )
         return (node_state, action_state)
+
+    def build_constraints(
+        self,
+        v_max: float,
+        a_max: float,
+        j_max: float,
+        track_width: float,
+        d_max: float = None,
+    ) -> motion_profile_generator.Constraints:
+        """The profiler constraints for these limits plus the config's drivetrain
+        model. The path optimizer is given the same ones, so its times match the
+        status bar's."""
+        cfg = self.config_manager
+        return motion_profile_generator.Constraints(
+            max_vel=v_max,  # Maximum velocity in ft/s
+            max_acc=a_max,  # Maximum acceleration in ft/s^2
+            max_dec=a_max if d_max is None else d_max,  # Max deceleration in ft/s^2
+            friction_coef=0.8,  # Coefficient of friction
+            max_jerk=j_max,  # Maximum jerk in ft/s^3
+            track_width=track_width,  # Distance between wheels in ft
+            # Optional drivetrain model. Absent from the config -> None -> the flat
+            # max_acc / max_dec above are used, exactly as before.
+            stall_accel=cfg.get_value("motion", "stall_accel"),
+            free_speed=cfg.get_value("motion", "free_speed"),
+            traction_accel=cfg.get_value("motion", "traction_accel"),
+            # ft of extra effective half-track charged to the outer wheel's speed budget,
+            # paying for the voltage that turning scrub costs. Absent -> None -> no penalty.
+            steering_speed_penalty=cfg.get_value("motion", "steering_speed_penalty"),
+            # Yaw budget (rad/s, rad/s^2): what the chassis can actually turn at, which
+            # the wheel-speed bound overstates on pivot-tight corners. Absent -> None ->
+            # no cap.
+            max_angular_velocity=cfg.get_value("motion", "max_angular_velocity"),
+            max_angular_acceleration=cfg.get_value("motion", "max_angular_acceleration"),
+            # Per-side overrides of the yaw cap, by which wheel is outer. Absent ->
+            # None -> max_angular_velocity for that side.
+            max_angular_velocity_left_outer=cfg.get_value(
+                "motion", "max_angular_velocity_left_outer"
+            ),
+            max_angular_velocity_right_outer=cfg.get_value(
+                "motion", "max_angular_velocity_right_outer"
+            ),
+            # In-place turns have their own (rad/s, rad/s^2): a spin loads the chassis
+            # differently from a pivot. Absent -> None -> the flat limits above.
+            max_turn_velocity=cfg.get_value("motion", "max_turn_velocity"),
+            max_turn_acceleration=cfg.get_value("motion", "max_turn_acceleration"),
+            # Spin-through turns spin while braking and launching, which the in-place
+            # limits overstate. Absent -> None -> max_turn_velocity / _acceleration.
+            spin_through_velocity=cfg.get_value("motion", "spin_through_velocity"),
+            spin_through_acceleration=cfg.get_value("motion", "spin_through_acceleration"),
+        )
 
     def generate_motion_profile_lists(
         self,
@@ -533,6 +674,14 @@ class PathWidget(QGraphicsView):
             cfg.get_value("motion", "free_speed"),
             cfg.get_value("motion", "traction_accel"),
             cfg.get_value("motion", "steering_speed_penalty"),
+            cfg.get_value("motion", "max_angular_velocity"),
+            cfg.get_value("motion", "max_angular_acceleration"),
+            cfg.get_value("motion", "max_angular_velocity_left_outer"),
+            cfg.get_value("motion", "max_angular_velocity_right_outer"),
+            cfg.get_value("motion", "max_turn_velocity"),
+            cfg.get_value("motion", "max_turn_acceleration"),
+            cfg.get_value("motion", "spin_through_velocity"),
+            cfg.get_value("motion", "spin_through_acceleration"),
             self._path_fingerprint(),
         )
         if self._profile_cache is not None and self._profile_cache_key == cache_key:
@@ -548,22 +697,7 @@ class PathWidget(QGraphicsView):
         self.angular_velocities: List[float] = []
         self.nodes_map: List[int] = []
         self.coords: List[float] = []
-        constraints = motion_profile_generator.Constraints(
-            max_vel=v_max,  # Maximum velocity in ft/s
-            max_acc=a_max,  # Maximum acceleration in ft/s^2
-            max_dec=a_max if d_max is None else d_max,  # Max deceleration in ft/s^2
-            friction_coef=0.8,  # Coefficient of friction
-            max_jerk=j_max,  # Maximum jerk in ft/s^3
-            track_width=track_width,  # Distance between wheels in ft
-            # Optional drivetrain model. Absent from the config -> None -> the flat
-            # max_acc / max_dec above are used, exactly as before.
-            stall_accel=cfg.get_value("motion", "stall_accel"),
-            free_speed=cfg.get_value("motion", "free_speed"),
-            traction_accel=cfg.get_value("motion", "traction_accel"),
-            # ft of extra effective half-track charged to the outer wheel's speed budget,
-            # paying for the voltage that turning scrub costs. Absent -> None -> no penalty.
-            steering_speed_penalty=cfg.get_value("motion", "steering_speed_penalty"),
-        )
+        constraints = self.build_constraints(v_max, a_max, j_max, track_width, d_max)
 
         (
             self.time_intervals,
@@ -579,6 +713,16 @@ class PathWidget(QGraphicsView):
             self.spline_manager, constraints
         )
 
+        self.feasibility_report = motion_profile_generator.check_trajectory_feasibility(
+            self.time_intervals, self.velocities, self.angular_velocities, constraints,
+            spin_through=motion_profile_generator.spin_through_samples(
+                self.spline_manager.nodes, self.nodes_map, len(self.time_intervals)
+            ),
+        )
+        logger.info(f"Trajectory feasibility: {self.feasibility_report.summary()}")
+        for warning in self.feasibility_report.warnings:
+            logger.warning(f"Trajectory feasibility: {warning}")
+
         logger.info(f"Accumulated value: {self.positions[-1]}")
         logger.info(f"Goal value: {self.spline_manager.get_total_arc_length()}")
         logger.info(
@@ -587,6 +731,8 @@ class PathWidget(QGraphicsView):
         # generate_motion_profile now emits the final node's nodes_map entry
         # itself (placed before any final turn/wait samples), so no caller-side
         # append is needed.
+
+        self._update_drive_overlay()
 
         result = (
             self.time_intervals,
@@ -611,12 +757,12 @@ class PathWidget(QGraphicsView):
     ):
         # convert points to numpy array of floats and from pixels to feet
         points = np.array([[point.x(), point.y()] for point in points])
-        points = (points / 2000 - 0.5) * 12.2038433932
+        points = (points / 2000 - 0.5) * FIELD_IMAGE_FT
 
         self.spline_manager.build_path(points, nodes, action_points)
         t_values = np.linspace(0, len(points) - 1, 100 * len(self.nodes))
         spline_points = self.spline_manager.get_points_at_parameters(t_values)
-        spline_points = (spline_points / 12.2038433932 + 0.5) * 2000
+        spline_points = (spline_points / FIELD_IMAGE_FT + 0.5) * 2000
 
         # Keep the sample table for fast closest-point queries.
         self._canvas_params = t_values
@@ -628,6 +774,12 @@ class PathWidget(QGraphicsView):
             for p in spline_points[1:]:
                 self.path.lineTo(p[0], p[1])
 
+        in_focus = self._focus_mask(t_values)
+        self.focus_path_item.setPath(
+            QPainterPath() if in_focus is None
+            else self._path_from_mask(spline_points, in_focus)
+        )
+
         self._update_feasibility_overlay(t_values, spline_points)
 
         return spline_points
@@ -635,7 +787,8 @@ class PathWidget(QGraphicsView):
     def _update_feasibility_overlay(self, t_values, spline_points_px):
         """Color path stretches where curvature caps the chassis well below
         max velocity: orange under 60%, red under 35%. Uses the same
-        v <= max_vel / (1 + |k| * lever) bound as the profiler."""
+        v <= max_vel / (1 + |k| * lever) bound as the profiler, and the yaw-rate
+        cap v <= max_angular_velocity / |k| when one is configured."""
         if not self.feasibility_coloring or len(t_values) < 2:
             self.slow_overlay_item.setPath(QPainterPath())
             self.crawl_overlay_item.setPath(QPainterPath())
@@ -657,12 +810,50 @@ class PathWidget(QGraphicsView):
         lever = track_width / 2 + penalty
         speed_ratio = 1.0 / (1.0 + np.abs(curvature) * lever)
 
+        max_vel = self.config_manager.get_value("motion", "max_velocity") or 0
+        yaw_cap = self.config_manager.get_value("motion", "max_angular_velocity")
+        if yaw_cap and max_vel > 0:
+            abs_curvature = np.abs(curvature)
+            yaw_ratio = np.full(len(t_values), np.inf)
+            bending = abs_curvature > 1e-9
+            yaw_ratio[bending] = yaw_cap / (abs_curvature[bending] * max_vel)
+            speed_ratio = np.minimum(speed_ratio, yaw_ratio)
+
+        # Only inside the focus range, when one is set
+        in_focus = self._focus_mask(t_values)
+        if in_focus is None:
+            in_focus = np.ones(len(t_values), dtype=bool)
         self.slow_overlay_item.setPath(
-            self._path_from_mask(spline_points_px, speed_ratio < 0.6)
+            self._path_from_mask(spline_points_px, (speed_ratio < 0.6) & in_focus)
         )
         self.crawl_overlay_item.setPath(
-            self._path_from_mask(spline_points_px, speed_ratio < 0.35)
+            self._path_from_mask(spline_points_px, (speed_ratio < 0.35) & in_focus)
         )
+
+    def _update_drive_overlay(self):
+        """Draw the profile's poses when any spin-through turn blends, since those
+        leave the spline; clear it otherwise."""
+        path = QPainterPath()
+        blending = any(
+            motion_profile_generator.blends_turn(n, i, len(self.nodes))
+            for i, n in enumerate(getattr(self.spline_manager, "nodes", None) or [])
+        )
+        coords = getattr(self, "coords", None) or []
+        bounds = self._focus_bounds()
+        nodes_map = getattr(self, "nodes_map", None) or []
+        if bounds is not None and coords and len(nodes_map) > bounds[1]:
+            # The profile's samples from arriving at the first focused node to
+            # arriving at the last (nodes_map: node -> its first sample)
+            coords = coords[nodes_map[bounds[0]] : nodes_map[bounds[1]] + 1]
+        if blending and coords:
+            points = [
+                (np.asarray(c, dtype=float).ravel()[:2] / FIELD_IMAGE_FT + 0.5) * 2000
+                for c in coords
+            ]
+            path.moveTo(points[0][0], points[0][1])
+            for p in points[1:]:
+                path.lineTo(p[0], p[1])
+        self.drive_overlay_item.setPath(path)
 
     @staticmethod
     def _path_from_mask(points, mask) -> QPainterPath:
@@ -705,24 +896,39 @@ class PathWidget(QGraphicsView):
             points.append(self.end_node.pos())
             self.update_spline(points, self.nodes, self.action_points)
         else:
+            # Drop splines built from the old node list; the per-node accessors
+            # index them by node position and would run off the end.
+            self.spline_manager.splines = []
             self.path = QPainterPath()
             self._canvas_samples = None
             self._canvas_params = None
             self.slow_overlay_item.setPath(QPainterPath())
             self.crawl_overlay_item.setPath(QPainterPath())
+            self.drive_overlay_item.setPath(QPainterPath())
+            self.focus_path_item.setPath(QPainterPath())
 
-        for action_node in self.action_points:
-            t = action_node.t
-            point = self.spline_manager.get_point_at_parameter(t)
-            point = (point / (12.2038433932) + 0.5) * 2000
-            action_node.setPos(QPointF(point[0], point[1]))
+        if self.spline_manager.splines:
+            for action_node in self.action_points:
+                t = action_node.t
+                point = self.spline_manager.get_point_at_parameter(t)
+                point = (point / FIELD_IMAGE_FT + 0.5) * 2000
+                action_node.setPos(QPointF(point[0], point[1]))
+
+        if getattr(self.parent, "selected_action_point", None) is not None:
+            self.parent.refresh_selected_action_point()
 
         pen = QPen(QColor("#008080"), 4)  # dark purple (looks cool)
         # pen = QPen(QColor("#0a0612"), 4)  # dark purple (looks cool)
         self.path_item.setPen(pen)
         self.path_item.setPath(self.path)
+        self.focus_path_item.setPen(pen)
+        self._apply_focus()
 
         self.viewport().update()  # Request a repaint of the viewport
+        self.parent.schedule_path_time_update()
+        # The Optimize page's limit overlay follows the path (no-op while hidden).
+        if hasattr(self.parent, "refresh_optimizer_overlay"):
+            self.parent.refresh_optimizer_overlay()
 
     def save(self):
         self.parent.auto_save()
@@ -742,13 +948,15 @@ class PathWidget(QGraphicsView):
         if pos == -1 and self.end_node is not None:
             pos = len(self.nodes) - 1
         if pos == -1:
+            # Appended past the last segment: no existing segment is renumbered.
             self.nodes.append(new_node)
         else:
             self.nodes.insert(pos, new_node)
-
-        for p in self.action_points:
-            if (p.t//1 >= pos):
-                p.t += 1
+            # Segments from pos onward are renumbered one higher; keep their
+            # action points on them.
+            for p in self.action_points:
+                if p.t // 1 >= pos:
+                    p.t += 1
 
         new_node.setPos(point)
         self.scene.addItem(new_node)
@@ -776,6 +984,7 @@ class PathWidget(QGraphicsView):
 
         self.scene.addItem(new_action_point)
         new_action_point.show()
+        self.parent.update_path_page()
 
         logger.info(
             f"Action point created at ({new_action_point.abs_x}, {new_action_point.abs_y})"
@@ -808,7 +1017,33 @@ class PathWidget(QGraphicsView):
         if remove_action_point in self.action_points:
             self.action_points.remove(remove_action_point)
 
+        # Same as remove_node: the panel must not keep editing a deleted point.
+        if getattr(self.parent, "selected_action_point", None) is remove_action_point:
+            self.parent.set_selected_action_point(None)
+
+        self.parent.update_path_page()
         self.update_path()
+
+    def sort_action_points(self):
+        """Keep action_points in path order after a t change.
+
+        The profile generator walks this list in order and only fires the next
+        point once the path passes its t, so a point moved past another would
+        otherwise be skipped entirely.
+        """
+        self.action_points.sort(key=lambda a: a.t)
+        self.parent.update_path_page()
+
+    def max_action_point_t(self):
+        """Largest valid t: the path runs over len(nodes) - 1 segments."""
+        return max(len(self.nodes) - 1, 0)
+
+    def action_point_distance(self, point):
+        """Arc length (inches) from the start of the path to point, or None
+        while there is no path."""
+        if not self.spline_manager.splines:
+            return None
+        return self.spline_manager.time_to_distance(point.t) * 12
 
     def set_start_node(self, new_start_node):
         if self.start_node:
@@ -833,6 +1068,12 @@ class PathWidget(QGraphicsView):
 
     def set_selected_node(self, node):
         self.parent.set_selected_node(node)
+
+    def set_selected_action_point(self, point):
+        self.parent.set_selected_action_point(point)
+
+    def is_action_point_selected(self, point):
+        return getattr(self.parent, "selected_action_point", None) is point
 
     # MULTI-SELECTION
     def is_node_selected(self, n):
@@ -867,11 +1108,13 @@ class PathWidget(QGraphicsView):
         self.set_multi_selection(set())
 
     def _resolve_node_at(self, viewport_pos):
-        item = self.itemAt(viewport_pos)
-        if isinstance(item, node.Node):
-            return item
-        if item is not None and isinstance(item.parentItem(), node.Node):
-            return item.parentItem()
+        # Topmost node under the cursor that is not faded out by the focus range,
+        # so a click in a cluster reaches the focused node under a faded one
+        for item in self.items(viewport_pos):
+            if not isinstance(item, node.Node) and item is not None:
+                item = item.parentItem()
+            if isinstance(item, node.Node) and self.is_node_in_focus(item):
+                return item
         return None
 
     def delete_selected_nodes(self):
@@ -955,8 +1198,8 @@ class PathWidget(QGraphicsView):
         # self.auto_save()
 
     def convert_point(self, point: QPointF):
-        point.setX((point.x() / (146.446120719) + 0.5) * 2000)
-        point.setY((point.y() / (146.446120719) + 0.5) * 2000)
+        point.setX((point.x() / FIELD_IMAGE_IN + 0.5) * 2000)
+        point.setY((point.y() / FIELD_IMAGE_IN + 0.5) * 2000)
 
         return point
 
@@ -994,6 +1237,7 @@ class PathWidget(QGraphicsView):
             node.is_reverse_node = rec.is_reverse
             node.stop_mode = rec.stop_mode
             node.turn = rec.turn
+            node.spin_through = rec.spin_through
             node.wait_time = rec.wait_time
             node.max_velocity = rec.max_velocity
             node.max_acceleration = rec.max_acceleration
@@ -1009,6 +1253,7 @@ class PathWidget(QGraphicsView):
             )
 
             node.apply_action_map(rec.actions)
+            node.optimize = dict(rec.optimize)
             node.set_locked(rec.locked)
             # set_visible show()s or hide()s to match; a node hidden when the
             # route was saved must come back hidden, not unconditionally shown.
@@ -1026,6 +1271,7 @@ class PathWidget(QGraphicsView):
 
             action_point.show()
 
+        self.keep_out = list(route.keep_out)
         self.update_path()
 
         # Migration/compatibility notes. Suppressed during undo/redo, where
@@ -1046,6 +1292,90 @@ class PathWidget(QGraphicsView):
         logger.info(f"Visualizing toggled to : {state}")
         self.visualize = state
         self.update()
+
+    # FOCUS RANGE
+    def _focus_bounds(self):
+        """(first, last) node index of the focus range, or None when there is none.
+        A range whose nodes were deleted (or rebuilt by a load) clears itself."""
+        if self.focus_from is None:
+            return None
+        if self.focus_from not in self.nodes:
+            self.focus_from = self.focus_to = None
+            return None
+        if self.focus_to is not None and self.focus_to not in self.nodes:
+            self.focus_to = None
+        a = self.nodes.index(self.focus_from)
+        b = len(self.nodes) - 1 if self.focus_to is None else self.nodes.index(self.focus_to)
+        return (min(a, b), max(a, b))
+
+    def _focus_mask(self, t_values):
+        """Which spline parameters lie in the focus range; None without one."""
+        bounds = self._focus_bounds()
+        if bounds is None:
+            return None
+        t_values = np.asarray(t_values)
+        return (t_values >= bounds[0] - 1e-9) & (t_values <= bounds[1] + 1e-9)
+
+    def is_node_in_focus(self, n) -> bool:
+        bounds = self._focus_bounds()
+        if bounds is None or n not in self.nodes:
+            return True
+        return bounds[0] <= self.nodes.index(n) <= bounds[1]
+
+    def is_param_in_focus(self, t: float) -> bool:
+        bounds = self._focus_bounds()
+        return bounds is None or bounds[0] - 1e-9 <= t <= bounds[1] + 1e-9
+
+    def set_focus_from(self, n) -> None:
+        """Focus from node n on: to the last node, or the existing end of the range."""
+        self.focus_from = n
+        logger.info(f"Focus range from node {self.nodes.index(n)}")
+        self._focus_changed()
+
+    def set_focus_to(self, n) -> None:
+        """Focus up to node n: from the first node, or the existing start."""
+        if self.focus_from is None or self.focus_from not in self.nodes:
+            self.focus_from = self.nodes[0]
+        self.focus_to = n
+        logger.info(f"Focus range to node {self.nodes.index(n)}")
+        self._focus_changed()
+
+    def clear_focus(self) -> None:
+        if self.focus_from is None:
+            return
+        self.focus_from = self.focus_to = None
+        logger.info("Focus range cleared")
+        self._focus_changed()
+
+    def _focus_changed(self) -> None:
+        # A selection outside the range would leave a hidden node editable
+        for n in [n for n in self.selected_nodes if not self.is_node_in_focus(n)]:
+            self.selected_nodes.discard(n)
+            n.update()
+        selected = getattr(self.parent, "selected_node", None)
+        if selected is not None and not self.is_node_in_focus(selected):
+            self.set_selected_node(None)
+        self._update_drive_overlay()
+        self.update_path()
+
+    def _apply_focus(self) -> None:
+        """Fade and disable the nodes / action points outside the focus range."""
+        active = self._focus_bounds() is not None
+        self.path_item.setOpacity(FOCUS_DIM_OPACITY if active else 1.0)
+        items = [(n, self.is_node_in_focus(n)) for n in self.nodes]
+        items += [(ap, self.is_param_in_focus(ap.t)) for ap in self.action_points]
+        for item, inside in items:
+            item.setOpacity(1.0 if inside else FOCUS_DIM_OPACITY)
+            item.setAcceptedMouseButtons(
+                Qt.MouseButton.AllButtons if inside else Qt.MouseButton.NoButton
+            )
+            item.setAcceptHoverEvents(inside)
+
+    def set_drive_overlay_visible(self, visible: bool) -> None:
+        """Show or hide the dashed spin-through drive line. Still kept up to date while
+        hidden, so showing it again needs no regeneration."""
+        logger.info(f"Spin-through drive line toggled to: {visible}")
+        self.drive_overlay_item.setVisible(visible)
 
     def set_feasibility_coloring(self, enabled: bool) -> None:
         logger.info(f"Feasibility coloring toggled to: {enabled}")
@@ -1082,7 +1412,7 @@ class PathWidget(QGraphicsView):
         hi = self._canvas_params[min(idx + 1, len(self._canvas_params) - 1)]
         fine_params = np.linspace(lo, hi, 64)
         fine_points = self.spline_manager.get_points_at_parameters(fine_params)
-        fine_points = (fine_points / 12.2038433932 + 0.5) * 2000
+        fine_points = (fine_points / FIELD_IMAGE_FT + 0.5) * 2000
 
         fine_idx = int(np.argmin(np.sum((fine_points - target) ** 2, axis=1)))
         closest_point = fine_points[fine_idx]
@@ -1140,8 +1470,8 @@ class PathWidget(QGraphicsView):
 
         # Create rectangle centered at path point
         rect_size = QSizeF(
-            self.robot_width * (2000 / (146.446120719)),
-            self.robot_length * (2000 / (146.446120719)),
+            self.robot_width * (2000 / FIELD_IMAGE_IN),
+            self.robot_length * (2000 / FIELD_IMAGE_IN),
         )
         center_rect = QRectF(
             path_point.x() - rect_size.width() / 2,

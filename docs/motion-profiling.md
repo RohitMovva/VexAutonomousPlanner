@@ -65,7 +65,7 @@ exactly the same instant the path tangent flips.
 
 ---
 
-## The eight changes
+## The nine changes
 
 ### 1. The angular-acceleration constraint was disabled
 
@@ -565,6 +565,189 @@ zero, so §1–§7's results are untouched.
 > deliberately: `accel_limit` is the dominant term, and that constraint binds mainly near spline
 > splits where `v ≈ 0` and the error vanishes. Revisit it if a residual shows up on a curved log.
 
+### 9. The speed budget called a pivot-tight corner feasible; the motors could not turn it
+
+**Evidence.** `OverrideAutonomous/tests/logs/09122026-9.txt`, route `turn_test`: a 90° corner of
+about 6 in radius — half the 12 in track — taken at 15 in/s, peak ω = 2.4 rad/s. The inner wheel
+is commanded to ~0 while the outer wheels drag the chassis around a pivot against scrub. The
+outer side sat at 127/127 for 25 consecutive ticks at 2.3–2.45 A (the V5 current cap) and
+delivered 20–25 in/s against a 33–35 in/s setpoint; the chassis yawed at most 2.1 rad/s.
+Heading lagged the reference by 10.7°, the robot ran ~1 in wide, and the run ended 0.66 in and
+5.4° off. RAMSETE made it worse in the corner: behind on the path, it raised v from 15 to
+18 in/s, deepening the saturation it could not push through.
+
+**Why §8's bound misses it.** `v ≤ max_vel / (1 + |κ|·lever)` is a *speed* budget. At the pivot
+the outer wheel's reference was 29 in/s against a 42 in/s budget, so the corner passed. What
+binds there is *torque*: two motors turning the whole robot about a stopped wheel. No speed
+budget can see that, and widening `steering_speed_penalty` enough to catch it would strangle
+every gentle arc.
+
+**The fix: a yaw budget, measured rather than derived.** Two optional caps on `Constraints`:
+
+```
+max_angular_velocity      ω = v·|κ| ≤ ω_max        →  v ≤ ω_max / |κ|          (max_speed_by_yaw_rate)
+max_angular_acceleration  α = κ·a + v²·κ' ≤ α_max  →  v ≤ sqrt(α_max / |κ'|)   (limit_velocity_by_ang_accel)
+                                                      a ≤ (α_max − v²|κ'|) / (|κ| + 2·ds·|κ'|)   (max_accel_by_yaw_accel)
+```
+
+The rate cap joins the wheel-speed bound in `max_speed_at_curvature`, whichever binds first. The
+acceleration cap enters the pre-pass exactly like the outer wheel's force budget and both sweeps
+through `ramp_limit`, checked at *both* ends of every interval for the same reason §7 checks the
+outer wheel at both ends. On a straight (`κ = κ' = 0`) both are unbounded, so straight-line
+profiles stay bit-identical.
+
+**In-place turns have their own caps.** A spin drives all four motors against a symmetric load,
+so the pivot-measured caps above do not apply to it. Until 2026-09-26 `motion_profile_angle` ran
+on the flat `max_vel` / `max_acc` alone, which planned a 180° spin at up to 7.4 rad/s in 0.72 s.
+The robot at full voltage (±127 on both sides, logs `09222026-164` and `09242026-289`) reached
+only about 4.3 rad/s, still accelerating at about 7 rad/s², so it left every turn 40-70° behind
+and started the next segment still rotating. `max_turn_velocity` / `max_turn_acceleration`
+(rad/s, rad/s²) now cap the spin's wheel speed and acceleration at `ω·track/2`: a 180° spin
+planned at 1.36 s. Measured directly on 2026-10-09 with the suite's `spin_max` route (planned at
+8 rad/s so the robot runs flat out; boots 1001, 1002, 1004), the robot spins at about 8 rad/s and
+spins up at 14-16 rad/s², so the 09-26 figures came from turns held back by something else.
+The caps are now 7 rad/s and 12 rad/s² (a 180° spin plans at about 0.75 s). A turn node's own
+`max_velocity` / `max_acceleration` replace them for that spin (the suite's spin-rate routes). `check_trajectory_feasibility` judges moving samples against
+`max_angular_velocity` and spins against `max_turn_velocity`, so a route with a turn node no
+longer warns about the path's yaw cap. The trajectory file format is unchanged; the robot
+just gets a slower spin to follow.
+
+**Starting values** (`config.yaml`): `max_angular_velocity: 1.5` — the pinned chassis managed
+2.1 rad/s, so 1.5 leaves roughly 30% of yaw authority for RAMSETE; `max_angular_acceleration:
+5.0` — the pinned side produced about 5.3 rad/s². Tune them from logs: raise the rate cap until
+the outer wheel's voltage starts railing in the corner, then back off.
+
+**First benchmark** (`09122026-11.txt`, cap 1.5, firmware kP still 4): cross-track max
+0.99 → 0.46 in, heading p95 10.4° → 6.0°, final error 0.66 in / 5.4° → 0.18 in / 3.8°,
+saturation 7% → 0%. The chassis held the 1.5 rad/s reference through the steady part of the
+corner (measured 1.52); the remaining 6° of lag builds during the ramp-in, where the inner
+wheel runs 3–5 in/s faster than commanded because its braking voltage never exceeds −7 — a
+velocity-loop problem (kP, brake feedforward), not a profile problem. Outer-motor current
+peaked at 1.48 A against the 2.5 A cap log 9 hit, and no voltage exceeded 81/127 anywhere in
+the run, so both caps had headroom: `max_angular_velocity` went to **1.8** and `stall_accel`
+from 7.5 to **10.0** (still under the 11.1 ft/s² measured on the previous chassis). On
+`turn_test` that is 2.56 → 2.32 s with a predicted outer-wheel feedforward peak of ~114
+motor units on six samples of the accel phase, so the next log should show voltages in the
+90s there. If the outer wheel rails in the corner or the ramp-in lag grows past ~8°, the yaw
+cap is the knob to bring back down; if it rails on the straight, `stall_accel` is.
+
+**Per-side yaw caps** (2026-10-20). The outer wheel pays for the yaw, and the two sides need
+not have the same headroom. Across the ten `truelocalsawpalt` runs of 10-19 (logs
+`10192026-1012`..`1021`), at the 1.8 rad/s cap the right side was saturated on 73% of ticks
+when it was the outer wheel and the left on 3%, because the right drive drags (port 12).
+`max_angular_velocity_left_outer` / `max_angular_velocity_right_outer` replace
+`max_angular_velocity` for turns with that outer wheel; either absent → `max_angular_velocity`.
+The forward-backward pass tracks the driving direction per sample (it toggles at reverse nodes,
+as `generate_motion_profile` does) and `Constraints.outer_side` picks the side: the profile
+emits `v = ±|v|`, `ω = −|v|·κ`, and the right wheel (`v + ω·tw/2`) is outer exactly when
+`v·ω > 0`, i.e. `κ < 0` forwards or `κ > 0` in reverse. Anything that does not know the
+direction uses the strictest cap (`yaw_rate_cap(None)`); the canvas feasibility colouring still
+uses plain `max_angular_velocity`.
+`check_trajectory_feasibility` holds each sample to its own side's cap. The yaw-acceleration
+cap stays symmetric. With neither key set the profile is bit-identical to before.
+
+**Results** (`tools/profile_routes.py --compare`, track width 12.0 in). Every competition route
+has a corner tighter than the half-track, so every one is touched:
+
+| route | min radius (ft) | peak ω before (rad/s) | duration before → after |
+|---|---|---|---|
+| turn_test | 0.51 | 2.49 | 2.18 → 2.56 s (+17%) |
+| chudton | 0.48 | 2.54 | 5.74 → 6.44 s (+12%) |
+| fourpin | 0.29 | 2.43 | 14.29 → 14.80 s (+4%) |
+| mirroredthreepin | 0.13 | 3.39 | 6.88 → 8.11 s (+18%) |
+| threepin | 0.15 | 3.34 | 14.49 → 16.78 s (+16%) |
+| thematchauton | 0.16 | 3.30 | 14.82 → 16.74 s (+13%) |
+| sawp | 0.19 | 3.20 | 19.36 → 23.28 s (+20%) |
+| skills | 0.12 | 3.45 | 37.89 → 41.01 s (+8%) |
+| straight_line | — | 0 | 2.84 → 2.84 s (identical) |
+
+That cost is the price of corners the chassis was never going to hold; the way to buy the time
+back is to draw wider corners, which the canvas overlay now colours for the yaw cap too.
+
+**The report.** `check_trajectory_feasibility` runs after every generation and logs the
+trajectory's duration, peak speed, peak yaw rate and (finite-differenced, informational) yaw
+acceleration, minimum turning radius over moving samples, peak outer-wheel speed, and how many
+samples sit at the yaw cap. It warns when the yaw rate or outer-wheel speed exceeds its cap and
+when the minimum radius is inside the half-track — the pivot signature. `PathWidget` keeps the
+last one as `feasibility_report`.
+
+> `robot.track_width` must match the firmware's `Config::WHEEL_BASE_WIDTH` (12.0 in as of
+> 2026-09-12; it was 13.5 here while the firmware had already moved). The firmware converts ω to
+> a wheel differential with its own value, so a mismatch means the wheel speeds the profiler
+> budgeted are not the ones the robot commands.
+
+
+---
+
+## Spin-through turns
+
+A turn node normally runs as stop, spin in place, go: no rotation while braking in and
+none while launching out. Ticking **Spin Through Turn** on a node with a turn
+(`spin_through` in the route file) overlaps the spin with those two ramps instead,
+in `blend_spin_through`. The robot then passes through the node already spinning.
+
+The case it exists for is straight_cycle / curved_cycle. The robot backs into the goal
+and backs into the matchloader with the same side, so its body has to flip about 170
+deg on each leg while it travels the same way. A reverse node with a `turn` of 180 on
+the goal-matchloader line describes exactly that: the path keeps going, the body
+flips. On a clean straight version of straight_cycle (tests/test_spin_through.py
+builds one) a cycle takes 5.2 s spinning in place and 4.2 s spinning through.
+
+How the profile is built, per spin-through node, over the samples from the previous
+node to the next one:
+
+1. **Ramps.** At full decel the brake into the node uses the whole acceleration
+   budget and leaves the spin nothing, so the ramps either side are also tried at
+   `SPIN_THROUGH_RAMP_FRACTIONS` of `max_dec` / `max_acc` (resampled on the 10 ms
+   grid) and the quickest overall is kept.
+2. **Spin budget.** The spin may use yaw rate up to
+   `spin_through_velocity * (1 - |v| / max_velocity)` and yaw acceleration up to
+   `spin_through_acceleration * (1 - |a| / max_acc)`, each less what the path itself is
+   turning at (unset, they fall back to `max_turn_velocity` / `max_turn_acceleration`).
+   That straight line between the straight-line and spin limits is an **assumption,
+   not a measurement**. The spin-through caps are lower than the in-place ones on
+   purpose. On the first flight (skills.txt, 2026-10-30, firmware card boots 319/323)
+   the flips ran on the in-place 7 rad/s / 12 rad/s². Both sides then sat at 127 for a
+   third to four fifths of every flip, the wheels slipped at the cusp, and the heading
+   ran 15-65 deg behind. At 7 rad/s the outer wheel alone is at about `max_velocity`
+   (7 × 5.675 in ≈ 40 in/s), which leaves RAMSETE nothing to correct with. The fastest spin under it is found
+   with a forward/backward pass in time. If the spin does not fit, the robot dwells
+   at the node (v = 0) for the shortest time that lets it. The window is then pulled
+   in toward the node, so the turning happens where the robot is slowest.
+3. **Pose.** A robot that turns while moving leaves the spline, so the pose is
+   integrated through the window. That leaves a mismatch of a few inches at the next
+   node. It is spread back along the distance travelled with a smoothstep that is flat
+   at both neighbouring nodes and at the cusp. Heading, speed and yaw rate are
+   recomputed from the shifted path, so the samples stay something a differential
+   drive can follow (no sideways velocity) and the next node is hit exactly.
+4. **Limits.** If that shift pushes a wheel past `max_velocity`, or the
+   acceleration past what the region already asked for, the region is slowed
+   uniformly until it does not.
+
+What changes for the user:
+
+- The **spin-through node itself is not hit exactly.** The cusp drifts with the
+  swing (about 3 in in the test cycle). The neighbouring nodes are hit exactly, at
+  the same heading as an in-place turn would give.
+- The canvas draws the profile's own poses as a **dashed line** whenever a
+  spin-through turn blends, because that is where the robot is sent, not the
+  spline.
+- A node with a `wait_time` or a lift wait keeps the in-place spin. The robot is
+  meant to sit there, and the firmware's lift hold freezes the trajectory clock,
+  which would stop it mid-spin. So do the start and end nodes, which have no ramp
+  on one side.
+- `check_trajectory_feasibility` holds the samples of a spin-through region that
+  sit inside the spin envelope to the spin's limits instead of the path's yaw cap,
+  given the regions by `spin_through_samples`.
+- The firmware needs nothing new. It follows the exported samples as always.
+
+Not yet done:
+
+- The path optimizer places spin-through turns itself (see
+  [path-optimizer.md](path-optimizer.md#spin-through-placement)).
+- Nothing has been flown. The budget in step 2 and RAMSETE tracking a 3-4 rad/s spin
+  while rolling both need a suite run before the time saving is trusted.
+
 ---
 
 ## Configuration reference
@@ -581,6 +764,14 @@ motion:
   max_deceleration: 8.0        # ceiling — deliberately lower
   max_velocity: 4.0            # leaves RAMSETE headroom under the firmware's cap
   steering_speed_penalty: 0.167 # ft — the outer wheel's speed budget pays for scrub (§8)
+  max_angular_velocity: 1.8    # rad/s — yaw the chassis can hold on a one-sided pivot (§9)
+  max_angular_acceleration: 5.0 # rad/s^2 — yaw acceleration budget (§9); omit either to disable
+  max_angular_velocity_left_outer: 2.2   # rad/s — optional per-side override (§9)
+  max_angular_velocity_right_outer: 1.8  # rad/s — optional per-side override (§9)
+  max_turn_velocity: 7.0       # rad/s — turn-in-place ceiling, measured ~8 (§9); omit to disable
+  max_turn_acceleration: 12.0  # rad/s^2 — turn-in-place acceleration, measured 14-16 (§9)
+  spin_through_velocity: 4.0   # rad/s — spin-through turns (see "Spin-through turns"); omit to use max_turn_velocity
+  spin_through_acceleration: 7.0 # rad/s^2 — spin-through turns; omit to use max_turn_acceleration
   max_jerk: 16.0               # currently unused by the profiler
 ```
 
@@ -751,8 +942,8 @@ reversal — harmless there, and worth recognising if you ever see it in a plot.
 difference of `ω = v·κ` across a genuine curvature discontinuity at |v| ≈ 0. The wheels are
 barely turning; it isn't a torque the drivetrain has to make. Ignore it when auditing.
 
-**`motion_profile_angle` (in-place turns) still uses a flat `constraints.max_acc`** and does not
-consult the drivetrain model.
+**`motion_profile_angle` (in-place turns) runs a trapezoid** under `max_vel` / `max_acc` and the
+turn caps (§9), not the drivetrain model.
 
 **`max_jerk` is configured but unused.** The profiler does not currently bound jerk.
 
@@ -771,8 +962,9 @@ slip-risk spot in the route, though, so it's worth watching if odometry drifts.)
 
 Known bugs, not yet fixed:
 
-- **`motion_profile_angle` (in-place turns) ignores the drivetrain model** and still uses a flat
-  `constraints.max_acc`.
+- **`motion_profile_angle` (in-place turns) ignores the drivetrain model.** It is capped by the
+  measured turn limits (§9) but is still a symmetric trapezoid; the robot brakes faster than it
+  accelerates, so the deceleration half is conservative.
 - **`max_jerk` is configured but unused.** The profiler does not bound jerk.
 - **`src/motion_profiling_v2/test.py` is stale.** It calls `limit_velocity_by_ang_accel` with a
   signature that no longer exists; the suite errors out.
@@ -816,11 +1008,12 @@ Fixed in an earlier pass, previously listed here:
 
 ## How to re-verify after a change
 
-There is no headless entry point *in the repo*, but one is straightforward to write and is how
-every number in this document was measured. `Node` and `ActionPoint` are Qt graphics items, but
-the profiler only reads plain attributes off them, so a ~30-line stand-in plus the route-file
-JSON is enough to drive `build_path` → `forward_backward_pass` → `generate_motion_profile`
-without Qt. The one thing to get right is the coordinate conversion: route files store inches,
+`tools/profile_routes.py` profiles every saved route headlessly from `config.yaml` and prints
+the feasibility report per route (`--compare` also runs with the yaw caps off). It is built on
+`src/utilities/headless_profile.py`: `Node` and `ActionPoint` are Qt graphics items, but the
+profiler only reads plain attributes off them, so a stand-in plus the route-file JSON drives
+`build_path` → `forward_backward_pass` → `generate_motion_profile` without Qt. The numbers in
+§9 came from it; the earlier sections were measured with an ad-hoc version of the same thing. The one thing to get right is the coordinate conversion: route files store inches,
 and `load_nodes` → `convert_point` → `update_spline` nets out to **feet = inches / 12**.
 
 **Audit on the distance grid, not the resampled 10 ms grid.** The 10 ms profile finite-differences
@@ -832,6 +1025,7 @@ carry. Check the invariant on the grid the sweeps actually enforce it on.
 The properties that should always hold:
 
 - `|v| ≤ max_velocity`, and `|v| + |ω|·track_width/2 ≤ max_velocity` (wheel speeds)
+- `|ω| ≤ max_angular_velocity` on every moving sample (§9)
 - `accelerations[i] == (linear_vels[i+1] − linear_vels[i]) / dt` — exactly
 - `positions` monotonic, ending at the spline's total arc length
 - no heading step larger than a few degrees per 10 ms tick

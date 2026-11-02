@@ -400,6 +400,15 @@ class QuinticHermiteSplineManager:
         t = t0 + (t1 - t0) * (distance - d0) / (d1 - d0)
         return t
 
+    def time_to_distance(self, t: float) -> float:
+        """Inverse of distance_to_time: arc length (feet) from the start to
+        parameter t, clamped to the ends of the path."""
+        if self.lookup_table is None:
+            self.build_lookup_table()
+        return float(
+            np.interp(t, self.lookup_table.parameters, self.lookup_table.distances)
+        )
+
     def distances_to_times(self, distances: np.ndarray) -> np.ndarray:
         """Batch distance_to_time. np.interp clamps to the table ends exactly
         like the scalar version's edge cases."""

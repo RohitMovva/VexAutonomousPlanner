@@ -44,6 +44,12 @@ class ConfigManager:
                 "header_folder": "",  # Header file output folder
                 "routes_folder": "",  # Routes folder
             },
+            "sd_card": {
+                "mount_point": "/mnt/sdcard",  # where tools/sdcard mounts the card
+                "routes_folder": "/mnt/sdcard/routes",  # read by the V5 brain as /usd/routes
+                "pending_folder": "",  # trajectories saved while the card is out ("" = route_backups/sd_card_pending)
+                "auto_sync": True,  # copy pending/newer local trajectories when the card appears
+            },
         }
 
         if not os.path.exists(self.config_file_path):

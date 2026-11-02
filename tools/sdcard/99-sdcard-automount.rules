@@ -1,0 +1,8 @@
+# Auto-mount FAT/exFAT filesystems on USB storage at MOUNT_POINT (/etc/sdcard.conf).
+# Installed to /etc/udev/rules.d/ by tools/sdcard/install.sh.
+#
+# When the SD card reader is attached from Windows (usbipd) and a card is
+# inserted, the kernel adds a partition (e.g. sde1). This hands it to
+# sdcard-mount@sde1.service, which is bound to the device: it mounts on add
+# and unmounts automatically when the card or reader disappears.
+ACTION=="add", SUBSYSTEM=="block", ENV{DEVTYPE}=="disk|partition", ENV{ID_BUS}=="usb", ENV{ID_FS_TYPE}=="vfat|exfat", TAG+="systemd", ENV{SYSTEMD_WANTS}+="sdcard-mount@%k.service"

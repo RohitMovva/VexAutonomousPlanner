@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+# sdcard: control the SD card that is auto-mounted into WSL for the path planner.
+# Installed at /usr/local/bin/sdcard by tools/sdcard/install.sh.
+set -euo pipefail
+
+HELPER=/usr/local/sbin/sdcard-helper
+
+usage() {
+    cat <<USAGE
+usage: sdcard [command]
+
+  status    show whether the reader is attached and the card is mounted (default)
+  eject     flush and unmount the card so it can be pulled out
+  mount     mount a card that is inserted but not mounted (e.g. after eject)
+  release   hand the reader back to Windows (stops auto-attach)
+  attach    take the reader back from Windows and mount the card
+  log [N]   show the last N log lines (default 50)
+USAGE
+}
+
+case "${1:-status}" in
+    status|eject|mount|release|attach)
+        exec sudo -n "$HELPER" "$1" ;;
+    log)
+        exec journalctl --no-pager -n "${2:-50}" -t sdcard-helper \
+            -u sdcard-usbip-attach.service -u 'sdcard-mount@*.service' ;;
+    -h|--help|help)
+        usage ;;
+    *)
+        usage; exit 2 ;;
+esac

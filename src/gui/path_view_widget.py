@@ -4,6 +4,8 @@ import numpy as np
 from PyQt6.QtCore import QSize, Qt
 from PyQt6.QtGui import QIcon
 from PyQt6.QtWidgets import (
+    QCheckBox,
+    QComboBox,
     QDoubleSpinBox,
     QFormLayout,
     QGroupBox,
@@ -18,6 +20,7 @@ from PyQt6.QtWidgets import (
 
 import utilities
 from gui import node
+from utilities import action_spec
 
 logger = logging.getLogger(__name__)
 
@@ -143,6 +146,8 @@ class PathViewWidget(QWidget):
 
         self.changing_node = False
 
+        self._build_action_point_group(main_layout)
+
         self.lock_pixmap = QIcon(utilities.file_management.resource_path("../assets/lock.png"))
         self.unlock_pixmap = QIcon(utilities.file_management.resource_path("../assets/unlock.png"))
         self.eye_pixmap = QIcon(utilities.file_management.resource_path("../assets/eye.png"))
@@ -227,7 +232,50 @@ class PathViewWidget(QWidget):
                 node_widget.setStyleSheet("background-color: #000000;")
             self.node_layout.addWidget(node_widget)
 
+        self._add_action_point_rows()
+
         self.node_layout.addStretch()
+
+    def _add_action_point_rows(self):
+        points = self._path_widget().action_points
+        if not points:
+            return
+        header = QLabel("Action points")
+        header.setStyleSheet("font-weight: bold; margin-top: 6px;")
+        self.node_layout.addWidget(header)
+
+        for i, point in enumerate(points):
+            row = QWidget()
+            row_layout = QHBoxLayout(row)
+            row_layout.setContentsMargins(0, 0, 0, 0)
+
+            # Flat button so the row reads like the node labels but can be
+            # clicked to select a point that is hard to hit on the canvas.
+            select_button = QPushButton(f"Action point {i + 1}  (t = {point.t:.2f})")
+            select_button.setFlat(True)
+            select_button.setStyleSheet("text-align: left;")
+            select_button.setSizePolicy(
+                QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred
+            )
+            select_button.clicked.connect(
+                lambda checked, p=point: self.gui_manager.set_selected_action_point(p)
+            )
+            row_layout.addWidget(select_button)
+
+            trash_button = QPushButton()
+            trash_button.setIcon(self.trash_pixmap)
+            trash_button.setIconSize(QSize(24, 24))
+            trash_button.setFixedSize(24, 24)
+            trash_button.setFlat(True)
+            trash_button.setToolTip("Delete Action Point")
+            trash_button.clicked.connect(
+                lambda checked, p=point: self.on_action_point_trash_clicked(p)
+            )
+            row_layout.addWidget(trash_button)
+
+            if point is self.selected_action_point:
+                row.setStyleSheet("background-color: #000000;")
+            self.node_layout.addWidget(row)
 
     def _path_widget(self):
         return self.gui_manager.central_widget
@@ -278,6 +326,224 @@ class PathViewWidget(QWidget):
 
         self.changing_node = False
         self.update_view()
+
+    # ACTION POINT EDITOR
+    def _build_action_point_group(self, main_layout):
+        """The Action Point group, shown in place of Position/Tangent while an
+        action point is selected."""
+        self.selected_action_point = None
+        self.changing_action_point = False
+
+        self.action_group = QGroupBox("Action Point")
+        form = QFormLayout()
+
+        self.action_t = QDoubleSpinBox()
+        self.action_t.setDecimals(3)
+        self.action_t.setSingleStep(0.01)
+        self.action_t.setToolTip(
+            "Path parameter: the whole part is the segment (0 = first node), "
+            "the fraction is how far along it"
+        )
+        form.addRow("Position (t):", self.action_t)
+
+        self.action_where = QLabel()
+        self.action_where.setWordWrap(True)
+        form.addRow(self.action_where)
+
+        self.action_stop = QCheckBox("Stop here")
+        form.addRow(self.action_stop)
+
+        self.action_wait = QDoubleSpinBox()
+        self.action_wait.setRange(0.0, 60.0)
+        self.action_wait.setDecimals(2)
+        self.action_wait.setSuffix(" s")
+        form.addRow("Wait time:", self.action_wait)
+
+        # Same 0-128 range as the context-menu dialogs
+        self.action_max_velocity = QDoubleSpinBox()
+        self.action_max_velocity.setRange(0.0, 128.0)
+        form.addRow("Max velocity:", self.action_max_velocity)
+
+        self.action_max_acceleration = QDoubleSpinBox()
+        self.action_max_acceleration.setRange(0.0, 128.0)
+        form.addRow("Max acceleration:", self.action_max_acceleration)
+
+        # One row per configured action slot, rebuilt on selection because
+        # config.yaml owns the slot list.
+        self.action_values_widget = QWidget()
+        self.action_values_form = QFormLayout(self.action_values_widget)
+        self.action_values_form.setContentsMargins(0, 0, 0, 0)
+        self.action_value_editors = []
+        form.addRow(self.action_values_widget)
+
+        self.action_group.setLayout(form)
+        main_layout.addWidget(self.action_group)
+        self.action_group.hide()
+
+        self.action_t.valueChanged.connect(self.on_action_t_changed)
+        self.action_stop.toggled.connect(self.on_action_stop_toggled)
+        self.action_wait.valueChanged.connect(
+            lambda v: self._set_action_attr("wait_time", v)
+        )
+        self.action_max_velocity.valueChanged.connect(
+            lambda v: self._set_action_attr("max_velocity", v)
+        )
+        self.action_max_acceleration.valueChanged.connect(
+            lambda v: self._set_action_attr("max_acceleration", v)
+        )
+        for spin_box in (
+            self.action_t,
+            self.action_wait,
+            self.action_max_velocity,
+            self.action_max_acceleration,
+        ):
+            spin_box.editingFinished.connect(self._commit_action_point_edit)
+
+    def _commit_action_point_edit(self):
+        self._path_widget().commit_undo_state("Edit action point")
+
+    def set_selected_action_point(self, point):
+        self.selected_action_point = point
+        if point is not None:
+            # addItems fires currentTextChanged; without the guard, building
+            # the combos would write their first choice into the point.
+            self.changing_action_point = True
+            try:
+                self._build_action_value_editors(point)
+            finally:
+                self.changing_action_point = False
+            self.refresh_selected_action_point()
+        # Node editors and the action point editor never show together.
+        self.action_group.setVisible(point is not None)
+        self.position_group.setVisible(point is None)
+        self.tangent_group.setVisible(point is None)
+        self.update_view()
+
+    def _build_action_value_editors(self, point):
+        while self.action_values_form.rowCount():
+            self.action_values_form.removeRow(0)
+        self.action_value_editors = []
+
+        for i, name in enumerate(point.actions):
+            spec = action_spec.spec_for(name)
+            if spec.kind == action_spec.CHOICE:
+                editor = QComboBox()
+                editor.addItems([label for label, _ in spec.choices])
+                editor.currentTextChanged.connect(
+                    lambda text, idx=i, sp=spec: self.on_action_choice_changed(idx, sp, text)
+                )
+            else:
+                editor = QDoubleSpinBox()
+                editor.setRange(spec.minimum, spec.maximum)
+                editor.setDecimals(spec.decimals)
+                editor.setSuffix(spec.suffix)
+                editor.valueChanged.connect(
+                    lambda v, idx=i: self.on_action_number_changed(idx, v)
+                )
+                editor.editingFinished.connect(self._commit_action_point_edit)
+            if spec.prompt:
+                editor.setToolTip(spec.prompt)
+            self.action_values_form.addRow(f"{name}:", editor)
+            self.action_value_editors.append(editor)
+
+    def refresh_selected_action_point(self):
+        """Load the selected point's values into the editors without writing
+        them back."""
+        point = self.selected_action_point
+        if point is None:
+            return
+        view = self._path_widget()
+        self.changing_action_point = True
+        try:
+            self.action_t.setRange(0.0, float(view.max_action_point_t()))
+            self.action_t.setValue(point.t)
+            self.action_where.setText(self._describe_position(point))
+            self.action_stop.setChecked(point.stop)
+            self.action_wait.setValue(point.wait_time)
+            self.action_max_velocity.setValue(point.max_velocity)
+            self.action_max_acceleration.setValue(point.max_acceleration)
+
+            for i, editor in enumerate(self.action_value_editors):
+                name = point.actions[i]
+                value = point.action_values[i]
+                if isinstance(editor, QComboBox):
+                    label = action_spec.format_value(name, value)
+                    if editor.findText(label) < 0:
+                        # An unrecognised code stays visible rather than being
+                        # silently shown as a code the firmware knows.
+                        editor.addItem(label)
+                    editor.setCurrentText(label)
+                else:
+                    editor.setValue(value)
+        finally:
+            self.changing_action_point = False
+
+    def _describe_position(self, point):
+        view = self._path_widget()
+        segments = view.max_action_point_t()
+        if segments < 1:
+            return "No path yet"
+        segment = min(int(point.t), segments - 1)
+        text = (
+            f"Segment {segment + 1} of {segments} "
+            f"(node {segment + 1} \u2192 node {segment + 2})"
+        )
+        distance = view.action_point_distance(point)
+        if distance is not None:
+            total = view.spline_manager.get_total_arc_length() * 12
+            text += f"\n{distance:.1f} in from the start (of {total:.1f} in)"
+        return text
+
+    def _editing_action_point(self):
+        """The point to write to, with the undo snapshot taken; None while the
+        panel is loading values or nothing is selected."""
+        if self.changing_action_point or self.selected_action_point is None:
+            return None
+        self._path_widget().begin_undo_state_once()
+        return self.selected_action_point
+
+    def on_action_t_changed(self, value):
+        point = self._editing_action_point()
+        if point is None:
+            return
+        point.set_t(value)
+        self.action_where.setText(self._describe_position(point))
+
+    def on_action_stop_toggled(self, checked):
+        point = self._editing_action_point()
+        if point is None:
+            return
+        point.stop = checked
+        self._commit_action_point_edit()
+
+    def _set_action_attr(self, attr, value):
+        point = self._editing_action_point()
+        if point is None:
+            return
+        setattr(point, attr, value)
+
+    def on_action_choice_changed(self, index, spec, text):
+        point = self._editing_action_point()
+        if point is None:
+            return
+        try:
+            point.action_values[index] = spec.value_for(text)
+        except KeyError:
+            return  # the "(unrecognised)" entry: leave the value as it is
+        self._path_widget().update_path()
+        self._commit_action_point_edit()
+
+    def on_action_number_changed(self, index, value):
+        point = self._editing_action_point()
+        if point is None:
+            return
+        point.action_values[index] = value
+        self._path_widget().update_path()
+
+    def on_action_point_trash_clicked(self, point):
+        self._path_widget().begin_undo_state()
+        point.delete_action_point()
+        self._path_widget().commit_undo_state("Delete action point")
 
     def _refresh_editor_enabled(self):
         """The editors only mean something with a node selected; a disabled,

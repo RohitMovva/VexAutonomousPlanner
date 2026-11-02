@@ -37,8 +37,9 @@ without the GUI stack.
 from __future__ import annotations
 
 import json
+import math
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Any, Dict, List, Optional, Sequence, Union
 
 FORMAT_NAME = "vap-route"
 FORMAT_VERSION = 2
@@ -60,6 +61,9 @@ class NodeRecord:
     is_reverse: bool = False
     stop_mode: int = 0
     turn: float = 0
+    # Spin the turn while braking in and launching out instead of stopping for it
+    # (motion_profile_generator.blend_spin_through). Only meaningful with a turn.
+    spin_through: bool = False
     wait_time: float = 0.0
     max_velocity: float = 0.0
     max_acceleration: float = 0.0
@@ -70,6 +74,12 @@ class NodeRecord:
     locked: bool = False
     visible: bool = True
     actions: Dict[str, float] = field(default_factory=dict)
+    # Path-optimizer overrides: setting name ("heading", "handles", "curvature",
+    # "position") ->
+    # True (free) / False (locked) / a number (free, by at most that much: degrees,
+    # a handle scale factor, 1/ft), plus "corridor" -> inches. Settings left out follow
+    # the optimizer's defaults (utilities/path_optimizer.node_limits).
+    optimize: Dict[str, Union[bool, float]] = field(default_factory=dict)
 
 
 @dataclass
@@ -84,6 +94,21 @@ class ActionPointRecord:
     actions: Dict[str, float] = field(default_factory=dict)
 
 
+KEEP_OUT_SHAPES = {"circle": 3, "rect": 4}
+
+
+@dataclass
+class KeepOutRecord:
+    """A field area the path optimizer must keep the robot out of, in field inches.
+
+    ``circle``: [x, y, radius]. ``rect``: [x0, y0, x1, y1], opposite corners, stored
+    with x0 <= x1 and y0 <= y1.
+    """
+
+    shape: str = "circle"
+    values: List[float] = field(default_factory=lambda: [0.0, 0.0, 6.0])
+
+
 @dataclass
 class Route:
     nodes: List[NodeRecord] = field(default_factory=list)
@@ -94,6 +119,9 @@ class Route:
     # Version of the file the route was parsed from (LEGACY_VERSION for the
     # old positional format); FORMAT_VERSION for freshly built routes.
     source_version: int = FORMAT_VERSION
+    # Areas the path optimizer keeps the robot's footprint out of (the spline itself
+    # ignores them).
+    keep_out: List[KeepOutRecord] = field(default_factory=list)
 
 
 # ---------------------------------------------------------------------------
@@ -132,6 +160,8 @@ def _node_to_dict(rec: NodeRecord) -> Dict[str, Any]:
         d["stop_mode"] = int(rec.stop_mode)
     if rec.turn:
         d["turn"] = _clean_number(rec.turn)
+    if rec.spin_through:
+        d["spin_through"] = True
     if rec.wait_time:
         d["wait_time"] = _clean_number(rec.wait_time)
     if rec.max_velocity:
@@ -153,6 +183,11 @@ def _node_to_dict(rec: NodeRecord) -> Dict[str, Any]:
     actions = _nonzero_actions(rec.actions)
     if actions:
         d["actions"] = actions
+    if rec.optimize:
+        d["optimize"] = {
+            name: value if isinstance(value, bool) else _clean_number(float(value))
+            for name, value in rec.optimize.items()
+        }
     return d
 
 
@@ -176,6 +211,10 @@ def _action_point_to_dict(rec: ActionPointRecord) -> Dict[str, Any]:
     return d
 
 
+def _keep_out_to_dict(rec: KeepOutRecord) -> Dict[str, Any]:
+    return {rec.shape: [_clean_number(float(v)) for v in rec.values]}
+
+
 def dumps_route(
     route: Route, action_names: Sequence[str], compact: bool = False
 ) -> str:
@@ -192,6 +231,9 @@ def dumps_route(
         "nodes": [_node_to_dict(n) for n in route.nodes],
         "action_points": [_action_point_to_dict(a) for a in route.action_points],
     }
+    # Omitted when empty, so routes without keep-out zones read as they always did.
+    if route.keep_out:
+        obj["keep_out"] = [_keep_out_to_dict(k) for k in route.keep_out]
     if compact:
         return json.dumps(obj, separators=(",", ":"))
 
@@ -210,8 +252,9 @@ def dumps_route(
         f'  "version": {obj["version"]},\n'
         f'  "actions": {enc(obj["actions"])},\n'
         f'  "nodes": {block(obj["nodes"])},\n'
-        f'  "action_points": {block(obj["action_points"])}\n'
-        "}\n"
+        f'  "action_points": {block(obj["action_points"])}'
+        + (f',\n  "keep_out": {block(obj["keep_out"])}' if "keep_out" in obj else "")
+        + "\n}\n"
     )
 
 
@@ -263,9 +306,10 @@ def _as_vector(value, what: str) -> Optional[List[float]]:
 # --- current format ---------------------------------------------------------
 
 _KNOWN_NODE_KEYS = {
-    "x", "y", "start", "end", "reverse", "stop_mode", "turn", "wait_time",
-    "max_velocity", "max_acceleration", "tangent", "tangent_derivative",
+    "x", "y", "start", "end", "reverse", "stop_mode", "turn", "spin_through",
+    "wait_time", "max_velocity", "max_acceleration", "tangent", "tangent_derivative",
     "incoming_magnitude", "outgoing_magnitude", "locked", "visible", "actions",
+    "optimize",
 }
 
 _KNOWN_ACTION_POINT_KEYS = {
@@ -321,7 +365,36 @@ def _parse_v2(data: dict, action_names: Sequence[str]) -> Route:
         except (TypeError, ValueError, KeyError, AttributeError) as e:
             raise RouteParseError(f"action point {i}: {e}") from e
 
-    return Route(nodes, action_points, warnings, source_version=version)
+    keep_out: List[KeepOutRecord] = []
+    raw_keep_out = data.get("keep_out") or []
+    if not isinstance(raw_keep_out, list):
+        raise RouteParseError(f"keep_out must be a list, got {raw_keep_out!r}")
+    for i, raw in enumerate(raw_keep_out):
+        try:
+            keep_out.append(_parse_keep_out(raw))
+        except (TypeError, ValueError) as e:
+            raise RouteParseError(f"keep_out {i}: {e}") from e
+
+    return Route(nodes, action_points, warnings, keep_out=keep_out, source_version=version)
+
+
+def _parse_keep_out(raw) -> KeepOutRecord:
+    if not isinstance(raw, dict) or len(raw) != 1:
+        raise ValueError(f'expected {{"circle": [x, y, r]}} or {{"rect": [x0, y0, x1, y1]}}, got {raw!r}')
+    (shape, values), = raw.items()
+    if shape not in KEEP_OUT_SHAPES:
+        raise ValueError(f"unknown shape {shape!r} (expected {', '.join(KEEP_OUT_SHAPES)})")
+    values = _as_vector(values, shape)
+    if len(values) != KEEP_OUT_SHAPES[shape] or not all(math.isfinite(v) for v in values):
+        raise ValueError(f"{shape} needs {KEEP_OUT_SHAPES[shape]} finite numbers, got {values!r}")
+    if shape == "circle" and values[2] <= 0:
+        raise ValueError(f"circle radius must be > 0, got {values[2]!r}")
+    if shape == "rect":
+        x0, y0, x1, y1 = values
+        values = [min(x0, x1), min(y0, y1), max(x0, x1), max(y0, y1)]
+        if values[0] == values[2] or values[1] == values[3]:
+            raise ValueError(f"rect has no area: {raw!r}")
+    return KeepOutRecord(shape, values)
 
 
 def _parse_v2_node(raw: dict, known_names, index: int, warnings) -> NodeRecord:
@@ -340,6 +413,7 @@ def _parse_v2_node(raw: dict, known_names, index: int, warnings) -> NodeRecord:
         is_reverse=bool(raw.get("reverse", False)),
         stop_mode=int(raw.get("stop_mode", 0)),
         turn=raw.get("turn", 0),
+        spin_through=bool(raw.get("spin_through", False)),
         wait_time=_as_float(raw.get("wait_time")),
         max_velocity=_as_float(raw.get("max_velocity")),
         max_acceleration=_as_float(raw.get("max_acceleration")),
@@ -354,7 +428,27 @@ def _parse_v2_node(raw: dict, known_names, index: int, warnings) -> NodeRecord:
         actions=_parse_actions_dict(
             raw.get("actions"), known_names, f"node {index}", warnings
         ),
+        optimize=_parse_optimize(raw.get("optimize"), index),
     )
+
+
+def _parse_optimize(raw, index: int) -> Dict[str, Union[bool, float]]:
+    if raw is None:
+        return {}
+    if not isinstance(raw, dict):
+        raise ValueError(f"node {index} optimize must be an object, got {raw!r}")
+    out = {}
+    for name, value in raw.items():
+        if isinstance(value, bool):
+            out[str(name)] = value
+        elif isinstance(value, (int, float)) and math.isfinite(value) and value >= 0:
+            out[str(name)] = float(value)
+        else:
+            raise ValueError(
+                f"node {index} optimize {name!r} must be true, false or a number >= 0,"
+                f" got {value!r}"
+            )
+    return out
 
 
 def _parse_v2_action_point(

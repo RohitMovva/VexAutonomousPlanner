@@ -1,0 +1,38 @@
+{
+  "format": "vap-route",
+  "version": 2,
+  "actions": ["intake","lift_state","right_reset","left_reset","front_reset","lift_height","intake_lift","roller","wait_lift","chainbar","sticks"],
+  "nodes": [
+    {"x":-60.923,"y":0,"start":true,"reverse":true,"wait_time":0.3,"tangent":[1,0],"tangent_derivative":[0,0],"incoming_magnitude":2.461,"outgoing_magnitude":2.461,"actions":{"lift_state":3,"roller":1},"optimize":{"heading":false,"handles":false,"curvature":false,"position":false}},
+    {"x":-47.670131,"y":17.336615,"reverse":true,"tangent":[0,1],"tangent_derivative":[0,0],"incoming_magnitude":1.038192,"outgoing_magnitude":1.565198,"actions":{"lift_state":1},"optimize":{"corridor":6.75}},
+    {"x":-32.993841,"y":3.140485,"reverse":true,"tangent":[0.828652,-0.559764],"tangent_derivative":[0,0],"incoming_magnitude":0.531183,"outgoing_magnitude":0.530719,"actions":{"chainbar":5}},
+    {"x":-39.295403,"y":4.049521,"reverse":true,"tangent":[-0.965888,-0.258961],"tangent_derivative":[0,0],"incoming_magnitude":0.630892,"outgoing_magnitude":5.310761},
+    {"x":-15.463003,"y":41.212478,"reverse":true,"tangent":[-0.707107,0.707107],"tangent_derivative":[0,0],"incoming_magnitude":3,"outgoing_magnitude":2.2,"actions":{"chainbar":-1},"optimize":{"heading":false,"handles":false,"curvature":false,"position":false}},
+    {"x":-23.267547,"y":23.870846,"tangent":[-0.92161,-0.388116],"tangent_derivative":[0.012188,0.316922],"incoming_magnitude":1.002555,"outgoing_magnitude":1.713737,"actions":{"lift_height":400}},
+    {"x":-41.516,"y":22.721,"reverse":true,"tangent":[-0.986286,-0.165048],"tangent_derivative":[0,0],"incoming_magnitude":1.627606,"outgoing_magnitude":1.20409},
+    {"x":-26.135,"y":20.718,"reverse":true,"tangent":[0.827695,-0.561179],"tangent_derivative":[0,0],"incoming_magnitude":1.22475,"outgoing_magnitude":4.134805,"actions":{"lift_state":-1,"chainbar":-1},"optimize":{"heading":false,"handles":true,"position":false}},
+    {"x":-44.754,"y":43.983,"tangent":[0.139,0.99],"tangent_derivative":[0.941,-0.239],"incoming_magnitude":1.6,"outgoing_magnitude":1.856,"actions":{"lift_height":550}},
+    {"x":-29.039618,"y":47.521,"end":true}
+  ],
+  "action_points": [
+    {"x":-59.448976,"y":0.014462,"t":0.050095,"actions":{"lift_height":250,"roller":-1,"chainbar":2}},
+    {"x":-47.681096,"y":16.153606,"t":0.91,"max_acceleration":4,"actions":{"lift_height":50}},
+    {"x":-45.065056,"y":10.996412,"t":1.328934,"actions":{"chainbar":2}},
+    {"x":-34.559443,"y":4.058357,"t":1.811,"max_velocity":0.5},
+    {"x":-33.147158,"y":3.243346,"t":1.971458,"actions":{"chainbar":5}},
+    {"x":-14.653027,"y":40.393128,"t":3.968,"actions":{"chainbar":3}},
+    {"x":-15.030954,"y":40.778997,"t":3.983,"actions":{"chainbar":1}},
+    {"x":-12.506176,"y":34.620319,"t":4.317922,"max_velocity":1.5,"actions":{"lift_state":5}},
+    {"x":-17.913264,"y":27.228877,"t":4.659822,"max_velocity":0.8},
+    {"x":-18.015287,"y":27.144781,"t":4.664774},
+    {"x":-24.701309,"y":23.309956,"t":5.07587,"max_velocity":1.5,"actions":{"lift_height":400}},
+    {"x":-40.170248,"y":22.936169,"t":5.93,"actions":{"lift_state":1}},
+    {"x":-36.376323,"y":28.127321,"t":7.273919,"actions":{"lift_state":5}},
+    {"x":-44.627021,"y":39.588394,"t":7.777265,"max_velocity":0.8},
+    {"x":-44.690221,"y":39.928873,"t":7.793981}
+  ],
+  "keep_out": [
+    {"circle":[-23.5,47.5,7.5]},
+    {"circle":[-0.2,23.2,8.5]}
+  ]
+}

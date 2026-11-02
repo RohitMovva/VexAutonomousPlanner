@@ -1,8 +1,12 @@
 import logging
 
 from PyQt6.QtCore import QPoint, QPointF, QRectF, Qt, QTimer
-from PyQt6.QtGui import QAction, QColor, QPainter
+from PyQt6.QtGui import QAction, QColor, QPainter, QPen
 from PyQt6.QtWidgets import QGraphicsItem, QInputDialog, QMenu, QWidget
+
+from gui import action_editor
+from utilities import action_spec
+from utilities.field_scale import FIELD_IMAGE_IN
 
 logger = logging.getLogger(__name__)
 
@@ -31,8 +35,8 @@ class ActionPoint(QGraphicsItem):
 
         # Scale pixel value down to account for the extra padding that isn't part of the field on either side, scale to between 0-1, subtract 0.5 to center and turn into inches
         self.image_size = 2000
-        self.abs_x = ((self.x() / (self.image_size)) - 0.5) * 146.446120719
-        self.abs_y = ((self.y() / (self.image_size)) - 0.5) * 146.446120719
+        self.abs_x = ((self.x() / (self.image_size)) - 0.5) * FIELD_IMAGE_IN
+        self.abs_y = ((self.y() / (self.image_size)) - 0.5) * FIELD_IMAGE_IN
 
         self.t = t
 
@@ -51,11 +55,11 @@ class ActionPoint(QGraphicsItem):
         self.mouse_move_event_data = None
 
     def get_abs_x(self):
-        self.abs_x = ((self.x() / (self.image_size)) - 0.5) * 146.446120719
+        self.abs_x = ((self.x() / (self.image_size)) - 0.5) * FIELD_IMAGE_IN
         return self.abs_x
 
     def get_abs_y(self):
-        self.abs_y = ((self.y() / (self.image_size)) - 0.5) * 146.446120719
+        self.abs_y = ((self.y() / (self.image_size)) - 0.5) * FIELD_IMAGE_IN
         return self.abs_y
 
     def boundingRect(self):
@@ -71,8 +75,16 @@ class ActionPoint(QGraphicsItem):
         # painter.setOpacity(.5)
         painter.drawEllipse(self.boundingRect())
 
+        if self.parent.is_action_point_selected(self):
+            # Same ring as a selected node, inset so it stays inside boundingRect.
+            painter.setPen(QPen(QColor("#7FDBFF"), 3))
+            painter.setBrush(Qt.BrushStyle.NoBrush)
+            painter.drawEllipse(self.boundingRect().adjusted(1.5, 1.5, -1.5, -1.5))
+
     def mousePressEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
+            self.parent.clear_multi_selection()
+            self.parent.set_selected_action_point(self)
             self.drag_start_position = event.pos()
             self.parent.begin_undo_state()
         super().mousePressEvent(event)
@@ -106,8 +118,9 @@ class ActionPoint(QGraphicsItem):
     def mouseReleaseEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
             self.drag_start_position = None
-            self.abs_x = ((self.x() / (self.image_size)) - 0.5) * 146.446120719
-            self.abs_y = ((self.y() / (self.image_size)) - 0.5) * 146.446120719
+            self.abs_x = ((self.x() / (self.image_size)) - 0.5) * FIELD_IMAGE_IN
+            self.abs_y = ((self.y() / (self.image_size)) - 0.5) * FIELD_IMAGE_IN
+            self.parent.sort_action_points()
             self.parent.update_path()
             self.parent.commit_undo_state("Move action point")
         super().mouseReleaseEvent(event)
@@ -138,10 +151,18 @@ class ActionPoint(QGraphicsItem):
         return super().itemChange(change, value)
 
     def contextMenuEvent(self, event):
+        # Faded out by the focus range: let the item underneath have the click
+        if not self.parent.is_param_in_focus(self.t):
+            event.ignore()
+            return
         context_menu = QMenu()
 
         attributes_menu = QMenu("Attributes")
         node_menu = QMenu("Node Actions")
+
+        position_action = QAction(f"Position (t): {self.t:.3f}")
+        position_action.triggered.connect(self.set_t_dialog)
+        attributes_menu.addAction(position_action)
 
         stop_action = QAction("Stop at Node", checkable=True)
         stop_action.setChecked(self.stop)
@@ -174,7 +195,8 @@ class ActionPoint(QGraphicsItem):
 
         new_actions = []
         for i, action in enumerate(self.actions):
-            new_actions.append(QAction(f"{action}: {self.action_values[i]}"))
+            value = action_spec.format_value(action, self.action_values[i])
+            new_actions.append(QAction(f"{action}: {value}"))
             new_actions[-1].triggered.connect(lambda checked, p=i: self.action_handler(p))
             attributes_menu.addAction(new_actions[-1])
 
@@ -186,6 +208,10 @@ class ActionPoint(QGraphicsItem):
         self.parent.begin_undo_state()
         context_menu.exec(event.screenPos())
         self.parent.commit_undo_state("Edit action point")
+        # Stop and wait edits don't rebuild the path, so nothing else would
+        # refresh the Path panel.
+        if self.parent.is_action_point_selected(self):
+            self.parent.parent.refresh_selected_action_point()
 
     def has_action(self):
         if any(self.action_values) or any(self.extra_actions.values()):
@@ -219,6 +245,35 @@ class ActionPoint(QGraphicsItem):
         if dialog.exec() == QInputDialog.DialogCode.Accepted:
             self.wait_time = dialog.doubleValue()
             logger.info(f"Wait time set to: {self.wait_time}")
+
+    def set_t(self, t):
+        """Move the point to path parameter t (clamped to the path) and keep
+        the list in path order."""
+        self.t = min(max(float(t), 0.0), float(self.parent.max_action_point_t()))
+        self.parent.sort_action_points()
+        self.parent.update_path()
+        logger.info(f"Action point t set to: {self.t}")
+
+    def set_t_dialog(self):
+        scene_pos = self.scenePos()
+        view_pos = self.scene().views()[0].mapFromScene(scene_pos)
+        screen_pos = self.scene().views()[0].viewport().mapToGlobal(view_pos)
+
+        dialog = QInputDialog(self.scene().views()[0])
+        dialog.setWindowTitle("Set Position")
+        dialog.setLabelText(
+            "Path parameter t (whole part = segment, fraction = along it):"
+        )
+        dialog.setInputMode(QInputDialog.InputMode.DoubleInput)
+        dialog.setDoubleRange(0, self.parent.max_action_point_t())
+        dialog.setDoubleDecimals(3)
+        dialog.setDoubleValue(self.t)
+        dialog.move(
+            int(screen_pos.x() + self.radius), int(screen_pos.y() + self.radius)
+        )
+
+        if dialog.exec() == QInputDialog.DialogCode.Accepted:
+            self.set_t(dialog.doubleValue())
 
     def delete_node(self):
         self.parent.remove_action_point(self)
@@ -294,24 +349,17 @@ class ActionPoint(QGraphicsItem):
 
         # Get the position of the node in screen coordinates
         scene_pos = self.scenePos()
-        view_pos = self.scene().views()[0].mapFromScene(scene_pos)
-        screen_pos = self.scene().views()[0].viewport().mapToGlobal(view_pos)
+        view = self.scene().views()[0]
+        view_pos = view.mapFromScene(scene_pos)
+        screen_pos = view.viewport().mapToGlobal(view_pos)
+        screen_pos.setX(int(screen_pos.x() + self.radius))
+        screen_pos.setY(int(screen_pos.y() + self.radius))
 
-        # Create the dialog
-        dialog = QInputDialog(self.scene().views()[0])
-        dialog.setWindowTitle(f"Set {action_name}")
-        dialog.setLabelText(f"Enter {action_name} value:")
-        dialog.setDoubleRange(-1000, 1000)
-        dialog.setDoubleValue(self.turn)
-
-        # Set the position of the dialog
-        dialog.move(
-            int(screen_pos.x() + self.radius), int(screen_pos.y() + self.radius)
+        value = action_editor.ask_action_value(
+            view, screen_pos, action_name, self.action_values[action_index]
         )
-
-        # Show the dialog and get the result
-        if dialog.exec() == QInputDialog.DialogCode.Accepted:
-            self.action_values[action_index] = dialog.doubleValue()
+        if value is not None:
+            self.action_values[action_index] = value
             self.parent.update_path()
             logger.info(
                 f"{action_name} value set to: {self.action_values[action_index]}"

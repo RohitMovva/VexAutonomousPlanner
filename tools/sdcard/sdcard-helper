@@ -1,0 +1,428 @@
+#!/usr/bin/env bash
+# sdcard-helper: privileged half of the WSL SD card auto-mount setup.
+#
+# Installed at /usr/local/sbin/sdcard-helper (root-owned) by install.sh. Used by:
+#   sdcard-usbip-attach.service  -> auto-attach   (keeps the reader attached to WSL)
+#   sdcard-mount@.service        -> mount-dev / umount-dev  (udev-triggered)
+#   the `sdcard` user command    -> status / mount / eject / release / attach (via sudo -n)
+#
+# Settings live in /etc/sdcard.conf (see sdcard.conf next to this file).
+
+set -euo pipefail
+
+CONF=/etc/sdcard.conf
+# One or more reader ids (vendor:product), space or comma separated; whichever
+# one is plugged in and shared gets attached.
+USB_HARDWARE_ID="05e3:0749 05e3:0764"
+MOUNT_POINT="/mnt/wsl/sdcard"
+COMPAT_LINK="/mnt/sdcard"
+MOUNT_USER=""
+HOST_IP="auto"
+POLL_SECONDS=3
+REATTACH_GRACE=6
+STORAGE_TIMEOUT=20
+USBIP_DIR="/run/usbipd-win"
+USBIPD_WSL_SHARE='C:\Program Files\usbipd-win\WSL'
+# shellcheck disable=SC1090
+[ -r "$CONF" ] && . "$CONF"
+USB_HARDWARE_ID=${USB_HARDWARE_ID,,}
+USB_HARDWARE_ID=${USB_HARDWARE_ID//,/ }
+USBIP="$USBIP_DIR/usbip"
+TAG="sdcard-helper"
+
+log() { logger -t "$TAG" -- "$*" 2>/dev/null || true; echo "$*" >&2; }
+die() { log "error: $*"; exit 1; }
+
+usage() {
+    cat <<USAGE
+usage: sdcard-helper <command>
+
+  status            show reader / mount state
+  mount             mount an attached card if one is present but not mounted
+  eject             flush and unmount the card so it can be pulled out
+  release           stop auto-attach, unmount, and hand the reader back to Windows
+  attach            resume auto-attach and wait for the card to mount
+  auto-attach       (service) keep the reader attached to WSL
+  attach-once       attach the reader now, without the service loop
+  detach            detach the reader from WSL (auto-attach will re-attach it)
+  mount-dev DEV     (udev) mount block device DEV at $MOUNT_POINT
+  umount-dev DEV    (udev) unmount DEV if it is what is mounted at $MOUNT_POINT
+  ensure-mount-point  (install) create $MOUNT_POINT and the $COMPAT_LINK symlink
+USAGE
+}
+
+require_root() { [ "$(id -u)" -eq 0 ] || die "must run as root (use the 'sdcard' command)"; }
+
+# --- usbip (reader <-> Windows) ---------------------------------------------
+
+ensure_usbip_tools() {
+    if [ ! -x "$USBIP" ]; then
+        mkdir -p "$USBIP_DIR"
+        mount -t drvfs "$USBIPD_WSL_SHARE" "$USBIP_DIR" -o ro 2>/dev/null \
+            || die "cannot mount usbipd-win's WSL tools from '$USBIPD_WSL_SHARE'. Is usbipd-win installed on Windows?"
+    fi
+    [ -x "$USBIP" ] || die "usbip client not found at $USBIP"
+    modprobe vhci_hcd 2>/dev/null || true
+}
+
+tcp_open() { timeout 2 bash -c "exec 3<>/dev/tcp/$1/3240" 2>/dev/null; }
+
+resolve_host_ip() {
+    if [ -n "$HOST_IP" ] && [ "$HOST_IP" != "auto" ]; then
+        echo "$HOST_IP"
+        return 0
+    fi
+    local candidate
+    for candidate in "$(ip -4 route show default 2>/dev/null | awk '{print $3; exit}')" 127.0.0.1; do
+        [ -n "$candidate" ] || continue
+        if tcp_open "$candidate"; then
+            echo "$candidate"
+            return 0
+        fi
+    done
+    return 1
+}
+
+# awk helper: true when the line names any of USB_HARDWARE_ID's readers as "(vid:pid)".
+AWK_MATCH_ID='function known(line,   i, n, ids) { n = split(IDS, ids, " "); for (i = 1; i <= n; i++) if (index(line, "(" ids[i] ")")) return 1; return 0 }'
+
+is_attached() { [ -n "$(attached_port)" ]; }
+
+# Bus id of a shared (bound, not yet attached) reader on the Windows host.
+find_busid() {
+    "$USBIP" list -r "$1" 2>/dev/null | awk -v IDS="$USB_HARDWARE_ID" "$AWK_MATCH_ID"'
+        /^[[:space:]]*[0-9]+-[0-9.]+:/ && known($0) { sub(":", "", $1); print $1; exit }'
+}
+
+# Reader id ("vid:pid") of the shared reader at bus id $2 on host $1.
+busid_reader() {
+    "$USBIP" list -r "$1" 2>/dev/null | awk -v b="$2:" '
+        $1 == b && match($0, /\([0-9a-f][0-9a-f][0-9a-f][0-9a-f]:[0-9a-f][0-9a-f][0-9a-f][0-9a-f]\)/) { print substr($0, RSTART + 1, RLENGTH - 2); exit }'
+}
+
+attached_port() {
+    "$USBIP" port 2>/dev/null | awk -v IDS="$USB_HARDWARE_ID" "$AWK_MATCH_ID"'
+        /^Port [0-9]+:/ { p = $2; sub(":", "", p) }
+        known($0) { print p; exit }'
+}
+
+# Reader id of the attached reader, or empty.
+attached_reader() {
+    "$USBIP" port 2>/dev/null | awk -v IDS="$USB_HARDWARE_ID" "$AWK_MATCH_ID"'
+        known($0) && match($0, /\([0-9a-f][0-9a-f][0-9a-f][0-9a-f]:[0-9a-f][0-9a-f][0-9a-f][0-9a-f]\)/) { print substr($0, RSTART + 1, RLENGTH - 2); exit }'
+}
+
+try_attach() {
+    local host busid output
+    host=$(resolve_host_ip) || return 1
+    busid=$(find_busid "$host")
+    [ -n "$busid" ] || return 1
+    if output=$("$USBIP" attach -r "$host" -b "$busid" 2>&1); then
+        log "attached reader $(busid_reader "$host" "$busid") (bus $busid) from $host"
+        return 0
+    fi
+    log "usbip attach failed: $output"
+    return 1
+}
+
+attach_once() {
+    require_root
+    ensure_usbip_tools
+    if is_attached; then
+        log "reader already attached"
+        return 0
+    fi
+    local host
+    host=$(resolve_host_ip) || die "cannot reach usbipd on Windows (tried the default gateway and 127.0.0.1). Set HOST_IP in $CONF."
+    [ -n "$(find_busid "$host")" ] || die "no shared reader ($USB_HARDWARE_ID) on $host. Plug it in, and make sure it is bound: usbipd bind --busid <BUSID> (admin PowerShell, once)."
+    try_attach || die "attach failed"
+}
+
+# True when a disk unit on the attached reader has no block device. The sd
+# driver gives every unit one (an empty slot shows up as a 0 B disk), so a
+# missing one means the probe is hung on a dead usbip link.
+storage_stuck() {
+    local unit
+    for unit in /sys/bus/scsi/devices/[0-9]*:*:*:*; do
+        [ -e "$unit" ] || continue
+        case "$(readlink -f "$unit")" in *vhci_hcd*) ;; *) continue ;; esac
+        [ "$(basename "$(readlink -f "$unit/driver" 2>/dev/null)")" = "sd" ] || continue
+        [ -n "$(ls "$unit/block" 2>/dev/null)" ] || return 0
+    done
+    return 1
+}
+
+detach_quiet() {
+    local port
+    port=$(attached_port)
+    [ -n "$port" ] || return 0
+    "$USBIP" detach -p "$port" >/dev/null 2>&1 || log "usbip detach -p $port failed; will retry"
+}
+
+auto_attach_loop() {
+    require_root
+    ensure_usbip_tools
+    log "auto-attach loop started for readers $USB_HARDWARE_ID (every ${POLL_SECONDS}s)"
+    # This reader re-plugs itself on the USB bus when a card goes in or out.
+    # Windows then tears the device down and brings it back, which drops our
+    # link; re-attaching before Windows is done leaves a half-alive link whose
+    # disk probe hangs forever. So: wait REATTACH_GRACE after a drop, and
+    # re-attach if the storage never appears. (usbipd keeps listing an attached
+    # device as exportable, so the host's list is no signal; the disk is.)
+    local was_attached=false stuck_since=0 now
+    while true; do
+        now=$(date +%s)
+        if is_attached; then
+            if ! $was_attached; then
+                was_attached=true
+                stuck_since=0
+            fi
+            if storage_stuck; then
+                [ "$stuck_since" -ne 0 ] || stuck_since=$now
+            else
+                stuck_since=0
+            fi
+            if [ "$stuck_since" -ne 0 ] && [ $((now - stuck_since)) -ge "$STORAGE_TIMEOUT" ]; then
+                log "reader attached but its storage never appeared (${STORAGE_TIMEOUT}s); re-attaching"
+                detach_quiet
+                was_attached=false
+                sleep "$REATTACH_GRACE"
+                try_attach || true
+            fi
+        else
+            if $was_attached; then
+                was_attached=false
+                log "reader went away (card change or host reset); waiting ${REATTACH_GRACE}s before re-attaching"
+                sleep "$REATTACH_GRACE"
+            fi
+            try_attach || true
+        fi
+        sleep "$POLL_SECONDS"
+    done
+}
+
+detach() {
+    require_root
+    ensure_usbip_tools
+    local port reader
+    port=$(attached_port)
+    if [ -z "$port" ]; then
+        log "reader is not attached"
+        return 0
+    fi
+    reader=$(attached_reader)
+    "$USBIP" detach -p "$port" >/dev/null 2>&1 || die "usbip detach -p $port failed"
+    log "detached reader $reader (port $port); it is back on Windows"
+}
+
+# --- mounting ---------------------------------------------------------------
+
+mounted_source() { findmnt -n -o SOURCE --mountpoint "$MOUNT_POINT" 2>/dev/null || true; }
+
+mount_unit_for() { echo "sdcard-mount@$(systemd-escape "$(basename "$1")").service"; }
+
+# USB partitions/disks carrying a FAT/exFAT filesystem, e.g. /dev/sde1.
+candidate_devices() {
+    local dev fstype
+    while read -r dev fstype; do
+        case "$fstype" in vfat|exfat) ;; *) continue ;; esac
+        if udevadm info -q property -n "$dev" 2>/dev/null | grep -q '^ID_BUS=usb$'; then
+            echo "$dev"
+        fi
+    done < <(lsblk -rno PATH,FSTYPE 2>/dev/null)
+}
+
+# The mount point lives under /mnt/wsl, a tmpfs WSL rebuilds on every boot, so
+# the directory has to be recreated here rather than once at install time. The
+# compatibility symlink lives on the root filesystem and normally survives, but
+# it is cheap to reassert and self-heals a card that was mounted before an
+# upgrade replaced the link with a directory.
+ensure_mount_point() {
+    mkdir -p "$MOUNT_POINT"
+    [ -n "${COMPAT_LINK:-}" ] || return 0
+    [ "$COMPAT_LINK" != "$MOUNT_POINT" ] || return 0
+    if [ -L "$COMPAT_LINK" ]; then
+        [ "$(readlink "$COMPAT_LINK")" = "$MOUNT_POINT" ] || ln -sfn "$MOUNT_POINT" "$COMPAT_LINK"
+        return 0
+    fi
+    if [ -e "$COMPAT_LINK" ]; then
+        # A leftover real directory. Only replace it when it is safe to: not a
+        # mount point of its own, and holding nothing we would throw away.
+        if mountpoint -q "$COMPAT_LINK" || [ -n "$(ls -A "$COMPAT_LINK" 2>/dev/null)" ]; then
+            log "$COMPAT_LINK is a non-empty directory or a mount point; leaving it alone"
+            return 0
+        fi
+        rmdir "$COMPAT_LINK" 2>/dev/null || { log "cannot replace $COMPAT_LINK with a symlink"; return 0; }
+    fi
+    ln -sfn "$MOUNT_POINT" "$COMPAT_LINK"
+}
+
+mount_dev() {
+    require_root
+    local dev=$1 current fstype label uid gid opts
+    [ -b "$dev" ] || die "$dev is not a block device"
+    # udev can fire more than once for a new partition; serialise so the
+    # second caller sees the first one's mount instead of stacking another.
+    exec 9>/run/lock/sdcard-mount.lock
+    flock 9
+    current=$(mounted_source)
+    if [ -n "$current" ]; then
+        [ "$current" = "$dev" ] && { log "$dev is already mounted at $MOUNT_POINT"; return 0; }
+        die "$MOUNT_POINT is busy with $current; not mounting $dev"
+    fi
+    [ -n "$MOUNT_USER" ] || die "MOUNT_USER is not set in $CONF"
+    fstype=$(blkid -o value -s TYPE "$dev" 2>/dev/null || true)
+    label=$(blkid -o value -s LABEL "$dev" 2>/dev/null || true)
+    uid=$(id -u "$MOUNT_USER")
+    gid=$(id -g "$MOUNT_USER")
+    case "$fstype" in
+        # flush: push writes out promptly, so pulling the card right after a
+        # save is safe. utf8: non-ASCII route names round-trip correctly.
+        vfat)  opts="rw,uid=$uid,gid=$gid,umask=022,flush,utf8,noatime" ;;
+        exfat) opts="rw,uid=$uid,gid=$gid,umask=022,noatime" ;;
+        "")    die "$dev has no recognised filesystem" ;;
+        *)     die "$dev is $fstype; only FAT32/exFAT cards are mounted (the V5 brain wants FAT32)" ;;
+    esac
+    ensure_mount_point
+    mount -t "$fstype" -o "$opts" "$dev" "$MOUNT_POINT"
+    log "mounted $dev (${fstype}${label:+, label '$label'}) at $MOUNT_POINT"
+}
+
+do_unmount() {
+    local current tries=0
+    # Loop: if something ever stacked a second mount, one umount is not enough.
+    while current=$(mounted_source); [ -n "$current" ] && [ "$tries" -lt 5 ]; do
+        tries=$((tries + 1))
+        timeout 20 sync -f "$MOUNT_POINT" 2>/dev/null || true
+        if umount "$MOUNT_POINT" 2>/dev/null; then
+            log "unmounted $current from $MOUNT_POINT"
+        else
+            umount -l "$MOUNT_POINT"
+            log "lazily unmounted $current from $MOUNT_POINT (device gone or files still open)"
+        fi
+    done
+}
+
+umount_dev() {
+    require_root
+    local dev=$1 current
+    current=$(mounted_source)
+    [ -n "$current" ] || return 0
+    if [ "$current" != "$dev" ]; then
+        log "$MOUNT_POINT holds $current, not $dev; leaving it alone"
+        return 0
+    fi
+    do_unmount
+}
+
+eject() {
+    require_root
+    local current unit
+    current=$(mounted_source)
+    if [ -z "$current" ]; then
+        log "no card is mounted at $MOUNT_POINT"
+        return 0
+    fi
+    unit=$(mount_unit_for "$current")
+    if systemctl is-active -q "$unit"; then
+        systemctl stop "$unit"
+    else
+        do_unmount
+    fi
+    log "SD card ejected; it is safe to remove"
+}
+
+mount_auto() {
+    require_root
+    local current dev
+    current=$(mounted_source)
+    if [ -n "$current" ]; then
+        log "$current is already mounted at $MOUNT_POINT"
+        return 0
+    fi
+    for dev in $(candidate_devices); do
+        systemctl start "$(mount_unit_for "$dev")"
+        return 0
+    done
+    if is_attached 2>/dev/null; then
+        die "reader is attached but no FAT32/exFAT card was found. Is a card inserted?"
+    fi
+    die "reader is not attached to WSL (see: sdcard status)"
+}
+
+wait_for() { # wait_for <seconds> <function>
+    local deadline=$(( $(date +%s) + $1 ))
+    while ! "$2"; do
+        [ "$(date +%s)" -lt "$deadline" ] || return 1
+        sleep 1
+    done
+}
+
+is_mounted() { [ -n "$(mounted_source)" ]; }
+
+release() {
+    require_root
+    systemctl stop sdcard-usbip-attach.service 2>/dev/null || true
+    eject
+    detach
+    log "reader released to Windows. Run 'sdcard attach' to take it back."
+}
+
+attach_and_wait() {
+    require_root
+    ensure_usbip_tools
+    systemctl start sdcard-usbip-attach.service
+    if ! is_attached; then
+        try_attach || true
+        wait_for 15 is_attached || die "reader did not attach. Is it plugged in and shared? (usbipd list on Windows; 'sdcard log' here)"
+    fi
+    if ! wait_for 10 is_mounted; then
+        mount_auto
+        wait_for 5 is_mounted || true
+    fi
+    status
+}
+
+status() {
+    ensure_usbip_tools 2>/dev/null || true
+    if is_attached 2>/dev/null; then
+        echo "reader ($(attached_reader)): attached to WSL"
+    else
+        echo "reader (any of $USB_HARDWARE_ID): not attached (on Windows, or unplugged)"
+    fi
+    echo "auto-attach service: $(systemctl is-active sdcard-usbip-attach.service 2>/dev/null || true)"
+    local current
+    current=$(mounted_source)
+    if [ -n "$current" ]; then
+        echo "card: $current mounted at $MOUNT_POINT ($(findmnt -n -o FSTYPE --mountpoint "$MOUNT_POINT"), label '$(blkid -o value -s LABEL "$current" 2>/dev/null)')"
+        df -h --output=size,used,avail "$MOUNT_POINT" 2>/dev/null | tail -1 \
+            | awk '{print "space: " $1 " total, " $2 " used, " $3 " free"}'
+        if [ -d "$MOUNT_POINT/routes" ]; then
+            echo "routes: $(find "$MOUNT_POINT/routes" -maxdepth 1 -name '*.txt' 2>/dev/null | wc -l) trajectory files in $MOUNT_POINT/routes"
+        else
+            echo "routes: $MOUNT_POINT/routes does not exist yet"
+        fi
+    else
+        echo "card: not mounted"
+        local dev
+        for dev in $(candidate_devices); do
+            echo "       candidate: $dev (run: sdcard mount)"
+        done
+    fi
+}
+
+case "${1:-}" in
+    status)       status ;;
+    mount)        mount_auto ;;
+    eject)        eject ;;
+    release)      release ;;
+    attach)       attach_and_wait ;;
+    auto-attach)  auto_attach_loop ;;
+    attach-once)  attach_once ;;
+    detach)       detach ;;
+    ensure-mount-point) require_root; ensure_mount_point ;;
+    mount-dev)    [ $# -eq 2 ] || { usage; exit 2; }; mount_dev "$2" ;;
+    umount-dev)   [ $# -eq 2 ] || { usage; exit 2; }; umount_dev "$2" ;;
+    -h|--help|help|"") usage ;;
+    *) usage; exit 2 ;;
+esac

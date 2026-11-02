@@ -13,8 +13,11 @@ from PyQt6.QtWidgets import (
 from gui.routes_widget import RouteFilesWidget
 from gui.settings_widget import SettingsWidget
 from gui.path_view_widget import PathViewWidget
+from gui.optimize_widget import OptimizeWidget
 
 logger = logging.getLogger(__name__)
+
+OPTIMIZE_PAGE = 3
 
 
 class MultiPageDockWidget(QDockWidget):
@@ -39,11 +42,13 @@ class MultiPageDockWidget(QDockWidget):
         self.settings_button = self.create_nav_button("Settings", 0)
         self.routes_button = self.create_nav_button("Routes", 1)
         self.path_button = self.create_nav_button("Path", 2)  # Add Path button
+        self.optimize_button = self.create_nav_button("Optimize", OPTIMIZE_PAGE)
 
         # Add buttons to nav bar
         self.nav_layout.addWidget(self.settings_button)
         self.nav_layout.addWidget(self.routes_button)
         self.nav_layout.addWidget(self.path_button)  # Add Path button to nav bar
+        self.nav_layout.addWidget(self.optimize_button)
 
         # Add nav bar to main layout
         self.main_layout.addWidget(self.nav_bar)
@@ -55,11 +60,13 @@ class MultiPageDockWidget(QDockWidget):
         self.settings_page = SettingsWidget(self.config_manager, self.parent)
         self.routes_page = RouteFilesWidget(self.parent)
         self.path_page = PathViewWidget(self.parent)  # Add Path page
+        self.optimize_page = OptimizeWidget(self.parent)
 
         # Add pages to stacked widget
         self.stacked_widget.addWidget(self.settings_page)
         self.stacked_widget.addWidget(self.routes_page)
         self.stacked_widget.addWidget(self.path_page)  # Add Path page to stack
+        self.stacked_widget.addWidget(self.optimize_page)
 
         # Add stacked widget to main layout
         self.main_layout.addWidget(self.stacked_widget)
@@ -83,6 +90,8 @@ class MultiPageDockWidget(QDockWidget):
         """Switch to the specified page and update button styles"""
         self.stacked_widget.setCurrentIndex(page_index)
         self.update_button_styles(page_index)
+        # The Optimize page draws on the field only while it is showing.
+        self.optimize_page.set_active(page_index == OPTIMIZE_PAGE)
         logger.info(f"Switched to page {page_index}")
 
     def update_path_page(self):
@@ -94,10 +103,18 @@ class MultiPageDockWidget(QDockWidget):
     def set_selected_node(self, node):
         """Set the selected node in the path page"""
         self.path_page.set_selected_node(node)
+        self.optimize_page.set_selected_node(node)
+
+    def set_selected_action_point(self, point):
+        """Set the selected action point in the path page"""
+        self.path_page.set_selected_action_point(point)
+
+    def refresh_selected_action_point(self):
+        self.path_page.refresh_selected_action_point()
 
     def update_button_styles(self, active_index):
         """Update button styles to show which one is active"""
-        buttons = [self.settings_button, self.routes_button, self.path_button]  # Add path_button
+        buttons = [self.settings_button, self.routes_button, self.path_button, self.optimize_button]
 
         for i, button in enumerate(buttons):
             if i == active_index:

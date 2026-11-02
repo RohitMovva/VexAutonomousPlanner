@@ -23,3 +23,6 @@ routes/
 config.yaml
 
 settings.json
+
+# trajectories parked while the SD card is out (moved to the card on insert)
+route_backups/sd_card_pending/
